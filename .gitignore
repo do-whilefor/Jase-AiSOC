@@ -12,6 +12,8 @@ build/
 dist/
 htmlcov/
 reports/
+.smoke-ingest/
+var/
 .env
 .env.*
 !.env.example
