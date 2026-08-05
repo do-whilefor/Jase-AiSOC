@@ -1,0 +1,9 @@
+{
+  "name": "normal_baseline",
+  "version": "0.1.0",
+  "description": "Normal business-traffic baseline (plan §8.4 false-positive control). 200 HTTP requests from 203.0.113.10 across 50 unique paths with 200 OK responses, spread over 300s (1/sec) — must not trigger any detection (verifies explainable false-positive density).",
+  "source": "synthetic",
+  "generator": "tests/replay/build_datasets.py",
+  "expected_detections": [],
+  "license": "proprietary"
+}

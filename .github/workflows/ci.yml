@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Python ${{ matrix.python-version }} quality
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: "0.8.24"
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Run lint
+        run: uv run ruff check .
+
+      - name: Run type checks
+        run: uv run mypy src tests migrations
+
+      - name: Verify checked-in contract schemas
+        run: uv run blue-team-export-schemas --check
+
+      - name: Run tests
+        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
+
+  supply-chain:
+    name: Dependency audit and SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: "0.8.24"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Audit Python dependencies
+        run: uv run pip-audit --skip-editable
+
+      - name: Generate CycloneDX SBOM
+        run: |
+          mkdir -p reports
+          uv run cyclonedx-py environment \
+            --output-format JSON \
+            --output-file reports/sbom.cdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sbom-python-${{ github.sha }}
+          path: reports/sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+
+  integration:
+    name: PostgreSQL migration and API integration
+    runs-on: ubuntu-latest
+    env:
+      BLUE_TEAM_DATABASE_URL: postgresql+asyncpg://blue_team:blue_team_test@127.0.0.1:5432/blue_team
+      BLUE_TEAM_TEST_DATABASE_URL: postgresql+asyncpg://blue_team:blue_team_test@127.0.0.1:5432/blue_team
+    services:
+      postgres:
+        image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+        env:
+          POSTGRES_DB: blue_team
+          POSTGRES_USER: blue_team
+          POSTGRES_PASSWORD: blue_team_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U blue_team -d blue_team"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: "0.8.24"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Apply and verify migrations
+        run: |
+          uv run alembic upgrade head
+          uv run alembic current
+          uv run alembic check
+
+      - name: Run PostgreSQL integration tests
+        run: uv run pytest -m integration -vv
+
+  build:
+    name: Build Python and container artifacts
+    needs: [quality, supply-chain, integration]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: "0.8.24"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Build wheel and source distribution
+        run: uv build
+
+      - name: Build runtime container
+        run: docker build --file deploy/Dockerfile --tag blue-team-ai-agent:${{ github.sha }} .
+
+      - name: Upload Python artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: python-dist-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30

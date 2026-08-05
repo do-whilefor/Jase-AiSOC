@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "CapabilityLevel": {
+      "enum": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "title": "CapabilityLevel",
+      "type": "string"
+    },
+    "CapabilityReport": {
+      "additionalProperties": false,
+      "description": "Tenant-independent Agent capability report consumed by later P2/P3 work.",
+      "properties": {
+        "schema_version": {
+          "const": "0.1.0",
+          "default": "0.1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "level": {
+          "$ref": "#/$defs/CapabilityLevel"
+        },
+        "platform": {
+          "$ref": "#/$defs/PlatformInfo"
+        },
+        "collectors": {
+          "items": {
+            "$ref": "#/$defs/CollectorCapability"
+          },
+          "title": "Collectors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "observed_at",
+        "level",
+        "platform",
+        "collectors"
+      ],
+      "title": "CapabilityReport",
+      "type": "object"
+    },
+    "CgroupVersion": {
+      "enum": [
+        "v1",
+        "v2",
+        "unknown"
+      ],
+      "title": "CgroupVersion",
+      "type": "string"
+    },
+    "CollectorCapability": {
+      "additionalProperties": false,
+      "description": "Observable state for one collector; failures must never be silently omitted.",
+      "properties": {
+        "name": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/CollectorState"
+        },
+        "drop_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Drop Count",
+          "type": "integer"
+        },
+        "last_error": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Error"
+        },
+        "validated_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Validated Version"
+        }
+      },
+      "required": [
+        "name",
+        "state"
+      ],
+      "title": "CollectorCapability",
+      "type": "object"
+    },
+    "CollectorState": {
+      "enum": [
+        "enabled",
+        "degraded",
+        "failed"
+      ],
+      "title": "CollectorState",
+      "type": "string"
+    },
+    "InitSystem": {
+      "enum": [
+        "systemd",
+        "openrc",
+        "runit",
+        "other",
+        "unknown"
+      ],
+      "title": "InitSystem",
+      "type": "string"
+    },
+    "PlatformInfo": {
+      "additionalProperties": false,
+      "description": "Facts observed from the operating system, without a support claim.",
+      "properties": {
+        "distro_id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "title": "Distro Id",
+          "type": "string"
+        },
+        "distro_like": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Distro Like",
+          "type": "array"
+        },
+        "version_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version Id"
+        },
+        "kernel_release": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Kernel Release",
+          "type": "string"
+        },
+        "architecture": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Architecture",
+          "type": "string"
+        },
+        "init_system": {
+          "$ref": "#/$defs/InitSystem",
+          "default": "unknown"
+        },
+        "btf_available": {
+          "default": false,
+          "title": "Btf Available",
+          "type": "boolean"
+        },
+        "cgroup_version": {
+          "$ref": "#/$defs/CgroupVersion",
+          "default": "unknown"
+        },
+        "security_modules": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Security Modules",
+          "type": "array"
+        },
+        "probe_warnings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Probe Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "distro_id",
+        "kernel_release",
+        "architecture"
+      ],
+      "title": "PlatformInfo",
+      "type": "object"
+    },
+    "PriorityCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "p0": {
+          "default": 0,
+          "minimum": 0,
+          "title": "P0",
+          "type": "integer"
+        },
+        "p1": {
+          "default": 0,
+          "minimum": 0,
+          "title": "P1",
+          "type": "integer"
+        },
+        "p2": {
+          "default": 0,
+          "minimum": 0,
+          "title": "P2",
+          "type": "integer"
+        },
+        "p3": {
+          "default": 0,
+          "minimum": 0,
+          "title": "P3",
+          "type": "integer"
+        }
+      },
+      "title": "PriorityCounts",
+      "type": "object"
+    },
+    "QueueTelemetry": {
+      "additionalProperties": false,
+      "properties": {
+        "queued_count": {
+          "minimum": 0,
+          "title": "Queued Count",
+          "type": "integer"
+        },
+        "inflight_count": {
+          "minimum": 0,
+          "title": "Inflight Count",
+          "type": "integer"
+        },
+        "corrupt_count": {
+          "minimum": 0,
+          "title": "Corrupt Count",
+          "type": "integer"
+        },
+        "stored_bytes": {
+          "minimum": 0,
+          "title": "Stored Bytes",
+          "type": "integer"
+        },
+        "dropped": {
+          "$ref": "#/$defs/PriorityCounts"
+        },
+        "protection_mode": {
+          "default": false,
+          "title": "Protection Mode",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "queued_count",
+        "inflight_count",
+        "corrupt_count",
+        "stored_bytes"
+      ],
+      "title": "QueueTelemetry",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.blue-team-ai.local/agent-heartbeat/v0.1.0",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tenant_id": {
+      "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "agent_id": {
+      "pattern": "^agent_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "host_id": {
+      "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+      "title": "Host Id",
+      "type": "string"
+    },
+    "boot_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Boot Id",
+      "type": "string"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "capabilities": {
+      "$ref": "#/$defs/CapabilityReport"
+    },
+    "queue": {
+      "$ref": "#/$defs/QueueTelemetry"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "agent_id",
+    "host_id",
+    "boot_id",
+    "observed_at",
+    "capabilities",
+    "queue"
+  ],
+  "title": "AgentHeartbeat",
+  "type": "object"
+}

@@ -1,0 +1,109 @@
+name: blue-team-ai-p2
+
+# P2 容器级端到端编排：PostgreSQL + 迁移 + API + Ingest 网关。
+#
+# Agent enroll→heartbeat→batch→ACK→克隆拒绝的容器级 e2e 事实证据由
+# tests/integration/test_ingest_mtls.py 提供（真实 mTLS + PostgreSQL，在 Docker
+# Linux Engine 下已绿）。本 compose 把同一组服务以多容器形式编排，用于验证
+# 服务间网络、健康门禁与数据卷共享。
+#
+# 启用 Agent 容器需要先把 Agent CA（证书 + 0600 私钥）与已 enrolled 的客户端
+# 证书/密钥写入共享卷（provision 流程：生成 LocalCertificateAuthority、create_tenant、
+# create_host、create_registration_token、enroll_agent，参考 tests/integration/test_ingest_mtls.py
+# 的 LocalCertificateAuthority.generate + enroll_agent 序列）。该 provision 链与
+# systemd 切换、真机 eBPF/auditd/全盘克隆验证一并标记为 VM 级 Experimental，留待
+# 真 Linux VM 矩阵实跑（见 docs/phase-p2-plan.md）。
+
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    environment:
+      POSTGRES_DB: blue_team
+      POSTGRES_USER: blue_team
+      POSTGRES_PASSWORD: blue_team_dev
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blue_team -d blue_team"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - p2-postgres-data:/var/lib/postgresql/data
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      BLUE_TEAM_DATABASE_URL: postgresql+asyncpg://blue_team:blue_team_dev@postgres:5432/blue_team
+      BLUE_TEAM_OBJECT_STORE_ROOT: /var/lib/blue-team/evidence
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+    environment:
+      BLUE_TEAM_ENVIRONMENT: development
+      BLUE_TEAM_API_HOST: 0.0.0.0
+      BLUE_TEAM_API_PORT: 8000
+      BLUE_TEAM_LOG_FORMAT: json
+      BLUE_TEAM_DATABASE_URL: postgresql+asyncpg://blue_team:blue_team_dev@postgres:5432/blue_team
+      BLUE_TEAM_OBJECT_STORE_ROOT: /var/lib/blue-team/evidence
+      BLUE_TEAM_BOOTSTRAP_ADMIN_TOKEN: p2-local-admin-token-change-me
+    ports:
+      - "127.0.0.1:58000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - p2-evidence-data:/var/lib/blue-team/evidence
+
+  ingest:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+    command: ["blue-team-ingest"]
+    environment:
+      BLUE_TEAM_ENVIRONMENT: development
+      BLUE_TEAM_INGEST_HOST: 0.0.0.0
+      BLUE_TEAM_INGEST_PORT: 8081
+      BLUE_TEAM_LOG_FORMAT: json
+      BLUE_TEAM_DATABASE_URL: postgresql+asyncpg://blue_team:blue_team_dev@postgres:5432/blue_team
+      BLUE_TEAM_OBJECT_STORE_ROOT: /var/lib/blue-team/evidence
+      BLUE_TEAM_AGENT_CA_CERTIFICATE_PATH: /run/secrets/agent-ca/ca.crt
+      BLUE_TEAM_AGENT_CA_PRIVATE_KEY_PATH: /run/secrets/agent-ca/ca.key
+    ports:
+      - "127.0.0.1:58001:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - p2-evidence-data:/var/lib/blue-team/evidence
+      - p2-agent-ca:/run/secrets/agent-ca:ro
+    # ingest 监听 8081 且强制 mTLS 客户端证书，复用的 deploy/Dockerfile HEALTHCHECK
+    # 探测的是 API 的 8000/health/live，在本容器恒为 connection refused，会把 ingest
+    # 误判为 unhealthy。此处用 8081 的 TCP 连通性作为 liveness，不要求客户端证书。
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('127.0.0.1', 8081), timeout=2); s.close()\""]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    # Agent CA 卷（p2-agent-ca）必须由 provision 步骤以 0600 私钥 + 证书填充后，
+    # ingest 才能加载 CertificateAuthority。provision 完成前 ingest 会启动失败
+    # 并由 restart 策略重试；这是有意的 fail-fast，避免静默降级。
+
+volumes:
+  p2-postgres-data:
+  p2-evidence-data:
+  p2-agent-ca:

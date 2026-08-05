@@ -1,0 +1,642 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Actor": {
+      "additionalProperties": false,
+      "properties": {
+        "user": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "User"
+        },
+        "uid": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uid"
+        },
+        "pid": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pid"
+        },
+        "ppid": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ppid"
+        }
+      },
+      "title": "Actor",
+      "type": "object"
+    },
+    "EventSource": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SourceKind"
+        },
+        "collector": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Collector",
+          "type": "string"
+        },
+        "collector_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Collector Version"
+        },
+        "agent_id": {
+          "anyOf": [
+            {
+              "pattern": "^agent_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Id"
+        }
+      },
+      "required": [
+        "kind",
+        "collector"
+      ],
+      "title": "EventSource",
+      "type": "object"
+    },
+    "FileInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Fa-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size"
+        }
+      },
+      "title": "FileInfo",
+      "type": "object"
+    },
+    "HostRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "hostname": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hostname"
+        },
+        "os": {
+          "anyOf": [
+            {
+              "const": "linux",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Os"
+        },
+        "distro": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Distro"
+        },
+        "kernel": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kernel"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "HostRef",
+      "type": "object"
+    },
+    "Integrity": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "verified",
+            "unverified",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "algorithm": {
+          "anyOf": [
+            {
+              "const": "sha256",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Algorithm"
+        },
+        "digest": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Fa-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Digest"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "Integrity",
+      "type": "object"
+    },
+    "Network": {
+      "additionalProperties": false,
+      "properties": {
+        "src_ip": {
+          "anyOf": [
+            {
+              "format": "ipv4",
+              "type": "string"
+            },
+            {
+              "format": "ipv6",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Src Ip"
+        },
+        "src_port": {
+          "anyOf": [
+            {
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Src Port"
+        },
+        "dst_ip": {
+          "anyOf": [
+            {
+              "format": "ipv4",
+              "type": "string"
+            },
+            {
+              "format": "ipv6",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dst Ip"
+        },
+        "dst_port": {
+          "anyOf": [
+            {
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dst Port"
+        },
+        "transport": {
+          "anyOf": [
+            {
+              "enum": [
+                "tcp",
+                "udp",
+                "icmp",
+                "sctp",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transport"
+        }
+      },
+      "title": "Network",
+      "type": "object"
+    },
+    "Process": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "command_line": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Command Line"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Fa-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        }
+      },
+      "title": "Process",
+      "type": "object"
+    },
+    "SourceKind": {
+      "enum": [
+        "agent",
+        "suricata",
+        "falco",
+        "auditd",
+        "journald",
+        "service_log",
+        "file_scan",
+        "import"
+      ],
+      "title": "SourceKind",
+      "type": "string"
+    },
+    "TenantRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "TenantRef",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.blue-team-ai.local/security-event/v0.1.0",
+  "additionalProperties": false,
+  "description": "P1 canonical contract for an immutable, tenant-bound event.",
+  "properties": {
+    "event_id": {
+      "pattern": "^evt_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "event_type": {
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "event_time": {
+      "format": "date-time",
+      "title": "Event Time",
+      "type": "string"
+    },
+    "ingest_time": {
+      "format": "date-time",
+      "title": "Ingest Time",
+      "type": "string"
+    },
+    "source_event_id": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Event Id"
+    },
+    "boot_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Boot Id"
+    },
+    "sequence": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sequence"
+    },
+    "clock_offset_ms": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Clock Offset Ms"
+    },
+    "source": {
+      "$ref": "#/$defs/EventSource"
+    },
+    "tenant": {
+      "$ref": "#/$defs/TenantRef"
+    },
+    "host": {
+      "$ref": "#/$defs/HostRef"
+    },
+    "actor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Actor"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "process": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Process"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "network": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Network"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "file": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FileInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "enum": [
+            "success",
+            "failure",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Outcome"
+    },
+    "labels": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "maxProperties": 64,
+      "title": "Labels",
+      "type": "object"
+    },
+    "raw_ref": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "title": "Raw Ref",
+      "type": "string"
+    },
+    "integrity": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Integrity"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "extensions": {
+      "additionalProperties": true,
+      "maxProperties": 32,
+      "title": "Extensions",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_id",
+    "schema_version",
+    "event_type",
+    "event_time",
+    "ingest_time",
+    "source",
+    "tenant",
+    "host",
+    "raw_ref"
+  ],
+  "title": "Security Event",
+  "type": "object"
+}

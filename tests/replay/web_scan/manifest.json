@@ -1,0 +1,11 @@
+{
+  "name": "web_scan",
+  "version": "0.1.0",
+  "description": "Web reconnaissance scanning attack replay (plan §8.3). 301 HTTP requests from 203.0.113.9 across 110 unique paths with 4xx responses, packed into ~30s — exceeds the 60s-window thresholds (request_count>300, unique_paths>100, 4xx_ratio>0.70).",
+  "source": "synthetic",
+  "generator": "tests/replay/build_datasets.py",
+  "expected_detections": [
+    {"category": "web.recon.scanning", "attack_state": "attack_attempt", "min_count": 1}
+  ],
+  "license": "proprietary"
+}
