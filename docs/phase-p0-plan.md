@@ -62,3 +62,11 @@
 3. 仓库许可证、发布签名身份、目标制品仓库、密钥托管未冻结（最迟首个发布制品前）。
 
 后续推进以容器级闭环作为 P2 收尾边界，VM 级验证标记 Experimental。
+
+## 2026-08-08 非 Docker 复审证据
+
+- 使用锁文件创建独立 Windows Python 3.12.11 环境；`ruff format --check`（141 files）、Ruff lint、mypy strict（139 source files）和 Schema drift check 全过。
+- `pytest`：235 passed、14 skipped；其中 5 个因未配置 PostgreSQL，9 个因 Windows 不具备 POSIX/直接可执行探针语义。跳过项未被当作通过。
+- `pip-audit --skip-editable`：无已知漏洞；Alembic 离线链只有一个 head `20260808_0007`。本轮未连接数据库，因此没有宣称 `alembic upgrade/check` 通过。
+- 复审修复 `.env` 污染单元测试、P3 watermark/迟到断链、P4 跨 host/entity 告警去重、Suricata SSH 未知结果误标 success，并补齐可哈希重建的四个 P4 replay。
+- P0-W7 人工评审、远端 CI、许可证/签名/密钥方案仍未关闭；P0 保持“进行中”。

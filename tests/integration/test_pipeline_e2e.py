@@ -33,10 +33,18 @@ TENANT = "ten_e2e_pipeline00"
 HOST = "host_e2e_pipeline00"
 
 
-def _envelope(seq: int, src_ip: str, url: str, status: int, offset: int) -> AgentEnvelope:
+def _envelope(
+    seq: int,
+    src_ip: str,
+    url: str,
+    status: int,
+    offset: int,
+    *,
+    base_time: datetime,
+) -> AgentEnvelope:
     from blue_team.domain.security_event import SecurityEvent
 
-    event_time = datetime(2026, 8, 4, 8, 0, 0, tzinfo=UTC) + timedelta(seconds=offset)
+    event_time = base_time + timedelta(seconds=offset)
     event = SecurityEvent.model_validate(
         {
             "event_id": f"evt_e2epipe{seq:04d}",
@@ -108,11 +116,19 @@ async def test_pipeline_normalize_detect_query_end_to_end(tmp_path: Path) -> Non
     from blue_team.agent_core.contracts import canonical_envelope_bytes
 
     received_at = datetime.now(UTC)
+    event_base_time = received_at - timedelta(seconds=45)
     async with database.session() as session, session.begin():
         from blue_team.storage.models import AgentEventRecord
 
         for seq in range(301):
-            env = _envelope(seq, "203.0.113.9", f"/p{seq:03d}", 404, round(seq * 0.1))
+            env = _envelope(
+                seq,
+                "203.0.113.9",
+                f"/p{seq:03d}",
+                404,
+                round(seq * 0.1),
+                base_time=event_base_time,
+            )
             canonical = canonical_envelope_bytes(env)
             metadata = await object_store.put(TENANT, canonical, media_type="application/json")
             session.add(

@@ -244,6 +244,7 @@ async def _heartbeat(request: web.Request) -> web.Response:
                 agent_id=identity.agent_id,
                 host_id=identity.host_id,
                 boot_id=heartbeat.boot_id,
+                agent_version=heartbeat.agent_version,
                 observed_at=heartbeat.observed_at,
                 queue_telemetry=heartbeat.queue.model_dump(mode="json"),
                 received_at=now,
@@ -258,6 +259,7 @@ async def _heartbeat(request: web.Request) -> web.Response:
                 target_id=identity.installation_id,
                 after={
                     "boot_id": heartbeat.boot_id,
+                    "agent_version": heartbeat.agent_version,
                     "observed_at": heartbeat.observed_at.isoformat(),
                     "protection_mode": heartbeat.queue.protection_mode,
                 },

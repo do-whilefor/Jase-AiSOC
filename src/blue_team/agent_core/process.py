@@ -18,7 +18,12 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from blue_team.agent_core.contracts import AgentHeartbeat
 from blue_team.agent_core.queue import LocalDiskQueue, QueueConfig
-from blue_team.agent_core.runtime import AgentRuntime, AgentRuntimeState, RuntimeConfig
+from blue_team.agent_core.runtime import (
+    AgentRuntime,
+    AgentRuntimeState,
+    CollectorRegistration,
+    RuntimeConfig,
+)
 from blue_team.agent_core.transport import MtlsTransport, TransportError
 from blue_team.domain.identifiers import AGENT_ID_PATTERN, HOST_ID_PATTERN, TENANT_ID_PATTERN
 from blue_team.platform import CapabilityReport, LinuxPlatformAdapter
@@ -55,6 +60,29 @@ class AgentProcessConfig(BaseModel):
     ca_certificate_path: Path | None = None
     transport_timeout_seconds: Annotated[float, Field(gt=0, le=300)] = 15.0
     upload_backoff_seconds: Annotated[float, Field(gt=0, le=3600)] = 5.0
+    auditd_enabled: bool = False
+    auditd_log_path: Path | None = None
+    auditctl_path: Path | None = None
+    auditd_start_at_end: bool = True
+    auditd_max_lines_per_poll: Annotated[int, Field(ge=1, le=100_000)] = 1000
+    auditd_serial_timeout_seconds: Annotated[float, Field(ge=0.1, le=300)] = 2.0
+    auditd_status_interval_seconds: Annotated[float, Field(ge=1, le=3600)] = 30.0
+    auditd_max_open_serials: Annotated[int, Field(ge=1, le=4096)] = 1024
+    auditd_max_records_per_serial: Annotated[int, Field(ge=2, le=256)] = 256
+    auditd_max_pending_bytes: Annotated[int, Field(ge=65_536, le=64 * 1024 * 1024)] = (
+        8 * 1024 * 1024
+    )
+    journald_enabled: bool = False
+    journald_units: tuple[str, ...] = ()
+    suricata_enabled: bool = False
+    suricata_log_path: Path | None = None
+    suricata_start_at_end: bool = True
+    suricata_max_lines_per_poll: Annotated[int, Field(ge=1, le=100_000)] = 1000
+    service_log_enabled: bool = False
+    service_log_path: Path | None = None
+    service_log_name: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")] = "nginx"
+    service_log_start_at_end: bool = True
+    service_log_max_lines_per_poll: Annotated[int, Field(ge=1, le=100_000)] = 1000
 
     @field_validator("state_directory")
     @classmethod
@@ -68,14 +96,18 @@ class AgentProcessConfig(BaseModel):
         "client_certificate_path",
         "client_private_key_path",
         "ca_certificate_path",
+        "auditd_log_path",
+        "auditctl_path",
+        "suricata_log_path",
+        "service_log_path",
     )
     @classmethod
-    def require_absolute_transport_path(cls, value: Path | None) -> Path | None:
+    def require_absolute_external_path(cls, value: Path | None) -> Path | None:
         if value is None:
             return value
         value = value.expanduser()
         if not value.is_absolute():
-            raise ValueError("transport paths must be absolute")
+            raise ValueError("external paths must be absolute")
         return value.absolute()
 
     @model_validator(mode="after")
@@ -89,6 +121,22 @@ class AgentProcessConfig(BaseModel):
             raise ValueError("transport requires client certificate, key, and CA paths")
         if self.ingest_url is None and any(path is not None for path in paths):
             raise ValueError("transport paths require ingest_url")
+        if self.auditd_enabled and self.auditd_log_path is None:
+            raise ValueError("auditd_enabled requires auditd_log_path")
+        if not self.auditd_enabled and (
+            self.auditd_log_path is not None or self.auditctl_path is not None
+        ):
+            raise ValueError("auditd paths require auditd_enabled")
+        if self.auditd_enabled and self.max_event_bytes < 3 * 1024 * 1024:
+            raise ValueError("auditd_enabled requires max_event_bytes of at least 3 MiB")
+        if self.suricata_enabled and self.suricata_log_path is None:
+            raise ValueError("suricata_enabled requires suricata_log_path")
+        if not self.suricata_enabled and self.suricata_log_path is not None:
+            raise ValueError("suricata_log_path requires suricata_enabled")
+        if self.service_log_enabled and self.service_log_path is None:
+            raise ValueError("service_log_enabled requires service_log_path")
+        if not self.service_log_enabled and self.service_log_path is not None:
+            raise ValueError("service_log_path requires service_log_enabled")
         return self
 
     @property
@@ -106,6 +154,22 @@ class AgentProcessConfig(BaseModel):
     @property
     def session_state_path(self) -> Path:
         return self.state_directory / "session.json"
+
+    @property
+    def auditd_state_path(self) -> Path:
+        return self.state_directory / "auditd-state.json"
+
+    @property
+    def journald_state_path(self) -> Path:
+        return self.state_directory / "journald-state.json"
+
+    @property
+    def suricata_state_path(self) -> Path:
+        return self.state_directory / "suricata-state.json"
+
+    @property
+    def service_log_state_path(self) -> Path:
+        return self.state_directory / f"service-log-{self.service_log_name}-state.json"
 
     @property
     def transport_configured(self) -> bool:
@@ -432,6 +496,115 @@ def _run_agent_process_locked(
         capability_probe=probe,
         heartbeat_sink=_HeartbeatSink(heartbeat_journal, transport, session),
     )
+    if config.auditd_enabled:
+        # Lazy import avoids making the core Agent contracts depend on the
+        # normalizer registry during package initialization.
+        from blue_team.agent_core.auditd_collector import AuditdCollector, AuditdCollectorConfig
+
+        assert config.auditd_log_path is not None
+        runtime.register_collector(
+            CollectorRegistration(
+                "auditd",
+                AuditdCollector(
+                    AuditdCollectorConfig(
+                        tenant_id=config.tenant_id,
+                        agent_id=config.agent_id,
+                        host_id=config.host_id,
+                        boot_id=config.boot_id,
+                        log_path=config.auditd_log_path,
+                        state_path=config.auditd_state_path,
+                        auditctl_path=config.auditctl_path,
+                        start_at_end=config.auditd_start_at_end,
+                        max_lines_per_poll=config.auditd_max_lines_per_poll,
+                        serial_timeout_seconds=config.auditd_serial_timeout_seconds,
+                        status_interval_seconds=config.auditd_status_interval_seconds,
+                        max_open_serials=config.auditd_max_open_serials,
+                        max_records_per_serial=config.auditd_max_records_per_serial,
+                        max_pending_bytes=config.auditd_max_pending_bytes,
+                    ),
+                    queue=queue,
+                ),
+                # audit.log must be drained even under queue pressure so kernel
+                # backlog/lost counters remain observable. P2 queue reduction is
+                # still applied to ordinary audit facts; P1 gaps stay protected.
+                essential_in_protection=True,
+            )
+        )
+    if config.journald_enabled:
+        from blue_team.agent_core.journald_collector import (
+            JournaldCollector,
+            JournaldCollectorConfig,
+            resolve_journalctl_path,
+        )
+
+        runtime.register_collector(
+            CollectorRegistration(
+                "journald",
+                JournaldCollector(
+                    JournaldCollectorConfig(
+                        tenant_id=config.tenant_id,
+                        agent_id=config.agent_id,
+                        host_id=config.host_id,
+                        boot_id=config.boot_id,
+                        state_path=config.journald_state_path,
+                        journalctl_path=resolve_journalctl_path(),
+                        units=config.journald_units,
+                    ),
+                    queue=queue,
+                ),
+            )
+        )
+    if config.suricata_enabled:
+        from blue_team.agent_core.suricata_collector import (
+            SuricataCollector,
+            SuricataCollectorConfig,
+        )
+
+        assert config.suricata_log_path is not None
+        runtime.register_collector(
+            CollectorRegistration(
+                "suricata",
+                SuricataCollector(
+                    SuricataCollectorConfig(
+                        tenant_id=config.tenant_id,
+                        agent_id=config.agent_id,
+                        host_id=config.host_id,
+                        boot_id=config.boot_id,
+                        log_path=config.suricata_log_path,
+                        state_path=config.suricata_state_path,
+                        start_at_end=config.suricata_start_at_end,
+                        max_lines_per_poll=config.suricata_max_lines_per_poll,
+                    ),
+                    queue=queue,
+                ),
+            )
+        )
+    if config.service_log_enabled:
+        from blue_team.agent_core.service_log_collector import (
+            ServiceLogCollector,
+            ServiceLogCollectorConfig,
+        )
+
+        assert config.service_log_path is not None
+        runtime.register_collector(
+            CollectorRegistration(
+                "service_log",
+                ServiceLogCollector(
+                    ServiceLogCollectorConfig(
+                        tenant_id=config.tenant_id,
+                        agent_id=config.agent_id,
+                        host_id=config.host_id,
+                        boot_id=config.boot_id,
+                        log_path=config.service_log_path,
+                        state_path=config.service_log_state_path,
+                        service_name=config.service_log_name,
+                        start_at_end=config.service_log_start_at_end,
+                        max_lines_per_poll=config.service_log_max_lines_per_poll,
+                    ),
+                    queue=queue,
+                ),
+            )
+        )
     event_cursor = 0
 
     def persist_runtime_events() -> None:

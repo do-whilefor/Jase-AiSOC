@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ClaimEpistemicStatus": {
+      "enum": [
+        "observed",
+        "inferred",
+        "unknown"
+      ],
+      "title": "ClaimEpistemicStatus",
+      "type": "string"
+    },
+    "ClaimVerificationStatus": {
+      "enum": [
+        "supported",
+        "contradicted",
+        "unsupported"
+      ],
+      "title": "ClaimVerificationStatus",
+      "type": "string"
+    },
+    "IncidentClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_id": {
+          "pattern": "^clm_[a-f0-9]{24}$",
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "category": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Category",
+          "type": "string"
+        },
+        "statement": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        },
+        "epistemic_status": {
+          "$ref": "#/$defs/ClaimEpistemicStatus"
+        },
+        "verification_status": {
+          "$ref": "#/$defs/ClaimVerificationStatus"
+        },
+        "evidence_event_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 512,
+          "minItems": 1,
+          "title": "Evidence Event Ids",
+          "type": "array"
+        },
+        "support_score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Support Score",
+          "type": "number"
+        },
+        "contradiction_score": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Contradiction Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "claim_id",
+        "category",
+        "statement",
+        "epistemic_status",
+        "verification_status",
+        "evidence_event_ids",
+        "support_score"
+      ],
+      "title": "IncidentClaim",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "incident_id": {
+      "maxLength": 132,
+      "minLength": 1,
+      "title": "Incident Id",
+      "type": "string"
+    },
+    "tenant_id": {
+      "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/IncidentClaim"
+      },
+      "maxItems": 10000,
+      "minItems": 1,
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "incident_id",
+    "tenant_id",
+    "revision",
+    "items"
+  ],
+  "title": "IncidentClaimBundle",
+  "type": "object"
+}

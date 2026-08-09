@@ -1,0 +1,38 @@
+[Unit]
+Description=Blue Team AI Agent - API server
+Documentation=man:blue-team-api(1)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=blue-team
+Group=blue-team
+RuntimeDirectory=blue-team
+RuntimeDirectoryMode=0750
+StateDirectory=blue-team
+StateDirectoryMode=0750
+EnvironmentFile=-/etc/blue-team/blue-team.env
+ExecStart=/opt/blue-team/.venv/bin/blue-team-api
+Restart=on-failure
+RestartSec=2s
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/blue-team
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

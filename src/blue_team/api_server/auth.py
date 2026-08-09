@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, Header, Request
@@ -12,8 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from blue_team.api_server.dependencies import get_session
-from blue_team.api_server.tenant_tokens import credential_id_from_token, token_matches
 from blue_team.config import Settings
+from blue_team.credentials import credential_id_from_token, token_matches
+from blue_team.domain.response import OperatorRole
 from blue_team.errors import AuthenticationError, AuthorizationError, ServiceUnavailableError
 from blue_team.storage.models import TenantCredentialRecord
 
@@ -24,11 +26,17 @@ _bearer = HTTPBearer(auto_error=False, scheme_name="P1DevelopmentToken")
 class RequestPrincipal:
     actor: str
     tenant_id: str | None = None
+    roles: frozenset[OperatorRole] = frozenset()
 
     def require_tenant_id(self) -> str:
         if self.tenant_id is None:
             raise AuthorizationError("a tenant-scoped principal is required")
         return self.tenant_id
+
+    def require_any_role(self, *allowed: OperatorRole) -> None:
+        if OperatorRole.TENANT_ADMIN in self.roles or self.roles.intersection(allowed):
+            return
+        raise AuthorizationError("the authenticated credential lacks the required role")
 
 
 def _settings(request: Request) -> Settings:
@@ -65,9 +73,18 @@ async def require_tenant_principal(
     record = await session.scalar(statement)
     if record is None or not token_matches(credentials.credentials, record.token_digest):
         raise AuthenticationError("invalid bearer credential")
+    if record.expires_at is not None and record.expires_at <= datetime.now(UTC):
+        raise AuthenticationError("expired bearer credential")
+    try:
+        roles = frozenset(OperatorRole(item) for item in record.roles)
+    except (TypeError, ValueError) as error:
+        raise AuthenticationError("invalid bearer credential role binding") from error
+    if not roles:
+        raise AuthenticationError("bearer credential has no roles")
     if requested_tenant_id is not None and requested_tenant_id != record.tenant_id:
         raise AuthorizationError("requested tenant does not match the authenticated credential")
     return RequestPrincipal(
         actor=f"tenant-credential:{record.id}",
         tenant_id=record.tenant_id,
+        roles=roles,
     )

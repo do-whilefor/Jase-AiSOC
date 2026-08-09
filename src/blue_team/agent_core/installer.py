@@ -976,7 +976,7 @@ def _acquire_lock(descriptor: int) -> None:
         import msvcrt
 
         os.lseek(descriptor, 0, os.SEEK_SET)
-        msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]
+        msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
         return
     fcntl = cast(_FcntlModule, importlib.import_module("fcntl"))
     fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -987,7 +987,7 @@ def _release_lock(descriptor: int) -> None:
         import msvcrt
 
         os.lseek(descriptor, 0, os.SEEK_SET)
-        msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
+        msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
         return
     fcntl = cast(_FcntlModule, importlib.import_module("fcntl"))
     fcntl.flock(descriptor, fcntl.LOCK_UN)

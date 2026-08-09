@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "IncidentTimelineEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "timeline_id": {
+          "pattern": "^tli_[a-f0-9]{24}$",
+          "title": "Timeline Id",
+          "type": "string"
+        },
+        "event_time": {
+          "format": "date-time",
+          "title": "Event Time",
+          "type": "string"
+        },
+        "category": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Category",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "evidence_event_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Evidence Event Ids",
+          "type": "array"
+        },
+        "assurance": {
+          "$ref": "#/$defs/TimelineAssurance"
+        }
+      },
+      "required": [
+        "timeline_id",
+        "event_time",
+        "category",
+        "summary",
+        "evidence_event_ids",
+        "assurance"
+      ],
+      "title": "IncidentTimelineEntry",
+      "type": "object"
+    },
+    "TimelineAssurance": {
+      "enum": [
+        "trusted",
+        "degraded",
+        "untrusted"
+      ],
+      "title": "TimelineAssurance",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "incident_id": {
+      "maxLength": 132,
+      "minLength": 1,
+      "title": "Incident Id",
+      "type": "string"
+    },
+    "tenant_id": {
+      "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/IncidentTimelineEntry"
+      },
+      "maxItems": 10000,
+      "minItems": 1,
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "incident_id",
+    "tenant_id",
+    "revision",
+    "items"
+  ],
+  "title": "IncidentTimelineBundle",
+  "type": "object"
+}

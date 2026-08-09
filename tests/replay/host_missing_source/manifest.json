@@ -1,0 +1,11 @@
+{
+  "name": "host_missing_source",
+  "version": "0.2.0",
+  "description": "Network and file facts lack their process/downloader source events; sequence rules must fail open to evidence review without inventing a successful chain.",
+  "source": "deterministic synthetic",
+  "source_kind": "falco",
+  "generator": "tests/replay/build_datasets.py",
+  "expected_detections": [],
+  "license": "CC0-1.0",
+  "events_sha256": "cf745d19b89d3729c94a47d6888c0285659b1086135dfecece90db6791369322"
+}

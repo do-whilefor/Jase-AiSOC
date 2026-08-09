@@ -170,7 +170,7 @@ class AgentProcessSupervisor:
                     stderr=subprocess.PIPE,
                     close_fds=True,
                     shell=False,
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,  # type: ignore[attr-defined]
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
                 )
             else:
                 process = subprocess.Popen(
@@ -547,7 +547,7 @@ def _signal_process_tree(process: subprocess.Popen[bytes], requested: signal.Sig
             else:
                 process.kill()
         else:
-            os.killpg(
+            os.killpg(  # type: ignore[attr-defined]
                 process.pid,
                 requested,
             )

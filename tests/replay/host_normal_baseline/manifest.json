@@ -1,0 +1,11 @@
+{
+  "name": "host_normal_baseline",
+  "version": "0.2.0",
+  "description": "Normal nginx worker, package-managed systemd unit, ten-host backup sweep, and temporary release write; none completes a P5 attack chain.",
+  "source": "deterministic synthetic",
+  "source_kind": "falco",
+  "generator": "tests/replay/build_datasets.py",
+  "expected_detections": [],
+  "license": "CC0-1.0",
+  "events_sha256": "1a4582e5ccc10a7c8034674b263c67834eeecab26cfae7601115373eefe1d28e"
+}

@@ -45,6 +45,7 @@ _IDENTIFIERS = {
 _BATCH_ID = re.compile(r"^batch_[a-f0-9]{32}$")
 _ACTIVE = "active"
 _CORRUPT = "corrupt"
+_MAX_SEQUENCE = 2**63 - 2
 
 
 class QueueError(RuntimeError):
@@ -199,6 +200,32 @@ class LocalDiskQueue:
     def estimate_stored_size(self, envelope: AgentEnvelope) -> int:
         self._require_identity(envelope)
         return self._encode(envelope).stored_size
+
+    def allocate_sequence(self, boot_id: str) -> int:
+        """Durably reserve one monotonically increasing sequence for a boot.
+
+        Reservation and enqueue are intentionally separate: a crash may create a
+        harmless gap, but it must never reuse an already issued sequence. The
+        high-water mark is stored in the same SQLite database as queue evidence.
+        """
+        if not boot_id or len(boot_id) > 128:
+            raise QueueConfigurationError("boot_id must contain between 1 and 128 characters")
+        with self._transaction(write=True) as connection:
+            key = self._sequence_metadata_key(boot_id)
+            raw_next = self._get_metadata(connection, key)
+            if raw_next is None:
+                next_sequence = self._derive_next_sequence(connection, boot_id)
+            else:
+                try:
+                    next_sequence = int(raw_next)
+                except ValueError as error:
+                    raise QueueIntegrityError(
+                        "queue sequence high-water mark is invalid"
+                    ) from error
+            if not 0 <= next_sequence <= _MAX_SEQUENCE:
+                raise QueueIntegrityError("queue sequence high-water mark is out of range")
+            self._set_metadata(connection, key, str(next_sequence + 1))
+            return next_sequence
 
     def enqueue(self, envelope: AgentEnvelope) -> QueueWriteResult:
         self._require_identity(envelope)
@@ -361,6 +388,7 @@ class LocalDiskQueue:
         envelope: AgentEnvelope,
         encoded: _EncodedEnvelope,
     ) -> QueueWriteResult | QueueError:
+        self._advance_sequence_floor(connection, envelope.boot_id, envelope.sequence + 1)
         existing = connection.execute(
             """
             SELECT payload_sha256 FROM queue_items
@@ -872,6 +900,52 @@ class LocalDiskQueue:
                 raise QueueIdentityMismatch(f"queue {key} is bound to {existing!r}, not {value!r}")
         if self._get_metadata(connection, "protection_mode") is None:
             self._set_metadata(connection, "protection_mode", "0")
+
+    def _derive_next_sequence(self, connection: sqlite3.Connection, boot_id: str) -> int:
+        row = connection.execute(
+            "SELECT MAX(sequence) AS value FROM queue_items WHERE boot_id = ?",
+            (boot_id,),
+        ).fetchone()
+        maximum = int(row["value"]) if row is not None and row["value"] is not None else -1
+        # Legacy queues did not persist a sequence high-water mark. Queue audit
+        # rows survive ACK deletion, so use their exact boot/sequence evidence to
+        # avoid reusing an already uploaded sequence after an upgrade.
+        audit_rows = connection.execute(
+            "SELECT details FROM queue_audit WHERE details LIKE ?",
+            (f'%"boot_id":"{boot_id}"%',),
+        ).fetchall()
+        for audit_row in audit_rows:
+            try:
+                details = json.loads(str(audit_row["details"]))
+            except ValueError:
+                continue
+            if not isinstance(details, dict) or details.get("boot_id") != boot_id:
+                continue
+            sequence = details.get("sequence")
+            if isinstance(sequence, int) and not isinstance(sequence, bool):
+                maximum = max(maximum, sequence)
+        return maximum + 1
+
+    def _advance_sequence_floor(
+        self, connection: sqlite3.Connection, boot_id: str, floor: int
+    ) -> None:
+        if not 0 <= floor <= _MAX_SEQUENCE + 1:
+            raise QueueSequenceConflict("event sequence exceeds the supported range")
+        key = self._sequence_metadata_key(boot_id)
+        current = self._get_metadata(connection, key)
+        if current is None:
+            existing_floor = self._derive_next_sequence(connection, boot_id)
+        else:
+            try:
+                existing_floor = int(current)
+            except ValueError as error:
+                raise QueueIntegrityError("queue sequence high-water mark is invalid") from error
+        if floor > existing_floor:
+            self._set_metadata(connection, key, str(floor))
+
+    @staticmethod
+    def _sequence_metadata_key(boot_id: str) -> str:
+        return f"next_sequence:{boot_id}"
 
     def _maybe_clear_protection(
         self,

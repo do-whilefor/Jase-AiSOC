@@ -1,0 +1,758 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ConsoleHistoricalRuleVersion": {
+      "additionalProperties": false,
+      "properties": {
+        "rule_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        },
+        "registered_current_version": {
+          "title": "Registered Current Version",
+          "type": "boolean"
+        },
+        "tenant_metrics": {
+          "$ref": "#/$defs/ConsoleRuleTenantMetrics"
+        }
+      },
+      "required": [
+        "rule_id",
+        "version",
+        "registered_current_version",
+        "tenant_metrics"
+      ],
+      "title": "ConsoleHistoricalRuleVersion",
+      "type": "object"
+    },
+    "ConsoleIntelligenceCacheEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "cache_id": {
+          "maxLength": 132,
+          "minLength": 1,
+          "title": "Cache Id",
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "indicator": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Indicator",
+          "type": "string"
+        },
+        "lookup_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Lookup Hash",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "cache_state": {
+          "enum": [
+            "fresh",
+            "expired",
+            "no_expiry"
+          ],
+          "title": "Cache State",
+          "type": "string"
+        },
+        "payload_fields": {
+          "default": [],
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Payload Fields",
+          "type": "array"
+        },
+        "payload_field_count": {
+          "minimum": 0,
+          "title": "Payload Field Count",
+          "type": "integer"
+        },
+        "payload_fields_truncated": {
+          "title": "Payload Fields Truncated",
+          "type": "boolean"
+        },
+        "fetched_at": {
+          "format": "date-time",
+          "title": "Fetched At",
+          "type": "string"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        }
+      },
+      "required": [
+        "cache_id",
+        "kind",
+        "indicator",
+        "lookup_hash",
+        "source",
+        "cache_state",
+        "payload_field_count",
+        "payload_fields_truncated",
+        "fetched_at"
+      ],
+      "title": "ConsoleIntelligenceCacheEntry",
+      "type": "object"
+    },
+    "ConsoleRuleGovernanceEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "rule_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "owner": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Owner",
+          "type": "string"
+        },
+        "lifecycle_stage": {
+          "enum": [
+            "draft",
+            "shadow",
+            "canary",
+            "released",
+            "deprecated"
+          ],
+          "title": "Lifecycle Stage",
+          "type": "string"
+        },
+        "runtime_state": {
+          "enum": [
+            "absent",
+            "current",
+            "expired",
+            "version_stale",
+            "catalog_mismatch"
+          ],
+          "title": "Runtime State",
+          "type": "string"
+        },
+        "emission_scope": {
+          "enum": [
+            "disabled",
+            "shadow_only",
+            "canary_hosts",
+            "all_hosts"
+          ],
+          "title": "Emission Scope",
+          "type": "string"
+        },
+        "runtime_emits_persisted_detections": {
+          "title": "Runtime Emits Persisted Detections",
+          "type": "boolean"
+        },
+        "formal_release_gate_closed": {
+          "title": "Formal Release Gate Closed",
+          "type": "boolean"
+        },
+        "lifecycle_rule_version": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lifecycle Rule Version"
+        },
+        "lifecycle_sequence": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lifecycle Sequence"
+        },
+        "manifest_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Manifest Sha256"
+        },
+        "signing_key_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_.-]{3,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Signing Key Id"
+        },
+        "catalog_digest_matches": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog Digest Matches"
+        },
+        "canary_host_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Canary Host Ids",
+          "type": "array"
+        },
+        "canary_host_count": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Canary Host Count",
+          "type": "integer"
+        },
+        "validation_evidence_count": {
+          "default": 0,
+          "maximum": 32,
+          "minimum": 0,
+          "title": "Validation Evidence Count",
+          "type": "integer"
+        },
+        "manifest_issued_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Manifest Issued At"
+        },
+        "manifest_expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Manifest Expires At"
+        },
+        "manifest_applied_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Manifest Applied At"
+        },
+        "data_sources": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Data Sources",
+          "type": "array"
+        },
+        "test_datasets": {
+          "items": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Test Datasets",
+          "type": "array"
+        },
+        "expected_false_positives": {
+          "items": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Expected False Positives",
+          "type": "array"
+        },
+        "technique_ids": {
+          "items": {
+            "pattern": "^T[0-9]{4}(?:\\.[0-9]{3})?$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Technique Ids",
+          "type": "array"
+        },
+        "suppression_conditions": {
+          "items": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Suppression Conditions",
+          "type": "array"
+        },
+        "rollback_plan": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Rollback Plan",
+          "type": "string"
+        },
+        "runtime_note": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Runtime Note",
+          "type": "string"
+        },
+        "tenant_metrics": {
+          "$ref": "#/$defs/ConsoleRuleTenantMetrics"
+        },
+        "quality_metrics": {
+          "$ref": "#/$defs/ConsoleRuleQualityMetrics"
+        }
+      },
+      "required": [
+        "rule_id",
+        "version",
+        "title",
+        "owner",
+        "lifecycle_stage",
+        "runtime_state",
+        "emission_scope",
+        "runtime_emits_persisted_detections",
+        "formal_release_gate_closed",
+        "data_sources",
+        "test_datasets",
+        "expected_false_positives",
+        "technique_ids",
+        "suppression_conditions",
+        "rollback_plan",
+        "runtime_note",
+        "tenant_metrics",
+        "quality_metrics"
+      ],
+      "title": "ConsoleRuleGovernanceEntry",
+      "type": "object"
+    },
+    "ConsoleRuleIntelligenceCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "registered_rules": {
+          "minimum": 0,
+          "title": "Registered Rules",
+          "type": "integer"
+        },
+        "persisted_rule_versions": {
+          "minimum": 0,
+          "title": "Persisted Rule Versions",
+          "type": "integer"
+        },
+        "historical_rule_versions": {
+          "minimum": 0,
+          "title": "Historical Rule Versions",
+          "type": "integer"
+        },
+        "intelligence_entries": {
+          "minimum": 0,
+          "title": "Intelligence Entries",
+          "type": "integer"
+        },
+        "governed_detections": {
+          "minimum": 0,
+          "title": "Governed Detections",
+          "type": "integer"
+        },
+        "legacy_detections": {
+          "minimum": 0,
+          "title": "Legacy Detections",
+          "type": "integer"
+        },
+        "shadow_observations": {
+          "minimum": 0,
+          "title": "Shadow Observations",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "registered_rules",
+        "persisted_rule_versions",
+        "historical_rule_versions",
+        "intelligence_entries",
+        "governed_detections",
+        "legacy_detections",
+        "shadow_observations"
+      ],
+      "title": "ConsoleRuleIntelligenceCounts",
+      "type": "object"
+    },
+    "ConsoleRuleQualityMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "precision": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Precision"
+        },
+        "recall": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recall"
+        },
+        "false_positives_per_host_day": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "False Positives Per Host Day"
+        },
+        "attack_attempt_success_error_rate": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attack Attempt Success Error Rate"
+        },
+        "mttd_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mttd Seconds"
+        },
+        "missing_source_sensitivity": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Missing Source Sensitivity"
+        },
+        "performance_ms_per_1000_events": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Performance Ms Per 1000 Events"
+        }
+      },
+      "title": "ConsoleRuleQualityMetrics",
+      "type": "object"
+    },
+    "ConsoleRuleTenantMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "hit_count": {
+          "minimum": 0,
+          "title": "Hit Count",
+          "type": "integer"
+        },
+        "governed_hit_count": {
+          "minimum": 0,
+          "title": "Governed Hit Count",
+          "type": "integer"
+        },
+        "legacy_hit_count": {
+          "minimum": 0,
+          "title": "Legacy Hit Count",
+          "type": "integer"
+        },
+        "open_hit_count": {
+          "minimum": 0,
+          "title": "Open Hit Count",
+          "type": "integer"
+        },
+        "distinct_host_count": {
+          "minimum": 0,
+          "title": "Distinct Host Count",
+          "type": "integer"
+        },
+        "shadow_observation_count": {
+          "minimum": 0,
+          "title": "Shadow Observation Count",
+          "type": "integer"
+        },
+        "shadow_distinct_host_count": {
+          "minimum": 0,
+          "title": "Shadow Distinct Host Count",
+          "type": "integer"
+        },
+        "feedback_total": {
+          "minimum": 0,
+          "title": "Feedback Total",
+          "type": "integer"
+        },
+        "true_positive_feedback": {
+          "minimum": 0,
+          "title": "True Positive Feedback",
+          "type": "integer"
+        },
+        "false_positive_feedback": {
+          "minimum": 0,
+          "title": "False Positive Feedback",
+          "type": "integer"
+        },
+        "benign_feedback": {
+          "minimum": 0,
+          "title": "Benign Feedback",
+          "type": "integer"
+        },
+        "needs_review_feedback": {
+          "minimum": 0,
+          "title": "Needs Review Feedback",
+          "type": "integer"
+        },
+        "last_hit_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Hit At"
+        },
+        "last_shadow_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Shadow At"
+        }
+      },
+      "required": [
+        "hit_count",
+        "governed_hit_count",
+        "legacy_hit_count",
+        "open_hit_count",
+        "distinct_host_count",
+        "shadow_observation_count",
+        "shadow_distinct_host_count",
+        "feedback_total",
+        "true_positive_feedback",
+        "false_positive_feedback",
+        "benign_feedback",
+        "needs_review_feedback"
+      ],
+      "title": "ConsoleRuleTenantMetrics",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Read-only truth surface for rule governance and cached intelligence.",
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tenant_id": {
+      "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "counts": {
+      "$ref": "#/$defs/ConsoleRuleIntelligenceCounts"
+    },
+    "rules": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConsoleRuleGovernanceEntry"
+      },
+      "maxItems": 32,
+      "title": "Rules",
+      "type": "array"
+    },
+    "historical_rule_versions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConsoleHistoricalRuleVersion"
+      },
+      "maxItems": 64,
+      "title": "Historical Rule Versions",
+      "type": "array"
+    },
+    "intelligence_cache": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConsoleIntelligenceCacheEntry"
+      },
+      "maxItems": 50,
+      "title": "Intelligence Cache",
+      "type": "array"
+    },
+    "truncated_sections": {
+      "default": [],
+      "items": {
+        "enum": [
+          "historical_rule_versions",
+          "intelligence_cache"
+        ],
+        "type": "string"
+      },
+      "maxItems": 2,
+      "title": "Truncated Sections",
+      "type": "array"
+    },
+    "lifecycle_enforcement_available": {
+      "const": true,
+      "default": true,
+      "title": "Lifecycle Enforcement Available",
+      "type": "boolean"
+    },
+    "managed_ioc_lifecycle_available": {
+      "const": false,
+      "default": false,
+      "title": "Managed Ioc Lifecycle Available",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "generated_at",
+    "counts"
+  ],
+  "title": "ConsoleRuleIntelligenceOperations",
+  "type": "object"
+}

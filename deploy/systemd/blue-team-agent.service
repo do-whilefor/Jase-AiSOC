@@ -1,0 +1,41 @@
+[Unit]
+Description=Blue Team AI Agent - endpoint collector agent
+Documentation=man:blue-team-agent(1)
+After=network-online.target blue-team-ingest.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=blue-team
+# `adm` grants read access to /var/log; `systemd-journal` grants journalctl access.
+SupplementaryGroups=adm systemd-journal
+RuntimeDirectory=blue-team
+RuntimeDirectoryMode=0750
+StateDirectory=blue-team-agent
+StateDirectoryMode=0750
+EnvironmentFile=-/etc/blue-team/agent.env
+ExecStart=/opt/blue-team/.venv/bin/blue-team-agent run --config /etc/blue-team/agent.json
+Restart=on-failure
+RestartSec=2s
+# Hardening: the Agent reads logs and journalctl; it does not need write
+# access outside its state dir or the ability to load kernel modules.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/blue-team-agent
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LimitNOFILE=65536
+# Audit/EVE log reads require no special capability; journalctl access is gated
+# by the systemd-journal supplementary group rather than capabilities.
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from blue_team.domain.resources import IncidentSeverity, ResourceModel
 
@@ -44,7 +44,14 @@ class DetectionCategory(StrEnum):
     """Stable detection category identifiers consumed by rules and the API."""
 
     WEB_RECON_SCANNING = "web.recon.scanning"
+    WEB_INJECTION = "web.attack.injection"
+    WEB_ABNORMAL_METHOD = "web.request.abnormal_method"
     SSH_BRUTEFORCE = "auth.ssh.bruteforce"
+    HOST_WEB_PROCESS_SHELL = "host.web_process.shell"
+    HOST_DOWNLOAD_EXECUTE = "host.download.execute"
+    HOST_PERSISTENCE_CHANGE = "host.persistence.change"
+    HOST_WEB_SHELL_OUTBOUND = "host.web_shell.outbound"
+    HOST_LATERAL_SCAN = "host.lateral.scan"
 
 
 class DetectionCreate(ResourceModel):
@@ -63,6 +70,17 @@ class DetectionCreate(ResourceModel):
     event_time_window_start: datetime
     event_time_window_end: datetime
     next_steps: Annotated[str, Field(max_length=512)] | None = None
+    governance_stage: Literal["canary", "released"] | None = None
+    governance_manifest_sha256: Annotated[
+        str | None,
+        Field(pattern=r"^[a-f0-9]{64}$"),
+    ] = None
+
+    @model_validator(mode="after")
+    def require_closed_governance_reference(self) -> Self:
+        if (self.governance_stage is None) != (self.governance_manifest_sha256 is None):
+            raise ValueError("detection governance stage and manifest must be present together")
+        return self
 
 
 class DetectionRead(ResourceModel):
@@ -84,5 +102,16 @@ class DetectionRead(ResourceModel):
     event_time_window_start: datetime
     event_time_window_end: datetime
     status: DetectionStatus
+    governance_stage: Literal["canary", "released"] | None = None
+    governance_manifest_sha256: Annotated[
+        str | None,
+        Field(pattern=r"^[a-f0-9]{64}$"),
+    ] = None
     detection_time: datetime
     created_at: datetime
+
+    @model_validator(mode="after")
+    def require_closed_governance_reference(self) -> Self:
+        if (self.governance_stage is None) != (self.governance_manifest_sha256 is None):
+            raise ValueError("detection governance stage and manifest must be present together")
+        return self

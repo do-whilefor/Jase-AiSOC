@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "AdjudicationResolution": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_id": {
+          "pattern": "^aic_[a-f0-9]{24}$",
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "final_status": {
+          "$ref": "#/$defs/ClaimReviewStatus"
+        },
+        "evidence_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "requires_human": {
+          "title": "Requires Human",
+          "type": "boolean"
+        },
+        "rationale": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "claim_id",
+        "final_status",
+        "requires_human",
+        "rationale"
+      ],
+      "title": "AdjudicationResolution",
+      "type": "object"
+    },
+    "ClaimReviewStatus": {
+      "enum": [
+        "supported",
+        "partially_supported",
+        "insufficient",
+        "contradicted",
+        "unsupported"
+      ],
+      "title": "ClaimReviewStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "incident_id": {
+      "maxLength": 132,
+      "minLength": 1,
+      "title": "Incident Id",
+      "type": "string"
+    },
+    "resolutions": {
+      "items": {
+        "$ref": "#/$defs/AdjudicationResolution"
+      },
+      "maxItems": 128,
+      "title": "Resolutions",
+      "type": "array"
+    },
+    "unresolved_conflict_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 256,
+      "title": "Unresolved Conflict Ids",
+      "type": "array"
+    },
+    "overall_unknowns": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "title": "Overall Unknowns",
+      "type": "array"
+    },
+    "allowed_response": {
+      "const": "recommend_only",
+      "default": "recommend_only",
+      "title": "Allowed Response",
+      "type": "string"
+    }
+  },
+  "required": [
+    "incident_id",
+    "resolutions"
+  ],
+  "title": "AdjudicationReport",
+  "type": "object"
+}

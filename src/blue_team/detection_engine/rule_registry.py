@@ -40,8 +40,10 @@ def get_rules() -> list[Rule]:
 def register_all() -> None:
     """Import rule modules so their ``@register`` decorators run."""
     from blue_team.detection_engine.rules import (  # noqa: F401  (import side effect)
+        host_behavior,
         ssh_bruteforce,
         web_recon_scan,
+        web_request_anomalies,
     )
 
 

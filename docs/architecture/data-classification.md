@@ -15,6 +15,11 @@
 4. 原始证据与 AI 输入输出分开保存；AI 记录保留 Provider、模型、Prompt/策略版本、字段清单、Token、成本和结果哈希。
 5. 对象存储按租户/数据类型分区，样本桶不可执行；访问使用短期凭据并记录下载审计。
 6. 删除必须覆盖索引、对象、缓存和派生模型上下文，并保留不含敏感原文的删除审计。
+7. 恶意样本必须进入独立加密 quarantine；API/控制台不提供默认导出，静态 worker 使用独立进程
+   身份，动态沙箱使用另一信任域。任何允许下载的后续能力必须另加短期授权、用途绑定和完整审计。
+8. P10 调查导出继承其中最高数据级别。当前只导出结构化 trace、evidence pointer、`raw_ref` 与
+   integrity hash，不复制 raw log/PCAP/sample bytes；tenant/trace/revision/evidence count 与 canonical
+   content SHA-256 必须进入 manifest 和审计。`raw_ref` 仍是需二次授权的不透明定位符。
 
 ## AI 数据出域门禁
 

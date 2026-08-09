@@ -20,7 +20,7 @@ from blue_team.agent_core import (
     QueueSequenceConflict,
     QueueStorageError,
 )
-from tests.unit.test_agent_contracts import AGENT_ID, HOST_ID, TENANT_ID, envelope
+from tests.unit.test_agent_contracts import AGENT_ID, BOOT_ID, HOST_ID, TENANT_ID, envelope
 
 
 class MutableClock:
@@ -95,6 +95,23 @@ def test_queue_survives_restart_reuses_batch_id_and_deletes_only_full_ack(
     assert restarted.acknowledge(complete) == 2
     assert restarted.telemetry().queued_count == 0
     assert restarted.telemetry().inflight_count == 0
+
+
+def test_sequence_allocator_is_monotonic_across_restart_and_manual_floor(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "sequence.sqlite3"
+    queue = LocalDiskQueue(config(path))
+    queue.initialize()
+
+    assert queue.allocate_sequence(BOOT_ID) == 0
+    assert queue.allocate_sequence(BOOT_ID) == 1
+    queue.enqueue(envelope(10, EventPriority.P2))
+
+    restarted = LocalDiskQueue(config(path))
+    restarted.initialize()
+    assert restarted.allocate_sequence(BOOT_ID) == 11
+    assert restarted.allocate_sequence("another-boot") == 0
 
 
 def test_acknowledgement_must_match_the_exact_final_sequence(tmp_path: Path) -> None:

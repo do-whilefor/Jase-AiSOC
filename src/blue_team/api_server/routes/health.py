@@ -21,13 +21,17 @@ async def liveness() -> dict[str, str]:
 
 @router.get("/health/ready", summary="Dependency readiness")
 async def readiness(
+    request: Request,
     database: Annotated[Database, Depends(get_database)],
     object_store: Annotated[ObjectStore, Depends(get_object_store)],
 ) -> JSONResponse:
-    checks = {
+    checks: dict[str, bool] = {
         "database": await database.ping(),
         "object_store": await object_store.ready(),
     }
+    if request.app.state.settings.malware_analysis_enabled:
+        quarantine = request.app.state.quarantine_store
+        checks["malware_quarantine"] = quarantine is not None and await quarantine.ready()
     ready = all(checks.values())
     return JSONResponse(
         status_code=status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE,

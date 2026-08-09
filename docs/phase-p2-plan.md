@@ -9,9 +9,9 @@
 | 工作包 | 当前实现/要求 | 状态 |
 |---|---|---|
 | 平台事实探测 | 安全解析 `os-release`，识别 init、内核、架构、BTF、cgroup、LSM | 已实现 |
-| Collector 能力报告 | journald/auditd/eBPF 显式 enabled/degraded/failed、drop_count、last_error | 初版完成 |
+| Collector 能力报告 | journald/auditd/eBPF 显式 enabled/degraded/failed；drop/backlog/parse/incomplete、last_error | 初版完成 |
 | 诊断 CLI | `blue-team-probe-platform` 输出 CapabilityReport v0.1.0 JSON | 已实现 |
-| Agent 框架 | AgentEnvelope、Heartbeat、Batch/ACK；确定性生命周期、真实进程入口、单实例锁和本地 journal | 初版完成 |
+| Agent 框架 | AgentEnvelope、Heartbeat、Batch/ACK；确定性生命周期、显式 polling Collector、真实进程入口、单实例锁和本地 journal | 初版完成 |
 | 本地可靠队列 | SQLite 事务缓存、优先级背压、批次租约、重放、损坏隔离和丢弃审计 | 初版完成 |
 | Agent 身份 | 一次性注册、P-256 mTLS 证书、轮换/吊销/重注册、软件机器绑定和并发租约 | 初版完成 |
 | 策略与升级 | 签名、防降级、灰度、回滚审计、健康门控 tar 事务及有界候选进程 supervisor；下载器/systemd/策略激活未接入 | 部分实现 |
@@ -56,6 +56,13 @@
 - Agent runtime 使用显式 `created → initializing → running/degraded/protection → stopping →
   stopped` 状态机，没有隐藏线程或隐式重启；Collector 只能在初始化前注册，名称重复或运行中
   注册均被拒绝，停止顺序与启动顺序相反。
+- runtime 的每轮工作会显式驱动可选 `run_once` Collector；poll 异常与其他 Collector 隔离。
+  `blue-team-agent run` 已注册 audit.log 文件 Collector，Heartbeat 会传播 degraded/failed 状态以及
+  最后可观察的 drop、backlog、parse-error 和 incomplete 计数。
+- 本地队列为每个 boot 持久分配 sequence 高水位，ACK 删除后仍可从审计恢复旧队列 floor；
+  AuditdCollector 把文件 cursor 和未完成 serial 一起 checkpoint，避免崩溃后从半组之后继续而丢证据。
+- 上述 Collector 只在 Windows 临时文件、可注入状态读取器和 SQLite 重启对照中动态验证；尚未在
+  原生 Linux auditd/auditctl 上证明权限、rotation、kernel lost/backlog 或高 EPS 行为。
 - 单个 Collector 的 start/health/pause/resume/stop 异常被隔离并进入失败能力报告，不使其他
   Collector 静默消失。Heartbeat 合并平台探测、Collector 动态状态和可靠队列 telemetry。
 - 队列进入 protection mode 时，runtime 立即暂停非必要 Collector，保留显式标记为 essential

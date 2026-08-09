@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "IncidentEvidenceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "pattern": "^evi_[a-f0-9]{24}$",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "event_id": {
+          "pattern": "^evt_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "event_type": {
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "title": "Event Type",
+          "type": "string"
+        },
+        "event_time": {
+          "format": "date-time",
+          "title": "Event Time",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "raw_ref": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Raw Ref",
+          "type": "string"
+        },
+        "integrity_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Integrity Sha256"
+        },
+        "source_time_quality": {
+          "enum": [
+            "trusted",
+            "skew_detected",
+            "untrusted"
+          ],
+          "title": "Source Time Quality",
+          "type": "string"
+        },
+        "is_late": {
+          "default": false,
+          "title": "Is Late",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "event_id",
+        "event_type",
+        "event_time",
+        "host_id",
+        "raw_ref",
+        "source_time_quality"
+      ],
+      "title": "IncidentEvidenceRef",
+      "type": "object"
+    },
+    "NormalizedEventRead": {
+      "additionalProperties": false,
+      "description": "A normalized event row, returned by the events query API (P3 batch E).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "tenant_id": {
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "source_event_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Event Id"
+        },
+        "event_type": {
+          "title": "Event Type",
+          "type": "string"
+        },
+        "event_time": {
+          "format": "date-time",
+          "title": "Event Time",
+          "type": "string"
+        },
+        "ingest_time": {
+          "format": "date-time",
+          "title": "Ingest Time",
+          "type": "string"
+        },
+        "source_time_quality": {
+          "title": "Source Time Quality",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "integer"
+        },
+        "raw_ref": {
+          "title": "Raw Ref",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "labels": {
+          "additionalProperties": true,
+          "title": "Labels",
+          "type": "object"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "title": "Extensions",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "tenant_id",
+        "event_id",
+        "source_event_id",
+        "event_type",
+        "event_time",
+        "ingest_time",
+        "source_time_quality",
+        "status",
+        "revision",
+        "raw_ref",
+        "payload",
+        "labels",
+        "extensions"
+      ],
+      "title": "NormalizedEventRead",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One normalized fact proven to belong to the current Incident revision.",
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tenant_id": {
+      "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "incident_id": {
+      "pattern": "^inc_[a-f0-9]{32}$",
+      "title": "Incident Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "evidence": {
+      "$ref": "#/$defs/IncidentEvidenceRef"
+    },
+    "normalized_event": {
+      "$ref": "#/$defs/NormalizedEventRead"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "incident_id",
+    "revision",
+    "evidence",
+    "normalized_event"
+  ],
+  "title": "ConsoleIncidentEvidenceDetail",
+  "type": "object"
+}

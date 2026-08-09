@@ -1,5 +1,6 @@
 """Linux Agent contracts and reliable local buffering primitives."""
 
+from blue_team.agent_core.auditd import AuditdRecord, AuditdSerialAggregator, AuditdSerialGroup
 from blue_team.agent_core.contracts import (
     AgentEnvelope,
     AgentHeartbeat,
@@ -98,6 +99,7 @@ from blue_team.agent_core.runtime import (
     CollectorDriver,
     CollectorRegistration,
     HeartbeatAttempt,
+    PollingCollectorDriver,
     QueueRuntimeBackend,
     RuntimeConfig,
     RuntimeConfigurationError,
@@ -137,6 +139,9 @@ __all__ = [
     "AgentRuntimeState",
     "AppliedRelease",
     "ArtifactKind",
+    "AuditdRecord",
+    "AuditdSerialAggregator",
+    "AuditdSerialGroup",
     "BatchAck",
     "CertificateSigner",
     "CloneDetectedError",
@@ -156,6 +161,7 @@ __all__ = [
     "LocalAgentIdentity",
     "LocalCertificateAuthority",
     "LocalDiskQueue",
+    "PollingCollectorDriver",
     "PriorityCounts",
     "PrivateJsonlJournal",
     "ProcessLaunch",

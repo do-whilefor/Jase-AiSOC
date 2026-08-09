@@ -11,11 +11,17 @@ TENANT_ID_PATTERN: Final = r"^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$"
 AGENT_ID_PATTERN: Final = r"^agent_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$"
 HOST_ID_PATTERN: Final = r"^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$"
 INSTALLATION_ID_PATTERN: Final = r"^inst_[A-Za-z0-9][A-Za-z0-9_-]{3,127}$"
+AGENT_VERSION_PATTERN: Final = (
+    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+    r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
 
 TenantId = Annotated[str, Field(pattern=TENANT_ID_PATTERN)]
 AgentId = Annotated[str, Field(pattern=AGENT_ID_PATTERN)]
 HostId = Annotated[str, Field(pattern=HOST_ID_PATTERN)]
 InstallationId = Annotated[str, Field(pattern=INSTALLATION_ID_PATTERN)]
+AgentVersion = Annotated[str, Field(pattern=AGENT_VERSION_PATTERN, max_length=128)]
 
 _PATTERNS: Final = {
     "tenant_id": re.compile(TENANT_ID_PATTERN),

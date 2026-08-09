@@ -2,8 +2,9 @@
 
 All functions are async and reuse the shared ``Database.session()`` context.
 ``insert_normalized_event`` is idempotent via the ``(tenant_id, dedupe_key)``
-unique constraint; late arrivals insert a new row with a bumped revision and
-mark the previous one ``superseded`` (append-only, never overwriting).
+unique constraint. A genuinely new late event has its own dedupe key and is
+appended with ``revision_reason=late_arrival``; a duplicate key remains a replay
+of the existing immutable fact.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,9 +40,9 @@ async def insert_normalized_event(
 ) -> NormalizedEventRecord | None:
     """Insert a normalized event; idempotent on ``(tenant_id, dedupe_key)``.
 
-    Returns the existing row (no duplicate) when the dedupe key is already
-    present. Late arrivals (``result.is_late``) insert a new row with
-    ``revision = prev.revision + 1`` and mark the previous row ``superseded``.
+    Returns the existing row when the dedupe key is already present. New late
+    events are appended normally and marked for P6 incident/timeline recompute;
+    normalized facts themselves are not superseded because of arrival order.
     """
     if result.event is None:
         return None
@@ -50,24 +51,13 @@ async def insert_normalized_event(
         select(NormalizedEventRecord).where(
             NormalizedEventRecord.tenant_id == tenant_id,
             NormalizedEventRecord.dedupe_key == result.dedupe_key,
-            NormalizedEventRecord.status == "active",
         )
     )
-    if existing is not None and not result.is_late:
+    if existing is not None:
         return existing
     payload = event.model_dump(mode="json")
     labels = payload.get("labels", {})
     extensions = payload.get("extensions", {})
-    revision = 1
-    revision_reason: str | None = None
-    if existing is not None and result.is_late:
-        revision = existing.revision + 1
-        revision_reason = "late_arrival"
-        await session.execute(
-            update(NormalizedEventRecord)
-            .where(NormalizedEventRecord.id == existing.id)
-            .values(status="superseded", revision_reason="superseded_by_late_arrival")
-        )
     record = NormalizedEventRecord(
         id=_new_id("nevt"),
         tenant_id=tenant_id,
@@ -87,8 +77,8 @@ async def insert_normalized_event(
         raw_ref=raw_ref,
         normalizer_version=normalizer_version,
         status="active",
-        revision=revision,
-        revision_reason=revision_reason,
+        revision=1,
+        revision_reason="late_arrival" if result.is_late else None,
         watermark_event_time=watermark_event_time,
     )
     session.add(record)

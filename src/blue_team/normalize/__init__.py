@@ -5,7 +5,10 @@ from __future__ import annotations
 # Importing the adapter modules registers them with the registry at import time.
 from blue_team.normalize import (  # noqa: F401
     agent_normalizer,
+    auditd_normalizer,
+    falco_normalizer,
     journald_normalizer,
+    service_log_normalizer,
     stub_normalizers,
     suricata_normalizer,
 )

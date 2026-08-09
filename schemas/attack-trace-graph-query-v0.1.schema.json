@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "TraceRelationship": {
+      "enum": [
+        "contains",
+        "runs_process",
+        "spawned",
+        "acts_as",
+        "logged_into",
+        "created_file",
+        "accessed_file",
+        "executed_file",
+        "stores_file",
+        "connects_to",
+        "targets",
+        "observed_session",
+        "communicates_with",
+        "lateral_to",
+        "resolves",
+        "presents_certificate",
+        "observed_technique",
+        "shares_infrastructure"
+      ],
+      "title": "TraceRelationship",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "root_entity_id": {
+      "pattern": "^tge_[a-f0-9]{24}$",
+      "title": "Root Entity Id",
+      "type": "string"
+    },
+    "max_depth": {
+      "default": 4,
+      "maximum": 8,
+      "minimum": 0,
+      "title": "Max Depth",
+      "type": "integer"
+    },
+    "max_nodes": {
+      "default": 250,
+      "maximum": 1000,
+      "minimum": 1,
+      "title": "Max Nodes",
+      "type": "integer"
+    },
+    "relationships": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/TraceRelationship"
+      },
+      "maxItems": 32,
+      "title": "Relationships",
+      "type": "array"
+    }
+  },
+  "required": [
+    "root_entity_id"
+  ],
+  "title": "TraceGraphQuery",
+  "type": "object"
+}

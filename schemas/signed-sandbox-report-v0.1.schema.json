@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "SandboxArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_id": {
+          "pattern": "^sba_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "maximum": 1073741824,
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "media_type": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Media Type",
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "sha256",
+        "size",
+        "media_type",
+        "kind"
+      ],
+      "title": "SandboxArtifact",
+      "type": "object"
+    },
+    "SandboxNetworkPolicy": {
+      "enum": [
+        "no_egress",
+        "simulated",
+        "controlled"
+      ],
+      "title": "SandboxNetworkPolicy",
+      "type": "string"
+    },
+    "SandboxObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "observation_id": {
+          "pattern": "^sbo_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Observation Id",
+          "type": "string"
+        },
+        "category": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Category",
+          "type": "string"
+        },
+        "action": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Action",
+          "type": "string"
+        },
+        "target": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        },
+        "evidence_artifact_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Evidence Artifact Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "observation_id",
+        "category",
+        "action",
+        "target"
+      ],
+      "title": "SandboxObservation",
+      "type": "object"
+    },
+    "SandboxReport": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "sandbox-report-v0.1",
+          "default": "sandbox-report-v0.1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "report_id": {
+          "pattern": "^sbr_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Report Id",
+          "type": "string"
+        },
+        "tenant_id": {
+          "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "sample_id": {
+          "pattern": "^smp_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Sample Id",
+          "type": "string"
+        },
+        "sample_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sample Sha256",
+          "type": "string"
+        },
+        "sandbox_task_id": {
+          "pattern": "^sbt_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Sandbox Task Id",
+          "type": "string"
+        },
+        "isolation_profile": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Isolation Profile",
+          "type": "string"
+        },
+        "network_policy": {
+          "$ref": "#/$defs/SandboxNetworkPolicy"
+        },
+        "observations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SandboxObservation"
+          },
+          "maxItems": 512,
+          "title": "Observations",
+          "type": "array"
+        },
+        "artifacts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SandboxArtifact"
+          },
+          "maxItems": 128,
+          "title": "Artifacts",
+          "type": "array"
+        },
+        "environment_destroyed": {
+          "title": "Environment Destroyed",
+          "type": "boolean"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "completed_at": {
+          "format": "date-time",
+          "title": "Completed At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "report_id",
+        "tenant_id",
+        "sample_id",
+        "sample_sha256",
+        "sandbox_task_id",
+        "isolation_profile",
+        "network_policy",
+        "environment_destroyed",
+        "started_at",
+        "completed_at"
+      ],
+      "title": "SandboxReport",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "signed-sandbox-report-v0.1",
+      "default": "signed-sandbox-report-v0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "key_id": {
+      "pattern": "^[A-Za-z0-9_.-]{3,128}$",
+      "title": "Key Id",
+      "type": "string"
+    },
+    "algorithm": {
+      "const": "ed25519",
+      "default": "ed25519",
+      "title": "Algorithm",
+      "type": "string"
+    },
+    "report": {
+      "$ref": "#/$defs/SandboxReport"
+    },
+    "signature": {
+      "maxLength": 88,
+      "minLength": 86,
+      "title": "Signature",
+      "type": "string"
+    }
+  },
+  "required": [
+    "key_id",
+    "report",
+    "signature"
+  ],
+  "title": "SignedSandboxReportEnvelope",
+  "type": "object"
+}

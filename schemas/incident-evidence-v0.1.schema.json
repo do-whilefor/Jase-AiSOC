@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "IncidentDataReduction": {
+      "additionalProperties": false,
+      "properties": {
+        "reduction_id": {
+          "pattern": "^red_[a-f0-9]{24}$",
+          "title": "Reduction Id",
+          "type": "string"
+        },
+        "rule_version": {
+          "const": "p6-reduction-v0.1.0",
+          "default": "p6-reduction-v0.1.0",
+          "title": "Rule Version",
+          "type": "string"
+        },
+        "reason": {
+          "const": "incident_context_sampling",
+          "default": "incident_context_sampling",
+          "title": "Reason",
+          "type": "string"
+        },
+        "input_count": {
+          "minimum": 1,
+          "title": "Input Count",
+          "type": "integer"
+        },
+        "retained_count": {
+          "minimum": 1,
+          "title": "Retained Count",
+          "type": "integer"
+        },
+        "dropped_count": {
+          "minimum": 0,
+          "title": "Dropped Count",
+          "type": "integer"
+        },
+        "sample_event_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Sample Event Ids",
+          "type": "array"
+        },
+        "full_query_ref": {
+          "pattern": "^qry_[a-f0-9]{32}$",
+          "title": "Full Query Ref",
+          "type": "string"
+        },
+        "query": {
+          "$ref": "#/$defs/IncidentQuerySpec"
+        }
+      },
+      "required": [
+        "reduction_id",
+        "input_count",
+        "retained_count",
+        "dropped_count",
+        "sample_event_ids",
+        "full_query_ref",
+        "query"
+      ],
+      "title": "IncidentDataReduction",
+      "type": "object"
+    },
+    "IncidentEvidenceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "pattern": "^evi_[a-f0-9]{24}$",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "event_id": {
+          "pattern": "^evt_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "event_type": {
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "title": "Event Type",
+          "type": "string"
+        },
+        "event_time": {
+          "format": "date-time",
+          "title": "Event Time",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "raw_ref": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Raw Ref",
+          "type": "string"
+        },
+        "integrity_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Integrity Sha256"
+        },
+        "source_time_quality": {
+          "enum": [
+            "trusted",
+            "skew_detected",
+            "untrusted"
+          ],
+          "title": "Source Time Quality",
+          "type": "string"
+        },
+        "is_late": {
+          "default": false,
+          "title": "Is Late",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "event_id",
+        "event_type",
+        "event_time",
+        "host_id",
+        "raw_ref",
+        "source_time_quality"
+      ],
+      "title": "IncidentEvidenceRef",
+      "type": "object"
+    },
+    "IncidentQuerySpec": {
+      "additionalProperties": false,
+      "properties": {
+        "tenant_id": {
+          "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "event_time_from": {
+          "format": "date-time",
+          "title": "Event Time From",
+          "type": "string"
+        },
+        "event_time_to": {
+          "format": "date-time",
+          "title": "Event Time To",
+          "type": "string"
+        },
+        "event_types": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Event Types",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tenant_id",
+        "host_id",
+        "event_time_from",
+        "event_time_to",
+        "event_types"
+      ],
+      "title": "IncidentQuerySpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Current revision's raw-evidence index and auditable reductions.",
+  "properties": {
+    "incident_id": {
+      "maxLength": 132,
+      "minLength": 1,
+      "title": "Incident Id",
+      "type": "string"
+    },
+    "tenant_id": {
+      "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "evidence_count": {
+      "minimum": 1,
+      "title": "Evidence Count",
+      "type": "integer"
+    },
+    "evidence_index": {
+      "items": {
+        "$ref": "#/$defs/IncidentEvidenceRef"
+      },
+      "maxItems": 4096,
+      "minItems": 1,
+      "title": "Evidence Index",
+      "type": "array"
+    },
+    "data_reductions": {
+      "items": {
+        "$ref": "#/$defs/IncidentDataReduction"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "title": "Data Reductions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "incident_id",
+    "tenant_id",
+    "revision",
+    "evidence_count",
+    "evidence_index",
+    "data_reductions"
+  ],
+  "title": "IncidentEvidenceBundle",
+  "type": "object"
+}

@@ -1,11 +1,18 @@
 {
   "name": "ssh_bruteforce",
-  "version": "0.1.0",
-  "description": "SSH brute-force attack replay (plan §8.2/§8.3). 11 failed SSH authentications from 203.0.113.9 across 3 usernames within 11s — exceeds the 60s-window threshold (failures>10).",
-  "source": "synthetic",
+  "version": "0.2.0",
+  "description": "11 explicit sshd Failed password records across three usernames in 11 seconds.",
+  "source": "deterministic synthetic",
+  "source_kind": "journald",
   "generator": "tests/replay/build_datasets.py",
   "expected_detections": [
-    {"category": "auth.ssh.bruteforce", "attack_state": "attack_attempt", "min_count": 1}
+    {
+      "category": "auth.ssh.bruteforce",
+      "attack_state": "attack_attempt",
+      "min_count": 1,
+      "max_count": 1
+    }
   ],
-  "license": "proprietary"
+  "license": "CC0-1.0",
+  "events_sha256": "f7342b7f6b176775e4bc4d61b50c2333eb0f143db3f85d107f6396e46eeb2649"
 }

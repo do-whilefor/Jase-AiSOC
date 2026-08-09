@@ -71,24 +71,41 @@ def partition_key(tenant_id: str, host_id: str, boot_id: str | None) -> str:
     return f"{tenant_id}|{host_id}|{boot_id or ''}"
 
 
-def dedupe_key(raw: RawInput, canonical: bytes) -> str:
-    """§7.5 dedupe key: source_event_id when present, else a content hash.
+def dedupe_key(
+    raw: RawInput,
+    canonical: bytes,
+    *,
+    source_event_id: str | None = None,
+) -> str:
+    """§7.5 dedupe key: scoped source ID when present, else a content hash.
 
-    Truncated to 128 characters to fit the ``normalized_events.dedupe_key`` column.
+    The database uniqueness boundary is tenant-wide, while source IDs and native
+    payloads may only be unique on one host or boot. Hash the trusted source scope
+    into every key so one host cannot suppress another host's normalized fact.
     """
-    source_event_id: str | None = None
-    if raw.envelope is not None:
+    if source_event_id is None and raw.envelope is not None:
         source_event_id = raw.envelope.event.source_event_id
-    if source_event_id:
-        return f"sid:{source_event_id[:123]}"[:128]
     source = (
         raw.envelope.event.source.collector if raw.envelope is not None else raw.source_kind.value
     )
+    scope = "\0".join(
+        (
+            raw.tenant_id,
+            raw.host_id,
+            raw.agent_id or "",
+            raw.boot_id or "",
+            raw.source_kind.value,
+            source,
+        )
+    )
+    if source_event_id:
+        digest = hashlib.sha256(f"{scope}\0{source_event_id}".encode()).hexdigest()
+        return f"sid:{digest}"
     digest = hashlib.sha256(
-        f"{source}|{raw.boot_id or ''}|{raw.envelope.sequence if raw.envelope else ''}|"
+        f"{scope}\0{raw.envelope.sequence if raw.envelope else ''}\0"
         f"{hashlib.sha256(canonical).hexdigest()}".encode()
     ).hexdigest()
-    return f"hsh:{digest[:124]}"[:128]
+    return f"hsh:{digest}"
 
 
 def clock_offset_ms(received_at: datetime, event_time: datetime) -> int | None:

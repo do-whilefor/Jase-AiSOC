@@ -11,12 +11,22 @@ from blue_team.domain.detection import AttackState
 from ._helpers import http_event, ssh_event
 
 
-def test_registry_registers_both_rules_after_register_all() -> None:
+def test_registry_registers_p4_rules_after_register_all() -> None:
     register_all()
     assert isinstance(get_rule("web.recon.scanning"), WebReconScanRule)
     assert isinstance(get_rule("auth.ssh.bruteforce"), SshBruteforceRule)
     rule_ids = {type(r).rule_id for r in get_rules()}
-    assert {"web.recon.scanning", "auth.ssh.bruteforce"} <= rule_ids
+    assert {
+        "web.recon.scanning",
+        "web.attack.injection",
+        "web.request.abnormal_method",
+        "auth.ssh.bruteforce",
+        "host.web_process.shell",
+        "host.download.execute",
+        "host.persistence.change",
+        "host.web_shell.outbound",
+        "host.lateral.scan",
+    } <= rule_ids
 
 
 def test_engine_dispatches_http_events_only_to_web_rule() -> None:

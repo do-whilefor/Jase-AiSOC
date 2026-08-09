@@ -1,0 +1,11 @@
+{
+  "name": "host_failed_attacks",
+  "version": "0.2.0",
+  "description": "Denied web-shell exec, denied downloader write, and denied cron persistence; failed syscalls must not become suspected-success detections.",
+  "source": "deterministic synthetic",
+  "source_kind": "falco",
+  "generator": "tests/replay/build_datasets.py",
+  "expected_detections": [],
+  "license": "CC0-1.0",
+  "events_sha256": "fe577226790b09d15640f80aa9638e52a634ca13ea2ff3cab54fd185ddc3910c"
+}

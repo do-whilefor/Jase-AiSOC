@@ -1,0 +1,889 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ConsoleSystemAgentQueueMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "heartbeat_hosts_total": {
+          "minimum": 0,
+          "title": "Heartbeat Hosts Total",
+          "type": "integer"
+        },
+        "aggregated_hosts": {
+          "minimum": 0,
+          "title": "Aggregated Hosts",
+          "type": "integer"
+        },
+        "queued_count": {
+          "minimum": 0,
+          "title": "Queued Count",
+          "type": "integer"
+        },
+        "inflight_count": {
+          "minimum": 0,
+          "title": "Inflight Count",
+          "type": "integer"
+        },
+        "corrupt_count": {
+          "minimum": 0,
+          "title": "Corrupt Count",
+          "type": "integer"
+        },
+        "stored_bytes": {
+          "minimum": 0,
+          "title": "Stored Bytes",
+          "type": "integer"
+        },
+        "dropped_p0": {
+          "const": 0,
+          "default": 0,
+          "title": "Dropped P0",
+          "type": "integer"
+        },
+        "dropped_p1": {
+          "minimum": 0,
+          "title": "Dropped P1",
+          "type": "integer"
+        },
+        "dropped_p2": {
+          "minimum": 0,
+          "title": "Dropped P2",
+          "type": "integer"
+        },
+        "dropped_p3": {
+          "minimum": 0,
+          "title": "Dropped P3",
+          "type": "integer"
+        },
+        "protection_mode_hosts": {
+          "minimum": 0,
+          "title": "Protection Mode Hosts",
+          "type": "integer"
+        },
+        "latest_heartbeat_received_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latest Heartbeat Received At"
+        }
+      },
+      "required": [
+        "heartbeat_hosts_total",
+        "aggregated_hosts",
+        "queued_count",
+        "inflight_count",
+        "corrupt_count",
+        "stored_bytes",
+        "dropped_p1",
+        "dropped_p2",
+        "dropped_p3",
+        "protection_mode_hosts"
+      ],
+      "title": "ConsoleSystemAgentQueueMetrics",
+      "type": "object"
+    },
+    "ConsoleSystemAgentVersionGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "maxLength": 128,
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "title": "Version",
+          "type": "string"
+        },
+        "host_count": {
+          "minimum": 1,
+          "title": "Host Count",
+          "type": "integer"
+        },
+        "latest_reported_at": {
+          "format": "date-time",
+          "title": "Latest Reported At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "host_count",
+        "latest_reported_at"
+      ],
+      "title": "ConsoleSystemAgentVersionGroup",
+      "type": "object"
+    },
+    "ConsoleSystemAgentVersionInventory": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "self_reported_heartbeat",
+          "default": "self_reported_heartbeat",
+          "title": "Source",
+          "type": "string"
+        },
+        "binary_integrity_verified": {
+          "const": false,
+          "default": false,
+          "title": "Binary Integrity Verified",
+          "type": "boolean"
+        },
+        "bound_hosts_total": {
+          "minimum": 0,
+          "title": "Bound Hosts Total",
+          "type": "integer"
+        },
+        "reported_hosts": {
+          "minimum": 0,
+          "title": "Reported Hosts",
+          "type": "integer"
+        },
+        "unreported_hosts": {
+          "minimum": 0,
+          "title": "Unreported Hosts",
+          "type": "integer"
+        },
+        "distinct_versions": {
+          "minimum": 0,
+          "title": "Distinct Versions",
+          "type": "integer"
+        },
+        "version_groups": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ConsoleSystemAgentVersionGroup"
+          },
+          "maxItems": 50,
+          "title": "Version Groups",
+          "type": "array"
+        }
+      },
+      "required": [
+        "bound_hosts_total",
+        "reported_hosts",
+        "unreported_hosts",
+        "distinct_versions"
+      ],
+      "title": "ConsoleSystemAgentVersionInventory",
+      "type": "object"
+    },
+    "ConsoleSystemCapabilityAvailability": {
+      "additionalProperties": false,
+      "properties": {
+        "message_broker_metrics_available": {
+          "const": false,
+          "default": false,
+          "title": "Message Broker Metrics Available",
+          "type": "boolean"
+        },
+        "backlog_age_metrics_available": {
+          "const": false,
+          "default": false,
+          "title": "Backlog Age Metrics Available",
+          "type": "boolean"
+        },
+        "database_capacity_metrics_available": {
+          "const": false,
+          "default": false,
+          "title": "Database Capacity Metrics Available",
+          "type": "boolean"
+        },
+        "object_storage_capacity_metrics_available": {
+          "const": false,
+          "default": false,
+          "title": "Object Storage Capacity Metrics Available",
+          "type": "boolean"
+        },
+        "dependency_health_probes_available": {
+          "const": false,
+          "default": false,
+          "title": "Dependency Health Probes Available",
+          "type": "boolean"
+        },
+        "deployment_inventory_available": {
+          "const": false,
+          "default": false,
+          "title": "Deployment Inventory Available",
+          "type": "boolean"
+        },
+        "agent_version_inventory_available": {
+          "const": true,
+          "default": true,
+          "title": "Agent Version Inventory Available",
+          "type": "boolean"
+        },
+        "agent_version_binary_integrity_verification_available": {
+          "const": false,
+          "default": false,
+          "title": "Agent Version Binary Integrity Verification Available",
+          "type": "boolean"
+        },
+        "human_user_directory_available": {
+          "const": false,
+          "default": false,
+          "title": "Human User Directory Available",
+          "type": "boolean"
+        }
+      },
+      "title": "ConsoleSystemCapabilityAvailability",
+      "type": "object"
+    },
+    "ConsoleSystemCredentialCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "total": {
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        },
+        "active": {
+          "minimum": 0,
+          "title": "Active",
+          "type": "integer"
+        },
+        "expired": {
+          "minimum": 0,
+          "title": "Expired",
+          "type": "integer"
+        },
+        "revoked": {
+          "minimum": 0,
+          "title": "Revoked",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total",
+        "active",
+        "expired",
+        "revoked"
+      ],
+      "title": "ConsoleSystemCredentialCounts",
+      "type": "object"
+    },
+    "ConsoleSystemCredentialSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "credential_id": {
+          "pattern": "^cred_[a-f0-9]{32}$",
+          "title": "Credential Id",
+          "type": "string"
+        },
+        "tenant_id": {
+          "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "roles": {
+          "items": {
+            "$ref": "#/$defs/OperatorRole"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Roles",
+          "type": "array"
+        },
+        "lifecycle": {
+          "enum": [
+            "active",
+            "expired",
+            "revoked"
+          ],
+          "title": "Lifecycle",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "revoked_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revoked At"
+        }
+      },
+      "required": [
+        "credential_id",
+        "tenant_id",
+        "roles",
+        "lifecycle",
+        "created_at"
+      ],
+      "title": "ConsoleSystemCredentialSummary",
+      "type": "object"
+    },
+    "ConsoleSystemErrorMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "total": {
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        },
+        "normalize_failed": {
+          "minimum": 0,
+          "title": "Normalize Failed",
+          "type": "integer"
+        },
+        "event_dlq_records": {
+          "minimum": 0,
+          "title": "Event Dlq Records",
+          "type": "integer"
+        },
+        "agent_queue_corrupt": {
+          "minimum": 0,
+          "title": "Agent Queue Corrupt",
+          "type": "integer"
+        },
+        "malware_failed": {
+          "minimum": 0,
+          "title": "Malware Failed",
+          "type": "integer"
+        },
+        "response_failed": {
+          "minimum": 0,
+          "title": "Response Failed",
+          "type": "integer"
+        },
+        "notifications_dead_letter": {
+          "minimum": 0,
+          "title": "Notifications Dead Letter",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total",
+        "normalize_failed",
+        "event_dlq_records",
+        "agent_queue_corrupt",
+        "malware_failed",
+        "response_failed",
+        "notifications_dead_letter"
+      ],
+      "title": "ConsoleSystemErrorMetrics",
+      "type": "object"
+    },
+    "ConsoleSystemFreshnessMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "tracked_hosts": {
+          "minimum": 0,
+          "title": "Tracked Hosts",
+          "type": "integer"
+        },
+        "fresh": {
+          "minimum": 0,
+          "title": "Fresh",
+          "type": "integer"
+        },
+        "stale": {
+          "minimum": 0,
+          "title": "Stale",
+          "type": "integer"
+        },
+        "degraded": {
+          "minimum": 0,
+          "title": "Degraded",
+          "type": "integer"
+        },
+        "unknown": {
+          "minimum": 0,
+          "title": "Unknown",
+          "type": "integer"
+        },
+        "lag_sample_count": {
+          "minimum": 0,
+          "title": "Lag Sample Count",
+          "type": "integer"
+        },
+        "average_lag_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Average Lag Seconds"
+        },
+        "maximum_lag_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Maximum Lag Seconds"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Updated At"
+        }
+      },
+      "required": [
+        "tracked_hosts",
+        "fresh",
+        "stale",
+        "degraded",
+        "unknown",
+        "lag_sample_count"
+      ],
+      "title": "ConsoleSystemFreshnessMetrics",
+      "type": "object"
+    },
+    "ConsoleSystemStorageRecords": {
+      "additionalProperties": false,
+      "properties": {
+        "raw_events": {
+          "minimum": 0,
+          "title": "Raw Events",
+          "type": "integer"
+        },
+        "normalized_events": {
+          "minimum": 0,
+          "title": "Normalized Events",
+          "type": "integer"
+        },
+        "evidence_objects": {
+          "minimum": 0,
+          "title": "Evidence Objects",
+          "type": "integer"
+        },
+        "malware_samples": {
+          "minimum": 0,
+          "title": "Malware Samples",
+          "type": "integer"
+        },
+        "audit_records": {
+          "minimum": 0,
+          "title": "Audit Records",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "raw_events",
+        "normalized_events",
+        "evidence_objects",
+        "malware_samples",
+        "audit_records"
+      ],
+      "title": "ConsoleSystemStorageRecords",
+      "type": "object"
+    },
+    "ConsoleSystemTenantState": {
+      "additionalProperties": false,
+      "properties": {
+        "tenant_id": {
+          "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "credential_counts": {
+          "$ref": "#/$defs/ConsoleSystemCredentialCounts"
+        }
+      },
+      "required": [
+        "tenant_id",
+        "name",
+        "created_at",
+        "credential_counts"
+      ],
+      "title": "ConsoleSystemTenantState",
+      "type": "object"
+    },
+    "ConsoleSystemUpgradeState": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "not_implemented",
+          "default": "not_implemented",
+          "title": "Status",
+          "type": "string"
+        },
+        "agent_rollout_available": {
+          "const": false,
+          "default": false,
+          "title": "Agent Rollout Available",
+          "type": "boolean"
+        },
+        "automatic_rollback_available": {
+          "const": false,
+          "default": false,
+          "title": "Automatic Rollback Available",
+          "type": "boolean"
+        },
+        "offline_package_inventory_available": {
+          "const": false,
+          "default": false,
+          "title": "Offline Package Inventory Available",
+          "type": "boolean"
+        },
+        "signed_artifact_inventory_available": {
+          "const": false,
+          "default": false,
+          "title": "Signed Artifact Inventory Available",
+          "type": "boolean"
+        },
+        "backup_restore_evidence_available": {
+          "const": false,
+          "default": false,
+          "title": "Backup Restore Evidence Available",
+          "type": "boolean"
+        }
+      },
+      "title": "ConsoleSystemUpgradeState",
+      "type": "object"
+    },
+    "ConsoleSystemVersionState": {
+      "additionalProperties": false,
+      "properties": {
+        "application_version": {
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "title": "Application Version",
+          "type": "string"
+        },
+        "database_migration_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Database Migration Version"
+        },
+        "database_schema_compatibility": {
+          "const": "not_evaluated",
+          "default": "not_evaluated",
+          "title": "Database Schema Compatibility",
+          "type": "string"
+        }
+      },
+      "required": [
+        "application_version"
+      ],
+      "title": "ConsoleSystemVersionState",
+      "type": "object"
+    },
+    "ConsoleSystemWorkQueues": {
+      "additionalProperties": false,
+      "properties": {
+        "raw_events_total": {
+          "minimum": 0,
+          "title": "Raw Events Total",
+          "type": "integer"
+        },
+        "normalize_pending": {
+          "minimum": 0,
+          "title": "Normalize Pending",
+          "type": "integer"
+        },
+        "normalize_done": {
+          "minimum": 0,
+          "title": "Normalize Done",
+          "type": "integer"
+        },
+        "normalize_failed": {
+          "minimum": 0,
+          "title": "Normalize Failed",
+          "type": "integer"
+        },
+        "malware_tasks_total": {
+          "minimum": 0,
+          "title": "Malware Tasks Total",
+          "type": "integer"
+        },
+        "malware_queued": {
+          "minimum": 0,
+          "title": "Malware Queued",
+          "type": "integer"
+        },
+        "malware_leased": {
+          "minimum": 0,
+          "title": "Malware Leased",
+          "type": "integer"
+        },
+        "malware_completed": {
+          "minimum": 0,
+          "title": "Malware Completed",
+          "type": "integer"
+        },
+        "malware_failed": {
+          "minimum": 0,
+          "title": "Malware Failed",
+          "type": "integer"
+        },
+        "response_actions_total": {
+          "minimum": 0,
+          "title": "Response Actions Total",
+          "type": "integer"
+        },
+        "response_pending_approval": {
+          "minimum": 0,
+          "title": "Response Pending Approval",
+          "type": "integer"
+        },
+        "response_approved": {
+          "minimum": 0,
+          "title": "Response Approved",
+          "type": "integer"
+        },
+        "response_queued": {
+          "minimum": 0,
+          "title": "Response Queued",
+          "type": "integer"
+        },
+        "response_executing": {
+          "minimum": 0,
+          "title": "Response Executing",
+          "type": "integer"
+        },
+        "response_rollback_queued": {
+          "minimum": 0,
+          "title": "Response Rollback Queued",
+          "type": "integer"
+        },
+        "response_rolling_back": {
+          "minimum": 0,
+          "title": "Response Rolling Back",
+          "type": "integer"
+        },
+        "response_terminal": {
+          "minimum": 0,
+          "title": "Response Terminal",
+          "type": "integer"
+        },
+        "notifications_total": {
+          "minimum": 0,
+          "title": "Notifications Total",
+          "type": "integer"
+        },
+        "notifications_pending": {
+          "minimum": 0,
+          "title": "Notifications Pending",
+          "type": "integer"
+        },
+        "notifications_delivering": {
+          "minimum": 0,
+          "title": "Notifications Delivering",
+          "type": "integer"
+        },
+        "notifications_retry_scheduled": {
+          "minimum": 0,
+          "title": "Notifications Retry Scheduled",
+          "type": "integer"
+        },
+        "notifications_delivered": {
+          "minimum": 0,
+          "title": "Notifications Delivered",
+          "type": "integer"
+        },
+        "notifications_dead_letter": {
+          "minimum": 0,
+          "title": "Notifications Dead Letter",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "raw_events_total",
+        "normalize_pending",
+        "normalize_done",
+        "normalize_failed",
+        "malware_tasks_total",
+        "malware_queued",
+        "malware_leased",
+        "malware_completed",
+        "malware_failed",
+        "response_actions_total",
+        "response_pending_approval",
+        "response_approved",
+        "response_queued",
+        "response_executing",
+        "response_rollback_queued",
+        "response_rolling_back",
+        "response_terminal",
+        "notifications_total",
+        "notifications_pending",
+        "notifications_delivering",
+        "notifications_retry_scheduled",
+        "notifications_delivered",
+        "notifications_dead_letter"
+      ],
+      "title": "ConsoleSystemWorkQueues",
+      "type": "object"
+    },
+    "OperatorRole": {
+      "enum": [
+        "tenant_admin",
+        "responder",
+        "approver",
+        "auditor"
+      ],
+      "title": "OperatorRole",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Auditor-only tenant operations truth without fabricated infrastructure telemetry.",
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tenant_id": {
+      "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "tenant": {
+      "$ref": "#/$defs/ConsoleSystemTenantState"
+    },
+    "credentials": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConsoleSystemCredentialSummary"
+      },
+      "maxItems": 100,
+      "title": "Credentials",
+      "type": "array"
+    },
+    "agent_queue": {
+      "$ref": "#/$defs/ConsoleSystemAgentQueueMetrics"
+    },
+    "agent_versions": {
+      "$ref": "#/$defs/ConsoleSystemAgentVersionInventory"
+    },
+    "work_queues": {
+      "$ref": "#/$defs/ConsoleSystemWorkQueues"
+    },
+    "storage_records": {
+      "$ref": "#/$defs/ConsoleSystemStorageRecords"
+    },
+    "errors": {
+      "$ref": "#/$defs/ConsoleSystemErrorMetrics"
+    },
+    "freshness": {
+      "$ref": "#/$defs/ConsoleSystemFreshnessMetrics"
+    },
+    "versions": {
+      "$ref": "#/$defs/ConsoleSystemVersionState"
+    },
+    "upgrade": {
+      "$ref": "#/$defs/ConsoleSystemUpgradeState",
+      "default": {
+        "status": "not_implemented",
+        "agent_rollout_available": false,
+        "automatic_rollback_available": false,
+        "offline_package_inventory_available": false,
+        "signed_artifact_inventory_available": false,
+        "backup_restore_evidence_available": false
+      }
+    },
+    "availability": {
+      "$ref": "#/$defs/ConsoleSystemCapabilityAvailability",
+      "default": {
+        "message_broker_metrics_available": false,
+        "backlog_age_metrics_available": false,
+        "database_capacity_metrics_available": false,
+        "object_storage_capacity_metrics_available": false,
+        "dependency_health_probes_available": false,
+        "deployment_inventory_available": false,
+        "agent_version_inventory_available": true,
+        "agent_version_binary_integrity_verification_available": false,
+        "human_user_directory_available": false
+      }
+    },
+    "truncated_sections": {
+      "default": [],
+      "items": {
+        "enum": [
+          "credentials",
+          "agent_queue",
+          "agent_versions"
+        ],
+        "type": "string"
+      },
+      "maxItems": 3,
+      "title": "Truncated Sections",
+      "type": "array"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "generated_at",
+    "tenant",
+    "agent_queue",
+    "agent_versions",
+    "work_queues",
+    "storage_records",
+    "errors",
+    "freshness",
+    "versions"
+  ],
+  "title": "ConsoleSystemOperations",
+  "type": "object"
+}

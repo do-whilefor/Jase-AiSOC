@@ -76,6 +76,24 @@
           "title": "Drop Count",
           "type": "integer"
         },
+        "backlog_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Backlog Count",
+          "type": "integer"
+        },
+        "parse_error_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Parse Error Count",
+          "type": "integer"
+        },
+        "incomplete_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Incomplete Count",
+          "type": "integer"
+        },
         "last_error": {
           "anyOf": [
             {
@@ -314,6 +332,20 @@
       "minLength": 1,
       "title": "Boot Id",
       "type": "string"
+    },
+    "agent_version": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Version"
     },
     "observed_at": {
       "format": "date-time",

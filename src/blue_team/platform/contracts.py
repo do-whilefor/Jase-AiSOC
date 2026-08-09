@@ -81,6 +81,9 @@ class CollectorCapability(PlatformContract):
     name: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")]
     state: CollectorState
     drop_count: Annotated[int, Field(ge=0)] = 0
+    backlog_count: Annotated[int, Field(ge=0)] = 0
+    parse_error_count: Annotated[int, Field(ge=0)] = 0
+    incomplete_count: Annotated[int, Field(ge=0)] = 0
     last_error: Annotated[str, Field(min_length=1, max_length=1024)] | None = None
     validated_version: Annotated[str, Field(min_length=1, max_length=64)] | None = None
 

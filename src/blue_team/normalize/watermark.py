@@ -38,9 +38,8 @@ def advance(
     """Advance the partition watermark and flag late arrivals.
 
     ``is_late`` is true only when the event falls *before* the watermark
-    (``max_seen_event_time - allowed_lateness``). Events within the lateness
-    window but older than ``max_seen`` are not flagged late here; the pipeline
-    bumps their revision via ``late_within_window`` separately if needed.
+    (``max_seen_event_time - allowed_lateness``). Out-of-order events that remain
+    inside the allowed lateness window are accepted without a late marker.
     """
     lateness = (
         allowed_lateness_seconds

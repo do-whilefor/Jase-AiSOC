@@ -293,6 +293,11 @@ class LocalCertificateAuthority:
                 x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]),
                 critical=True,
             )
+            .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), False)
+            .add_extension(
+                x509.AuthorityKeyIdentifier.from_issuer_public_key(self._private_key.public_key()),
+                False,
+            )
             .sign(self._private_key, hashes.SHA256())
         )
         return (

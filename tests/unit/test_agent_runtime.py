@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from blue_team import __version__
 from blue_team.agent_core import (
     AgentHeartbeat,
     AgentRuntime,
@@ -106,6 +107,52 @@ class FakeCollector:
         )
 
 
+class PollingFakeCollector(FakeCollector):
+    def __init__(self, name: str, *, fail_poll: bool = False) -> None:
+        super().__init__(name)
+        self.fail_poll = fail_poll
+        self.poll_count = 0
+
+    def run_once(self) -> None:
+        self.poll_count += 1
+        if self.fail_poll:
+            raise OSError("poll unavailable")
+
+
+class DegradedCollector(FakeCollector):
+    def capability(self) -> CollectorCapability:
+        return CollectorCapability(
+            name=self.name,
+            state=CollectorState.DEGRADED,
+            drop_count=2,
+            backlog_count=3,
+            parse_error_count=4,
+            incomplete_count=5,
+            last_error="kernel backlog status unavailable",
+            validated_version="test-v1",
+        )
+
+
+class FailsAfterInitialCapabilityCollector(FakeCollector):
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
+        self.capability_calls = 0
+
+    def capability(self) -> CollectorCapability:
+        self.capability_calls += 1
+        if self.capability_calls > 1:
+            raise OSError("health unavailable after startup")
+        return CollectorCapability(
+            name=self.name,
+            state=CollectorState.ENABLED,
+            drop_count=2,
+            backlog_count=3,
+            parse_error_count=4,
+            incomplete_count=5,
+            validated_version="test-v1",
+        )
+
+
 def _telemetry(*, protection: bool = False) -> QueueTelemetry:
     return QueueTelemetry(
         queued_count=1 if protection else 0,
@@ -166,6 +213,9 @@ def test_runtime_starts_collectors_sends_due_heartbeats_and_stops_in_reverse() -
 
     assert started.state is AgentRuntimeState.RUNNING
     assert first is not None and first.delivered
+    assert first.heartbeat.agent_version == __version__
+    legacy_payload = first.heartbeat.model_dump(mode="json", exclude={"agent_version"})
+    assert AgentHeartbeat.model_validate(legacy_payload).agent_version is None
     assert first.heartbeat.queue == _telemetry()
     assert [item.name for item in first.heartbeat.capabilities.collectors] == [
         "auditd",
@@ -185,6 +235,17 @@ def test_runtime_starts_collectors_sends_due_heartbeats_and_stops_in_reverse() -
     assert runtime.stop().state is AgentRuntimeState.STOPPED
     with pytest.raises(RuntimeStateError, match="registered before"):
         runtime.register_collector(CollectorRegistration("ebpf", FakeCollector("ebpf")))
+
+
+def test_runtime_rejects_a_non_semantic_agent_version() -> None:
+    with pytest.raises(RuntimeConfigurationError, match="agent_version"):
+        RuntimeConfig(
+            tenant_id=TENANT_ID,
+            agent_id=AGENT_ID,
+            host_id=HOST_ID,
+            boot_id=BOOT_ID,
+            agent_version="latest",
+        )
 
 
 def test_collector_start_failure_is_isolated_and_reported_in_heartbeat() -> None:
@@ -208,6 +269,63 @@ def test_collector_start_failure_is_isolated_and_reported_in_heartbeat() -> None
     runtime.stop()
     assert healthy.started is False
     assert failed.started is False
+
+
+def test_polling_collector_is_driven_without_hidden_thread_and_failure_isolated() -> None:
+    clock = MutableClock()
+    healthy = PollingFakeCollector("journald")
+    failed = PollingFakeCollector("auditd", fail_poll=True)
+    runtime = _runtime(FakeQueue(), clock, [])
+    runtime.register_collector(CollectorRegistration("journald", healthy))
+    runtime.register_collector(CollectorRegistration("auditd", failed))
+    runtime.start()
+
+    attempt = runtime.run_once()
+
+    assert attempt is not None
+    assert healthy.poll_count == 1
+    assert failed.poll_count == 1
+    assert runtime.snapshot().failed_collectors == ("auditd",)
+    capability = {item.name: item for item in attempt.heartbeat.capabilities.collectors}
+    assert capability["auditd"].state is CollectorState.FAILED
+    assert capability["auditd"].last_error == "poll failed: poll unavailable"
+
+
+def test_degraded_collector_state_and_counters_propagate_to_runtime_heartbeat() -> None:
+    clock = MutableClock()
+    runtime = _runtime(FakeQueue(), clock, [])
+    runtime.register_collector(CollectorRegistration("auditd", DegradedCollector("auditd")))
+
+    assert runtime.start().state is AgentRuntimeState.DEGRADED
+    attempt = runtime.run_once()
+
+    assert attempt is not None
+    capability = attempt.heartbeat.capabilities.collectors[0]
+    assert capability.state is CollectorState.DEGRADED
+    assert capability.drop_count == 2
+    assert capability.backlog_count == 3
+    assert capability.parse_error_count == 4
+    assert capability.incomplete_count == 5
+
+
+def test_failed_collector_retains_last_observed_counters_in_heartbeat() -> None:
+    clock = MutableClock()
+    runtime = _runtime(FakeQueue(), clock, [])
+    collector = FailsAfterInitialCapabilityCollector("auditd")
+    runtime.register_collector(CollectorRegistration("auditd", collector))
+    assert runtime.start().state is AgentRuntimeState.RUNNING
+
+    attempt = runtime.run_once()
+
+    assert attempt is not None
+    capability = attempt.heartbeat.capabilities.collectors[0]
+    assert capability.state is CollectorState.FAILED
+    assert capability.drop_count == 2
+    assert capability.backlog_count == 3
+    assert capability.parse_error_count == 4
+    assert capability.incomplete_count == 5
+    assert capability.validated_version == "test-v1"
+    assert capability.last_error == "health failed: health unavailable after startup"
 
 
 def test_queue_protection_pauses_only_nonessential_collectors_and_resumes() -> None:

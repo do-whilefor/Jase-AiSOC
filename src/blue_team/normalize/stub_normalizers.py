@@ -46,13 +46,12 @@ def _register_stub(kind: SourceKind) -> None:
     stub = _StubNormalizer(kind)
     from blue_team.normalize import normalizer_registry
 
-    normalizer_registry._REGISTRY[kind] = stub
+    # A concrete adapter may have been imported first; never replace it with a
+    # placeholder because of module import order.
+    normalizer_registry._REGISTRY.setdefault(kind, stub)
 
 
 for _kind in (
-    SourceKind.FALCO,
-    SourceKind.AUDITD,
-    SourceKind.SERVICE_LOG,
     SourceKind.FILE_SCAN,
     SourceKind.IMPORT,
 ):

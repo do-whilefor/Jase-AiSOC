@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 from datetime import UTC, datetime
+from typing import cast
 
 import httpx
 import pytest
@@ -80,6 +81,7 @@ def _heartbeat() -> AgentHeartbeat:
         agent_id=AGENT_ID,
         host_id=HOST_ID,
         boot_id=BOOT_ID,
+        agent_version="0.0.1",
         observed_at=observed_at,
         capabilities=CapabilityReport(
             observed_at=observed_at,
@@ -157,6 +159,10 @@ def test_post_heartbeat_delivers_session_value_and_lease_expiry(
         "Content-Type": "application/json",
         "Content-Encoding": "gzip",
     }
+    delivered_heartbeat = AgentHeartbeat.model_validate_json(
+        gzip.decompress(cast(bytes, captured["content"]))
+    )
+    assert delivered_heartbeat.agent_version == "0.0.1"
     assert delivery.delivered is True
     assert delivery.session_value == "renewed-session"
     assert delivery.lease_expires_at == datetime(2026, 8, 4, 12, 2, 0, tzinfo=UTC)

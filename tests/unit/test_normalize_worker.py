@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -83,7 +84,9 @@ def _session_returning(records: list[object]) -> AsyncMock:
     execute_result = MagicMock()
     execute_result.scalars.return_value.all.return_value = records
     session.execute = AsyncMock(return_value=execute_result)
+    session.scalar = AsyncMock(side_effect=[None, None, MagicMock()])
     session.commit = AsyncMock()
+    session.flush = AsyncMock()
     session.add = MagicMock()
     return session
 
@@ -118,6 +121,56 @@ async def test_normalize_worker_marks_failed_on_bad_envelope() -> None:
 
     assert processed == 1
     assert "failed" in worker.statuses
+
+
+@pytest.mark.asyncio
+async def test_normalize_worker_records_object_store_failure_in_dlq() -> None:
+    record = _make_record()
+    object_store = AsyncMock()
+    object_store.get = AsyncMock(side_effect=OSError("evidence unavailable"))
+    session = _session_returning([record])
+    database = _mock_database_with_session(session)
+    dlq = AsyncMock()
+
+    with patch("blue_team.normalize.worker.insert_dlq", dlq):
+        worker = _StatusSpy(database, object_store, batch_size=10)
+        processed = await worker.run_once()
+
+    assert processed == 1
+    assert "failed" in worker.statuses
+    assert dlq.await_args is not None
+    assert dlq.await_args.kwargs["reason"] == "storage_read_failed"
+
+
+@pytest.mark.asyncio
+async def test_normalize_worker_marks_event_older_than_watermark_as_late() -> None:
+    record = _make_record()
+    object_store = AsyncMock()
+    object_store.get = AsyncMock(return_value=_envelope_bytes())
+    session = _session_returning([record])
+    database = _mock_database_with_session(session)
+    current = SimpleNamespace(max_seen_event_time=datetime(2026, 8, 4, 8, 10, 0, tzinfo=UTC))
+    get_current = AsyncMock(return_value=current)
+    insert_event = AsyncMock()
+    persist_watermark = AsyncMock()
+
+    with (
+        patch("blue_team.normalize.worker.get_watermark", get_current),
+        patch("blue_team.normalize.worker.insert_normalized_event", insert_event),
+        patch("blue_team.normalize.worker.advance_watermark", persist_watermark),
+    ):
+        worker = _StatusSpy(
+            database,
+            object_store,
+            batch_size=10,
+            allowed_lateness_seconds=60,
+        )
+        processed = await worker.run_once()
+
+    assert processed == 1
+    assert insert_event.await_args is not None
+    assert insert_event.await_args.kwargs["result"].is_late is True
+    persist_watermark.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from blue_team.domain import SecurityEvent
-from blue_team.domain.identifiers import AgentId, HostId, TenantId
+from blue_team.domain.identifiers import AgentId, AgentVersion, HostId, TenantId
 from blue_team.platform import CapabilityReport
 
 BootId = Annotated[str, Field(min_length=1, max_length=128)]
@@ -111,6 +111,7 @@ class AgentHeartbeat(AgentContract):
     agent_id: AgentId
     host_id: HostId
     boot_id: BootId
+    agent_version: AgentVersion | None = None
     observed_at: datetime
     capabilities: CapabilityReport
     queue: QueueTelemetry

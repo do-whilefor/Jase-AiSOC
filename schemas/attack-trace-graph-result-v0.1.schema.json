@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "TraceEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "edge_id": {
+          "pattern": "^ted_[a-f0-9]{24}$",
+          "title": "Edge Id",
+          "type": "string"
+        },
+        "source_entity_id": {
+          "pattern": "^tge_[a-f0-9]{24}$",
+          "title": "Source Entity Id",
+          "type": "string"
+        },
+        "target_entity_id": {
+          "pattern": "^tge_[a-f0-9]{24}$",
+          "title": "Target Entity Id",
+          "type": "string"
+        },
+        "relationship": {
+          "$ref": "#/$defs/TraceRelationship"
+        },
+        "first_seen": {
+          "format": "date-time",
+          "title": "First Seen",
+          "type": "string"
+        },
+        "last_seen": {
+          "format": "date-time",
+          "title": "Last Seen",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "pattern": "^tev_[a-f0-9]{24}$",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "evidence_count": {
+          "minimum": 1,
+          "title": "Evidence Count",
+          "type": "integer"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        }
+      },
+      "required": [
+        "edge_id",
+        "source_entity_id",
+        "target_entity_id",
+        "relationship",
+        "first_seen",
+        "last_seen",
+        "evidence_ids",
+        "evidence_count",
+        "confidence"
+      ],
+      "title": "TraceEdge",
+      "type": "object"
+    },
+    "TraceEntity": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_id": {
+          "pattern": "^tge_[a-f0-9]{24}$",
+          "title": "Entity Id",
+          "type": "string"
+        },
+        "entity_type": {
+          "$ref": "#/$defs/TraceEntityType"
+        },
+        "canonical_key": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Canonical Key",
+          "type": "string"
+        },
+        "attributes": {
+          "additionalProperties": true,
+          "maxProperties": 32,
+          "title": "Attributes",
+          "type": "object"
+        },
+        "first_seen": {
+          "format": "date-time",
+          "title": "First Seen",
+          "type": "string"
+        },
+        "last_seen": {
+          "format": "date-time",
+          "title": "Last Seen",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity_id",
+        "entity_type",
+        "canonical_key",
+        "first_seen",
+        "last_seen"
+      ],
+      "title": "TraceEntity",
+      "type": "object"
+    },
+    "TraceEntityType": {
+      "enum": [
+        "host",
+        "user",
+        "process",
+        "file",
+        "ip",
+        "domain",
+        "certificate",
+        "session",
+        "technique",
+        "incident"
+      ],
+      "title": "TraceEntityType",
+      "type": "string"
+    },
+    "TraceGraph": {
+      "additionalProperties": false,
+      "properties": {
+        "entities": {
+          "items": {
+            "$ref": "#/$defs/TraceEntity"
+          },
+          "maxItems": 8192,
+          "minItems": 1,
+          "title": "Entities",
+          "type": "array"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/TraceEdge"
+          },
+          "maxItems": 16384,
+          "title": "Edges",
+          "type": "array"
+        }
+      },
+      "required": [
+        "entities",
+        "edges"
+      ],
+      "title": "TraceGraph",
+      "type": "object"
+    },
+    "TraceRelationship": {
+      "enum": [
+        "contains",
+        "runs_process",
+        "spawned",
+        "acts_as",
+        "logged_into",
+        "created_file",
+        "accessed_file",
+        "executed_file",
+        "stores_file",
+        "connects_to",
+        "targets",
+        "observed_session",
+        "communicates_with",
+        "lateral_to",
+        "resolves",
+        "presents_certificate",
+        "observed_technique",
+        "shares_infrastructure"
+      ],
+      "title": "TraceRelationship",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "trace_id": {
+      "pattern": "^trc_[a-f0-9]{32}$",
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "root_entity_id": {
+      "pattern": "^tge_[a-f0-9]{24}$",
+      "title": "Root Entity Id",
+      "type": "string"
+    },
+    "truncated": {
+      "title": "Truncated",
+      "type": "boolean"
+    },
+    "graph": {
+      "$ref": "#/$defs/TraceGraph"
+    }
+  },
+  "required": [
+    "trace_id",
+    "revision",
+    "root_entity_id",
+    "truncated",
+    "graph"
+  ],
+  "title": "TraceGraphQueryResult",
+  "type": "object"
+}

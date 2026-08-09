@@ -112,6 +112,35 @@
     "status": {
       "$ref": "#/$defs/DetectionStatus"
     },
+    "governance_stage": {
+      "anyOf": [
+        {
+          "enum": [
+            "canary",
+            "released"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Governance Stage"
+    },
+    "governance_manifest_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Governance Manifest Sha256"
+    },
     "detection_time": {
       "format": "date-time",
       "title": "Detection Time",

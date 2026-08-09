@@ -1,0 +1,1147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "AccountResponseTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "target_type": {
+          "const": "account",
+          "default": "account",
+          "title": "Target Type",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "expected_agent_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Agent Id",
+          "type": "string"
+        },
+        "username": {
+          "pattern": "^[a-z_][a-z0-9_-]{0,31}$",
+          "title": "Username",
+          "type": "string"
+        },
+        "uid": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Uid",
+          "type": "integer"
+        },
+        "shell": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Shell",
+          "type": "string"
+        },
+        "locked": {
+          "title": "Locked",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "host_id",
+        "expected_agent_id",
+        "username",
+        "uid",
+        "shell",
+        "locked"
+      ],
+      "title": "AccountResponseTarget",
+      "type": "object"
+    },
+    "AttackState": {
+      "description": "Outcome分层 (§8.3): 区分攻击尝试、阻断、疑似成功与确认失陷。\n\nA single signal (e.g. a scan) must not be reported as a confirmed compromise;\nhigher states require corroborating host-side evidence (P5) that is not yet\navailable, so the engine emits ``UNKNOWN`` rather than over-claiming.",
+      "enum": [
+        "attack_attempt",
+        "blocked",
+        "suspected_success",
+        "confirmed_compromise",
+        "unknown"
+      ],
+      "title": "AttackState",
+      "type": "string"
+    },
+    "ConsoleHostSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "hostname": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Hostname",
+          "type": "string"
+        },
+        "distro": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Distro"
+        },
+        "kernel": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kernel"
+        },
+        "criticality": {
+          "$ref": "#/$defs/Criticality"
+        },
+        "agent_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Id"
+        },
+        "agent_version": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Version"
+        },
+        "agent_version_reported_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Version Reported At"
+        },
+        "freshness_status": {
+          "$ref": "#/$defs/FreshnessStatus",
+          "default": "unknown"
+        },
+        "freshness_lag_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Freshness Lag Seconds"
+        }
+      },
+      "required": [
+        "host_id",
+        "hostname",
+        "criticality"
+      ],
+      "title": "ConsoleHostSummary",
+      "type": "object"
+    },
+    "ConsoleIncidentSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "incident_id": {
+          "maxLength": 132,
+          "minLength": 1,
+          "title": "Incident Id",
+          "type": "string"
+        },
+        "host_id": {
+          "anyOf": [
+            {
+              "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Host Id"
+        },
+        "status": {
+          "$ref": "#/$defs/IncidentStatus"
+        },
+        "severity": {
+          "$ref": "#/$defs/IncidentSeverity"
+        },
+        "attack_state": {
+          "$ref": "#/$defs/AttackState"
+        },
+        "risk_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Risk Score",
+          "type": "integer"
+        },
+        "assurance": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Assurance",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        },
+        "last_seen": {
+          "format": "date-time",
+          "title": "Last Seen",
+          "type": "string"
+        }
+      },
+      "required": [
+        "incident_id",
+        "status",
+        "severity",
+        "attack_state",
+        "risk_score",
+        "assurance",
+        "last_seen"
+      ],
+      "title": "ConsoleIncidentSummary",
+      "type": "object"
+    },
+    "ConsoleMalwareSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "sample_id": {
+          "maxLength": 132,
+          "minLength": 1,
+          "title": "Sample Id",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "filename": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "media_type": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Media Type",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "status": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Status",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample_id",
+        "sha256",
+        "media_type",
+        "size",
+        "status",
+        "created_at"
+      ],
+      "title": "ConsoleMalwareSummary",
+      "type": "object"
+    },
+    "ConsoleMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "host_total": {
+          "minimum": 0,
+          "title": "Host Total",
+          "type": "integer"
+        },
+        "host_degraded": {
+          "minimum": 0,
+          "title": "Host Degraded",
+          "type": "integer"
+        },
+        "incident_open": {
+          "minimum": 0,
+          "title": "Incident Open",
+          "type": "integer"
+        },
+        "detection_open": {
+          "minimum": 0,
+          "title": "Detection Open",
+          "type": "integer"
+        },
+        "response_pending_approval": {
+          "minimum": 0,
+          "title": "Response Pending Approval",
+          "type": "integer"
+        },
+        "response_running": {
+          "minimum": 0,
+          "title": "Response Running",
+          "type": "integer"
+        },
+        "malware_quarantined": {
+          "minimum": 0,
+          "title": "Malware Quarantined",
+          "type": "integer"
+        },
+        "model_human_review": {
+          "minimum": 0,
+          "title": "Model Human Review",
+          "type": "integer"
+        },
+        "notification_pending": {
+          "minimum": 0,
+          "title": "Notification Pending",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "host_total",
+        "host_degraded",
+        "incident_open",
+        "detection_open",
+        "response_pending_approval",
+        "response_running",
+        "malware_quarantined",
+        "model_human_review",
+        "notification_pending"
+      ],
+      "title": "ConsoleMetrics",
+      "type": "object"
+    },
+    "ConsoleModelRunSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "maxLength": 132,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "incident_id": {
+          "maxLength": 132,
+          "minLength": 1,
+          "title": "Incident Id",
+          "type": "string"
+        },
+        "provider": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "model": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "role": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        },
+        "status": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Status",
+          "type": "string"
+        },
+        "latency_ms": {
+          "minimum": 0,
+          "title": "Latency Ms",
+          "type": "integer"
+        },
+        "cost_usd": {
+          "minimum": 0.0,
+          "title": "Cost Usd",
+          "type": "number"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "incident_id",
+        "provider",
+        "model",
+        "role",
+        "status",
+        "latency_ms",
+        "cost_usd",
+        "created_at"
+      ],
+      "title": "ConsoleModelRunSummary",
+      "type": "object"
+    },
+    "Criticality": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "title": "Criticality",
+      "type": "string"
+    },
+    "EvidenceCollectionKind": {
+      "enum": [
+        "logs",
+        "process_tree",
+        "file_metadata",
+        "pcap"
+      ],
+      "title": "EvidenceCollectionKind",
+      "type": "string"
+    },
+    "EvidenceCollectionTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "target_type": {
+          "const": "evidence_collection",
+          "default": "evidence_collection",
+          "title": "Target Type",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "expected_agent_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Agent Id",
+          "type": "string"
+        },
+        "collections": {
+          "items": {
+            "$ref": "#/$defs/EvidenceCollectionKind"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Collections",
+          "type": "array"
+        },
+        "max_bytes": {
+          "maximum": 1073741824,
+          "minimum": 1024,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "duration_seconds": {
+          "default": 60,
+          "maximum": 3600,
+          "minimum": 1,
+          "title": "Duration Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "host_id",
+        "expected_agent_id",
+        "collections",
+        "max_bytes"
+      ],
+      "title": "EvidenceCollectionTarget",
+      "type": "object"
+    },
+    "FileResponseTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "target_type": {
+          "const": "file",
+          "default": "file",
+          "title": "Target Type",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "expected_agent_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Agent Id",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "inode": {
+          "minimum": 1,
+          "title": "Inode",
+          "type": "integer"
+        },
+        "device": {
+          "minimum": 0,
+          "title": "Device",
+          "type": "integer"
+        },
+        "uid": {
+          "minimum": 0,
+          "title": "Uid",
+          "type": "integer"
+        },
+        "gid": {
+          "minimum": 0,
+          "title": "Gid",
+          "type": "integer"
+        },
+        "mode": {
+          "maximum": 4095,
+          "minimum": 0,
+          "title": "Mode",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "host_id",
+        "expected_agent_id",
+        "path",
+        "sha256",
+        "inode",
+        "device",
+        "uid",
+        "gid",
+        "mode"
+      ],
+      "title": "FileResponseTarget",
+      "type": "object"
+    },
+    "FreshnessStatus": {
+      "enum": [
+        "fresh",
+        "stale",
+        "unknown",
+        "degraded"
+      ],
+      "title": "FreshnessStatus",
+      "type": "string"
+    },
+    "HostResponseTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "target_type": {
+          "const": "host",
+          "default": "host",
+          "title": "Target Type",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "expected_agent_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Agent Id",
+          "type": "string"
+        },
+        "management_ip": {
+          "maxLength": 45,
+          "minLength": 2,
+          "title": "Management Ip",
+          "type": "string"
+        },
+        "allowlist_ips": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Allowlist Ips",
+          "type": "array"
+        }
+      },
+      "required": [
+        "host_id",
+        "expected_agent_id",
+        "management_ip",
+        "allowlist_ips"
+      ],
+      "title": "HostResponseTarget",
+      "type": "object"
+    },
+    "IncidentSeverity": {
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "title": "IncidentSeverity",
+      "type": "string"
+    },
+    "IncidentStatus": {
+      "enum": [
+        "open",
+        "investigating",
+        "closed"
+      ],
+      "title": "IncidentStatus",
+      "type": "string"
+    },
+    "IpResponseTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "target_type": {
+          "const": "ip",
+          "default": "ip",
+          "title": "Target Type",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "expected_agent_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Agent Id",
+          "type": "string"
+        },
+        "ip_address": {
+          "maxLength": 45,
+          "minLength": 2,
+          "title": "Ip Address",
+          "type": "string"
+        }
+      },
+      "required": [
+        "host_id",
+        "expected_agent_id",
+        "ip_address"
+      ],
+      "title": "IpResponseTarget",
+      "type": "object"
+    },
+    "ProcessResponseTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "target_type": {
+          "const": "process",
+          "default": "process",
+          "title": "Target Type",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "expected_agent_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Agent Id",
+          "type": "string"
+        },
+        "pid": {
+          "maximum": 2147483647,
+          "minimum": 2,
+          "title": "Pid",
+          "type": "integer"
+        },
+        "start_ticks": {
+          "minimum": 1,
+          "title": "Start Ticks",
+          "type": "integer"
+        },
+        "executable_path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Executable Path",
+          "type": "string"
+        },
+        "executable_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Executable Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "host_id",
+        "expected_agent_id",
+        "pid",
+        "start_ticks",
+        "executable_path",
+        "executable_sha256"
+      ],
+      "title": "ProcessResponseTarget",
+      "type": "object"
+    },
+    "ResponseActionKind": {
+      "enum": [
+        "collect_evidence",
+        "temporary_block_ip",
+        "isolate_file",
+        "terminate_process",
+        "disable_account",
+        "isolate_host"
+      ],
+      "title": "ResponseActionKind",
+      "type": "string"
+    },
+    "ResponseActionPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "0.1.0",
+          "default": "0.1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "action_id": {
+          "pattern": "^rsa_[a-f0-9]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "tenant_id": {
+          "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "incident_id": {
+          "maxLength": 132,
+          "minLength": 1,
+          "title": "Incident Id",
+          "type": "string"
+        },
+        "incident_revision": {
+          "minimum": 1,
+          "title": "Incident Revision",
+          "type": "integer"
+        },
+        "action": {
+          "$ref": "#/$defs/ResponseActionKind"
+        },
+        "tier": {
+          "$ref": "#/$defs/ResponseTier"
+        },
+        "status": {
+          "$ref": "#/$defs/ResponseActionStatus"
+        },
+        "target": {
+          "discriminator": {
+            "mapping": {
+              "account": "#/$defs/AccountResponseTarget",
+              "evidence_collection": "#/$defs/EvidenceCollectionTarget",
+              "file": "#/$defs/FileResponseTarget",
+              "host": "#/$defs/HostResponseTarget",
+              "ip": "#/$defs/IpResponseTarget",
+              "process": "#/$defs/ProcessResponseTarget"
+            },
+            "propertyName": "target_type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IpResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/ProcessResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/FileResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/AccountResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/HostResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/EvidenceCollectionTarget"
+            }
+          ],
+          "title": "Target"
+        },
+        "target_identity_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Target Identity Sha256",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "operation": {
+          "$ref": "#/$defs/ResponseOperation"
+        },
+        "adapter": {
+          "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
+          "title": "Adapter",
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/ResponsePolicyDecision"
+        },
+        "requested_by": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Requested By",
+          "type": "string"
+        },
+        "approval_count": {
+          "default": 0,
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Approval Count",
+          "type": "integer"
+        },
+        "ttl_seconds": {
+          "anyOf": [
+            {
+              "maximum": 86400,
+              "minimum": 60,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ttl Seconds"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "queued_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Queued At"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        }
+      },
+      "required": [
+        "action_id",
+        "tenant_id",
+        "incident_id",
+        "incident_revision",
+        "action",
+        "tier",
+        "status",
+        "target",
+        "target_identity_sha256",
+        "evidence_ids",
+        "reason",
+        "operation",
+        "adapter",
+        "policy",
+        "requested_by",
+        "created_at"
+      ],
+      "title": "ResponseActionPlan",
+      "type": "object"
+    },
+    "ResponseActionStatus": {
+      "enum": [
+        "pending_approval",
+        "approved",
+        "rejected",
+        "queued",
+        "executing",
+        "succeeded",
+        "verification_failed",
+        "failed",
+        "rollback_queued",
+        "rolling_back",
+        "rolled_back",
+        "rollback_failed",
+        "cancelled",
+        "expired"
+      ],
+      "title": "ResponseActionStatus",
+      "type": "string"
+    },
+    "ResponseOperation": {
+      "enum": [
+        "firewall.block_ip",
+        "file.quarantine",
+        "process.terminate",
+        "account.disable",
+        "host.isolate",
+        "evidence.collect"
+      ],
+      "title": "ResponseOperation",
+      "type": "string"
+    },
+    "ResponsePolicyDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "policy_version": {
+          "const": "p11-response-policy-v0.1.0",
+          "default": "p11-response-policy-v0.1.0",
+          "title": "Policy Version",
+          "type": "string"
+        },
+        "allowed": {
+          "title": "Allowed",
+          "type": "boolean"
+        },
+        "tier": {
+          "$ref": "#/$defs/ResponseTier"
+        },
+        "required_approvals": {
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Required Approvals",
+          "type": "integer"
+        },
+        "rollback_required": {
+          "title": "Rollback Required",
+          "type": "boolean"
+        },
+        "rollback_supported": {
+          "title": "Rollback Supported",
+          "type": "boolean"
+        },
+        "target_revalidation_required": {
+          "const": true,
+          "default": true,
+          "title": "Target Revalidation Required",
+          "type": "boolean"
+        },
+        "execution_verification_required": {
+          "const": true,
+          "default": true,
+          "title": "Execution Verification Required",
+          "type": "boolean"
+        },
+        "business_confirmation_required": {
+          "title": "Business Confirmation Required",
+          "type": "boolean"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "allowed",
+        "tier",
+        "required_approvals",
+        "rollback_required",
+        "rollback_supported",
+        "business_confirmation_required",
+        "reasons"
+      ],
+      "title": "ResponsePolicyDecision",
+      "type": "object"
+    },
+    "ResponseTier": {
+      "enum": [
+        "r0_recommendation",
+        "r1_collection",
+        "r2_reversible_containment",
+        "r3_business_impact"
+      ],
+      "title": "ResponseTier",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tenant_id": {
+      "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "metrics": {
+      "$ref": "#/$defs/ConsoleMetrics"
+    },
+    "incidents": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConsoleIncidentSummary"
+      },
+      "maxItems": 50,
+      "title": "Incidents",
+      "type": "array"
+    },
+    "hosts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConsoleHostSummary"
+      },
+      "maxItems": 50,
+      "title": "Hosts",
+      "type": "array"
+    },
+    "malware": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConsoleMalwareSummary"
+      },
+      "maxItems": 50,
+      "title": "Malware",
+      "type": "array"
+    },
+    "model_runs": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConsoleModelRunSummary"
+      },
+      "maxItems": 50,
+      "title": "Model Runs",
+      "type": "array"
+    },
+    "response_actions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ResponseActionPlan"
+      },
+      "maxItems": 50,
+      "title": "Response Actions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "generated_at",
+    "metrics"
+  ],
+  "title": "ConsoleSnapshot",
+  "type": "object"
+}

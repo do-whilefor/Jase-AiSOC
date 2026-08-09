@@ -1,9 +1,10 @@
 """Repository functions for the P4 ``detections`` table.
 
 Detections are the alert-level output of the detection engine. ``create_detection``
-is idempotent on ``(tenant_id, rule_id, event_time_window_start,
-event_time_window_end)``: replaying a window that already produced a detection
-returns the existing row instead of duplicating it (§8.4 replay determinism).
+is idempotent on ``(tenant_id, host_id, rule_id, rule_version, entity_key,
+event_time_window_start, event_time_window_end)``: replaying the same subject
+window returns the existing row without collapsing detections for another host
+or source entity (§8.4 replay determinism).
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex}"
 
 
-def _detection_read(record: DetectionRecord) -> DetectionRead:
+def detection_read_from_record(record: DetectionRecord) -> DetectionRead:
     return DetectionRead(
         id=record.id,
         tenant_id=record.tenant_id,
@@ -45,6 +46,8 @@ def _detection_read(record: DetectionRecord) -> DetectionRead:
         event_time_window_start=record.event_time_window_start,
         event_time_window_end=record.event_time_window_end,
         status=record.status,  # type: ignore[arg-type]
+        governance_stage=record.governance_stage,  # type: ignore[arg-type]
+        governance_manifest_sha256=record.governance_manifest_sha256,
         detection_time=record.detection_time,
         created_at=record.created_at,
     )
@@ -60,20 +63,23 @@ async def create_detection(
 ) -> DetectionRead:
     """Persist a detection, idempotent on the rule+window dedupe key.
 
-    Returns the existing row unchanged when the same ``(rule_id, window)``
+    Returns the existing row unchanged when the same ``(rule_id, rule_version, window)``
     already produced a detection for this tenant, so replays do not multiply
     alerts.
     """
     existing = await session.scalar(
         select(DetectionRecord).where(
             DetectionRecord.tenant_id == tenant_id,
+            DetectionRecord.host_id == host_id,
             DetectionRecord.rule_id == data.rule_id,
+            DetectionRecord.rule_version == data.rule_version,
+            DetectionRecord.entity_key == data.entity_key,
             DetectionRecord.event_time_window_start == data.event_time_window_start,
             DetectionRecord.event_time_window_end == data.event_time_window_end,
         )
     )
     if existing is not None:
-        return _detection_read(existing)
+        return detection_read_from_record(existing)
     record = DetectionRecord(
         id=_new_id("det"),
         tenant_id=tenant_id,
@@ -92,14 +98,32 @@ async def create_detection(
         event_time_window_end=data.event_time_window_end,
         status=DetectionStatus.OPEN.value,
         next_steps=data.next_steps,
+        governance_stage=data.governance_stage,
+        governance_manifest_sha256=data.governance_manifest_sha256,
     )
-    session.add(record)
     try:
-        await session.flush()
+        # Isolate the flush in a savepoint so a concurrent idempotent insert does
+        # not poison the caller's outer transaction.
+        async with session.begin_nested():
+            session.add(record)
+            await session.flush()
     except IntegrityError as error:  # race: another worker inserted the same window
-        raise ConflictError("detection", "rule_window") from error
+        existing = await session.scalar(
+            select(DetectionRecord).where(
+                DetectionRecord.tenant_id == tenant_id,
+                DetectionRecord.host_id == host_id,
+                DetectionRecord.rule_id == data.rule_id,
+                DetectionRecord.rule_version == data.rule_version,
+                DetectionRecord.entity_key == data.entity_key,
+                DetectionRecord.event_time_window_start == data.event_time_window_start,
+                DetectionRecord.event_time_window_end == data.event_time_window_end,
+            )
+        )
+        if existing is not None:
+            return detection_read_from_record(existing)
+        raise ConflictError("detection", "subject_rule_window") from error
     await session.refresh(record)
-    result = _detection_read(record)
+    result = detection_read_from_record(record)
     session.add(
         AuditLogRecord(
             id=_new_id("audit"),
@@ -127,7 +151,7 @@ async def get_detection(
     )
     if record is None:
         raise NotFoundError("detection", detection_id)
-    return _detection_read(record)
+    return detection_read_from_record(record)
 
 
 async def list_detections(
@@ -161,11 +185,12 @@ async def list_detections(
         .scalars()
         .all()
     )
-    return [_detection_read(r) for r in rows], int(total or 0)
+    return [detection_read_from_record(r) for r in rows], int(total or 0)
 
 
 __all__ = [
     "create_detection",
+    "detection_read_from_record",
     "get_detection",
     "list_detections",
 ]

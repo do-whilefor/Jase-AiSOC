@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ApprovalDecision": {
+      "enum": [
+        "approve",
+        "reject"
+      ],
+      "title": "ApprovalDecision",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "decision": {
+      "$ref": "#/$defs/ApprovalDecision"
+    },
+    "comment": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Comment",
+      "type": "string"
+    },
+    "business_confirmation": {
+      "default": false,
+      "title": "Business Confirmation",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "decision",
+    "comment"
+  ],
+  "title": "ResponseApprovalCreate",
+  "type": "object"
+}

@@ -77,6 +77,7 @@ def _heartbeat(tenant_id: str, agent_id: str, host_id: str) -> AgentHeartbeat:
         agent_id=agent_id,
         host_id=host_id,
         boot_id="boot-mtls-integration",
+        agent_version="0.0.1",
         observed_at=observed_at,
         capabilities=CapabilityReport(
             observed_at=observed_at,
@@ -269,5 +270,12 @@ async def test_ingest_mtls_heartbeat_batch_and_clone_rejection(tmp_path: Path) -
     assert event_count == 2
     assert heartbeat_count == 1
     assert session_count == 1
+    async with database.session() as session:
+        persisted_agent_version = await session.scalar(
+            select(AgentHeartbeatRecord.agent_version).where(
+                AgentHeartbeatRecord.tenant_id == tenant.id
+            )
+        )
+    assert persisted_agent_version == "0.0.1"
     evidence_files = list((tmp_path / "evidence").rglob("*.evidence"))
     assert len(evidence_files) == 2

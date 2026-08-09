@@ -9,9 +9,11 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
+from blue_team import __version__
 from blue_team.agent_core.contracts import AgentHeartbeat, QueueTelemetry
 from blue_team.domain.identifiers import (
     AGENT_ID_PATTERN,
+    AGENT_VERSION_PATTERN,
     HOST_ID_PATTERN,
     TENANT_ID_PATTERN,
 )
@@ -105,6 +107,12 @@ class CollectorDriver(Protocol):
     def capability(self) -> CollectorCapability: ...
 
 
+class PollingCollectorDriver(CollectorDriver, Protocol):
+    """Optional no-thread collector extension driven once per Agent loop."""
+
+    def run_once(self) -> None: ...
+
+
 class QueueRuntimeBackend(Protocol):
     def initialize(self) -> None: ...
 
@@ -117,6 +125,7 @@ class RuntimeConfig:
     agent_id: str
     host_id: str
     boot_id: str
+    agent_version: str = __version__
     heartbeat_interval_seconds: int = 30
     heartbeat_retry_seconds: int = 5
     event_history_limit: int = 1000
@@ -127,6 +136,8 @@ class RuntimeConfig:
                 raise RuntimeConfigurationError(f"invalid {name}")
         if not self.boot_id or len(self.boot_id) > 128:
             raise RuntimeConfigurationError("boot_id must contain between 1 and 128 characters")
+        if re.fullmatch(AGENT_VERSION_PATTERN, self.agent_version) is None:
+            raise RuntimeConfigurationError("agent_version must be a bounded semantic version")
         if not 5 <= self.heartbeat_interval_seconds <= 3600:
             raise RuntimeConfigurationError("heartbeat_interval_seconds must be between 5 and 3600")
         if not 1 <= self.heartbeat_retry_seconds <= self.heartbeat_interval_seconds:
@@ -182,6 +193,7 @@ class _CollectorRuntime:
     started: bool = False
     paused: bool = False
     failure: str | None = None
+    last_capability: CollectorCapability | None = None
 
 
 class AgentRuntime:
@@ -257,6 +269,9 @@ class AgentRuntime:
         now = self._now()
         telemetry = self._read_queue_telemetry()
         self._apply_protection(telemetry.protection_mode)
+        self._poll_collectors()
+        telemetry = self._read_queue_telemetry()
+        self._apply_protection(telemetry.protection_mode)
         self._refresh_collector_health()
         self._reconcile_state(telemetry)
         if self._next_heartbeat_at is None or now < self._next_heartbeat_at:
@@ -268,6 +283,7 @@ class AgentRuntime:
             agent_id=self.config.agent_id,
             host_id=self.config.host_id,
             boot_id=self.config.boot_id,
+            agent_version=self.config.agent_version,
             observed_at=now,
             capabilities=self._merge_collector_capabilities(capability_report, now),
             queue=telemetry,
@@ -349,6 +365,11 @@ class AgentRuntime:
             capability = collector.registration.driver.capability()
             if capability.name != collector.registration.name:
                 raise RuntimeConfigurationError("collector capability name changed at runtime")
+            if capability.state is CollectorState.FAILED:
+                raise RuntimeConfigurationError(
+                    f"collector reported failed: {capability.last_error or 'unknown error'}"
+                )
+            collector.last_capability = capability
         except Exception as error:
             collector.failure = f"start failed: {_safe_error(error)}"
             self._record(
@@ -439,12 +460,34 @@ class AgentRuntime:
                 capability = collector.registration.driver.capability()
                 if capability.name != collector.registration.name:
                     raise RuntimeConfigurationError("collector capability name changed at runtime")
+                if capability.state is CollectorState.FAILED:
+                    raise RuntimeConfigurationError(
+                        f"collector reported failed: {capability.last_error or 'unknown error'}"
+                    )
+                collector.last_capability = capability
             except Exception as error:
                 collector.failure = f"health failed: {_safe_error(error)}"
                 self._record(
                     "collector_health_failed",
                     collector.failure,
                     component=collector.registration.name,
+                )
+
+    def _poll_collectors(self) -> None:
+        for name, collector in self._collectors.items():
+            if not collector.started or collector.paused or collector.failure is not None:
+                continue
+            poll = getattr(collector.registration.driver, "run_once", None)
+            if poll is None:
+                continue
+            try:
+                poll()
+            except Exception as error:
+                collector.failure = f"poll failed: {_safe_error(error)}"
+                self._record(
+                    "collector_poll_failed",
+                    collector.failure,
+                    component=name,
                 )
 
     def _refresh_capabilities(self) -> CapabilityReport:
@@ -479,14 +522,22 @@ class AgentRuntime:
         capabilities = {capability.name: capability for capability in report.collectors}
         for name, collector in self._collectors.items():
             if collector.failure is not None:
+                previous = collector.last_capability
                 capabilities[name] = CollectorCapability(
                     name=name,
                     state=CollectorState.FAILED,
+                    drop_count=previous.drop_count if previous is not None else 0,
+                    backlog_count=previous.backlog_count if previous is not None else 0,
+                    parse_error_count=(previous.parse_error_count if previous is not None else 0),
+                    incomplete_count=(previous.incomplete_count if previous is not None else 0),
                     last_error=collector.failure,
+                    validated_version=(
+                        previous.validated_version if previous is not None else None
+                    ),
                 )
                 continue
             try:
-                current = collector.registration.driver.capability()
+                current = collector.last_capability or collector.registration.driver.capability()
                 if current.name != name:
                     raise RuntimeConfigurationError("collector capability name changed at runtime")
             except Exception as error:
@@ -503,12 +554,11 @@ class AgentRuntime:
                 )
             else:
                 capabilities[name] = (
-                    CollectorCapability(
-                        name=name,
-                        state=CollectorState.DEGRADED,
-                        drop_count=current.drop_count,
-                        last_error="paused by local reliable queue protection mode",
-                        validated_version=current.validated_version,
+                    current.model_copy(
+                        update={
+                            "state": CollectorState.DEGRADED,
+                            "last_error": "paused by local reliable queue protection mode",
+                        }
                     )
                     if collector.paused
                     else current
@@ -581,6 +631,11 @@ class AgentRuntime:
             or self._queue_failed
             or self._capability_probe_failed
             or any(collector.failure for collector in self._collectors.values())
+            or any(
+                collector.last_capability is not None
+                and collector.last_capability.state is not CollectorState.ENABLED
+                for collector in self._collectors.values()
+            )
         )
 
 

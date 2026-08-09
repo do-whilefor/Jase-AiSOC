@@ -48,5 +48,7 @@ class AgentNormalizer:
             partition_key=part,
             dedupe_key=dedupe_key(raw, raw.raw_payload),
             is_late=False,
-            source_time_quality="trusted",
+            source_time_quality=(
+                "trusted" if offset is not None and abs(offset) <= 300_000 else "skew_detected"
+            ),
         )

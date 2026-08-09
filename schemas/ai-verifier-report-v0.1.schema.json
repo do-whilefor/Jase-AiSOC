@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ClaimReviewStatus": {
+      "enum": [
+        "supported",
+        "partially_supported",
+        "insufficient",
+        "contradicted",
+        "unsupported"
+      ],
+      "title": "ClaimReviewStatus",
+      "type": "string"
+    },
+    "VerifierClaimReview": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_id": {
+          "pattern": "^aic_[a-f0-9]{24}$",
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/ClaimReviewStatus"
+        },
+        "evidence_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "contradictions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Contradictions",
+          "type": "array"
+        },
+        "unknowns": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Unknowns",
+          "type": "array"
+        },
+        "rationale": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "claim_id",
+        "verdict",
+        "rationale"
+      ],
+      "title": "VerifierClaimReview",
+      "type": "object"
+    },
+    "VerifierRecommendation": {
+      "enum": [
+        "accept",
+        "revise",
+        "escalate"
+      ],
+      "title": "VerifierRecommendation",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "incident_id": {
+      "maxLength": 132,
+      "minLength": 1,
+      "title": "Incident Id",
+      "type": "string"
+    },
+    "verifier_slot_id": {
+      "pattern": "^vslot_[a-f0-9]{16}$",
+      "title": "Verifier Slot Id",
+      "type": "string"
+    },
+    "reviews": {
+      "items": {
+        "$ref": "#/$defs/VerifierClaimReview"
+      },
+      "maxItems": 128,
+      "title": "Reviews",
+      "type": "array"
+    },
+    "overall_unknowns": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "title": "Overall Unknowns",
+      "type": "array"
+    },
+    "recommendation": {
+      "$ref": "#/$defs/VerifierRecommendation"
+    }
+  },
+  "required": [
+    "incident_id",
+    "verifier_slot_id",
+    "reviews",
+    "recommendation"
+  ],
+  "title": "VerifierReport",
+  "type": "object"
+}

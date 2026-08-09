@@ -1,0 +1,643 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ConsoleModelOperationsCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "review_tasks": {
+          "minimum": 0,
+          "title": "Review Tasks",
+          "type": "integer"
+        },
+        "model_runs": {
+          "minimum": 0,
+          "title": "Model Runs",
+          "type": "integer"
+        },
+        "aggregate_groups": {
+          "minimum": 0,
+          "title": "Aggregate Groups",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "review_tasks",
+        "model_runs",
+        "aggregate_groups"
+      ],
+      "title": "ConsoleModelOperationsCounts",
+      "type": "object"
+    },
+    "ConsoleModelProviderConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "provider": {
+          "enum": [
+            "openai_compatible",
+            "kimi",
+            "glm"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "model_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Name"
+        },
+        "api_key_state": {
+          "enum": [
+            "configured",
+            "not_configured"
+          ],
+          "title": "Api Key State",
+          "type": "string"
+        },
+        "base_url_state": {
+          "enum": [
+            "configured",
+            "not_configured",
+            "not_required"
+          ],
+          "title": "Base Url State",
+          "type": "string"
+        },
+        "configuration_complete": {
+          "title": "Configuration Complete",
+          "type": "boolean"
+        },
+        "credential_validity": {
+          "const": "not_tested",
+          "default": "not_tested",
+          "title": "Credential Validity",
+          "type": "string"
+        },
+        "health_status": {
+          "const": "not_probed",
+          "default": "not_probed",
+          "title": "Health Status",
+          "type": "string"
+        },
+        "enabled_roles": {
+          "items": {
+            "enum": [
+              "adjudicator",
+              "analyzer",
+              "verifier"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "title": "Enabled Roles",
+          "type": "array"
+        },
+        "supports_tools": {
+          "title": "Supports Tools",
+          "type": "boolean"
+        },
+        "supports_json_schema": {
+          "title": "Supports Json Schema",
+          "type": "boolean"
+        },
+        "model_context_tokens": {
+          "maximum": 10000000,
+          "minimum": 1,
+          "title": "Model Context Tokens",
+          "type": "integer"
+        },
+        "max_response_bytes": {
+          "maximum": 20971520,
+          "minimum": 1024,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "provider_timeout_seconds": {
+          "maximum": 600.0,
+          "minimum": 0.1,
+          "title": "Provider Timeout Seconds",
+          "type": "number"
+        },
+        "provider_max_retries": {
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Provider Max Retries",
+          "type": "integer"
+        },
+        "circuit_failure_threshold": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Circuit Failure Threshold",
+          "type": "integer"
+        },
+        "circuit_recovery_seconds": {
+          "maximum": 3600.0,
+          "minimum": 1.0,
+          "title": "Circuit Recovery Seconds",
+          "type": "number"
+        },
+        "max_context_tokens": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "title": "Max Context Tokens",
+          "type": "integer"
+        },
+        "max_output_tokens": {
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Max Output Tokens",
+          "type": "integer"
+        },
+        "max_tool_calls": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Max Tool Calls",
+          "type": "integer"
+        },
+        "max_model_runs_per_incident": {
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Max Model Runs Per Incident",
+          "type": "integer"
+        },
+        "max_verifier_slots": {
+          "maximum": 16,
+          "minimum": 0,
+          "title": "Max Verifier Slots",
+          "type": "integer"
+        },
+        "adjudicator_enabled": {
+          "title": "Adjudicator Enabled",
+          "type": "boolean"
+        },
+        "max_reviews_per_minute": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Max Reviews Per Minute",
+          "type": "integer"
+        },
+        "max_cost_usd_per_incident": {
+          "maximum": 10000.0,
+          "minimum": 0.0,
+          "title": "Max Cost Usd Per Incident",
+          "type": "number"
+        }
+      },
+      "required": [
+        "enabled",
+        "provider",
+        "api_key_state",
+        "base_url_state",
+        "configuration_complete",
+        "enabled_roles",
+        "supports_tools",
+        "supports_json_schema",
+        "model_context_tokens",
+        "max_response_bytes",
+        "provider_timeout_seconds",
+        "provider_max_retries",
+        "circuit_failure_threshold",
+        "circuit_recovery_seconds",
+        "max_context_tokens",
+        "max_output_tokens",
+        "max_tool_calls",
+        "max_model_runs_per_incident",
+        "max_verifier_slots",
+        "adjudicator_enabled",
+        "max_reviews_per_minute",
+        "max_cost_usd_per_incident"
+      ],
+      "title": "ConsoleModelProviderConfiguration",
+      "type": "object"
+    },
+    "ConsoleModelReviewMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "task_count": {
+          "minimum": 0,
+          "title": "Task Count",
+          "type": "integer"
+        },
+        "skipped_count": {
+          "minimum": 0,
+          "title": "Skipped Count",
+          "type": "integer"
+        },
+        "completed_count": {
+          "minimum": 0,
+          "title": "Completed Count",
+          "type": "integer"
+        },
+        "model_unavailable_count": {
+          "minimum": 0,
+          "title": "Model Unavailable Count",
+          "type": "integer"
+        },
+        "invalid_output_count": {
+          "minimum": 0,
+          "title": "Invalid Output Count",
+          "type": "integer"
+        },
+        "budget_exceeded_count": {
+          "minimum": 0,
+          "title": "Budget Exceeded Count",
+          "type": "integer"
+        },
+        "require_human_status_count": {
+          "minimum": 0,
+          "title": "Require Human Status Count",
+          "type": "integer"
+        },
+        "verification_required_count": {
+          "minimum": 0,
+          "title": "Verification Required Count",
+          "type": "integer"
+        },
+        "human_review_required_count": {
+          "minimum": 0,
+          "title": "Human Review Required Count",
+          "type": "integer"
+        },
+        "deterministic_only_count": {
+          "minimum": 0,
+          "title": "Deterministic Only Count",
+          "type": "integer"
+        },
+        "unreviewed_count": {
+          "minimum": 0,
+          "title": "Unreviewed Count",
+          "type": "integer"
+        },
+        "basic_count": {
+          "minimum": 0,
+          "title": "Basic Count",
+          "type": "integer"
+        },
+        "enhanced_count": {
+          "minimum": 0,
+          "title": "Enhanced Count",
+          "type": "integer"
+        },
+        "high_count": {
+          "minimum": 0,
+          "title": "High Count",
+          "type": "integer"
+        },
+        "last_review_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Review At"
+        }
+      },
+      "required": [
+        "task_count",
+        "skipped_count",
+        "completed_count",
+        "model_unavailable_count",
+        "invalid_output_count",
+        "budget_exceeded_count",
+        "require_human_status_count",
+        "verification_required_count",
+        "human_review_required_count",
+        "deterministic_only_count",
+        "unreviewed_count",
+        "basic_count",
+        "enhanced_count",
+        "high_count"
+      ],
+      "title": "ConsoleModelReviewMetrics",
+      "type": "object"
+    },
+    "ConsoleModelReviewQuality": {
+      "additionalProperties": false,
+      "properties": {
+        "labeled_performance_available": {
+          "const": false,
+          "default": false,
+          "title": "Labeled Performance Available",
+          "type": "boolean"
+        },
+        "labeled_outcome_count": {
+          "const": 0,
+          "default": 0,
+          "title": "Labeled Outcome Count",
+          "type": "integer"
+        },
+        "precision": {
+          "default": null,
+          "title": "Precision",
+          "type": "null"
+        },
+        "recall": {
+          "default": null,
+          "title": "Recall",
+          "type": "null"
+        },
+        "ground_truth_agreement": {
+          "default": null,
+          "title": "Ground Truth Agreement",
+          "type": "null"
+        },
+        "false_positive_rate": {
+          "default": null,
+          "title": "False Positive Rate",
+          "type": "null"
+        }
+      },
+      "title": "ConsoleModelReviewQuality",
+      "type": "object"
+    },
+    "ConsoleModelRunAggregate": {
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "model": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "analyzer",
+            "verifier",
+            "adjudicator"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "run_count": {
+          "minimum": 1,
+          "title": "Run Count",
+          "type": "integer"
+        },
+        "completed_count": {
+          "minimum": 0,
+          "title": "Completed Count",
+          "type": "integer"
+        },
+        "failed_count": {
+          "minimum": 0,
+          "title": "Failed Count",
+          "type": "integer"
+        },
+        "circuit_open_count": {
+          "minimum": 0,
+          "title": "Circuit Open Count",
+          "type": "integer"
+        },
+        "failure_rate": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Failure Rate",
+          "type": "number"
+        },
+        "average_latency_ms": {
+          "minimum": 0.0,
+          "title": "Average Latency Ms",
+          "type": "number"
+        },
+        "total_input_tokens": {
+          "minimum": 0,
+          "title": "Total Input Tokens",
+          "type": "integer"
+        },
+        "total_output_tokens": {
+          "minimum": 0,
+          "title": "Total Output Tokens",
+          "type": "integer"
+        },
+        "total_cost_usd": {
+          "minimum": 0.0,
+          "title": "Total Cost Usd",
+          "type": "number"
+        },
+        "total_retries": {
+          "minimum": 0,
+          "title": "Total Retries",
+          "type": "integer"
+        },
+        "total_tool_calls": {
+          "minimum": 0,
+          "title": "Total Tool Calls",
+          "type": "integer"
+        },
+        "last_run_at": {
+          "format": "date-time",
+          "title": "Last Run At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model",
+        "role",
+        "run_count",
+        "completed_count",
+        "failed_count",
+        "circuit_open_count",
+        "failure_rate",
+        "average_latency_ms",
+        "total_input_tokens",
+        "total_output_tokens",
+        "total_cost_usd",
+        "total_retries",
+        "total_tool_calls",
+        "last_run_at"
+      ],
+      "title": "ConsoleModelRunAggregate",
+      "type": "object"
+    },
+    "ConsoleModelRunSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "maxLength": 132,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "incident_id": {
+          "maxLength": 132,
+          "minLength": 1,
+          "title": "Incident Id",
+          "type": "string"
+        },
+        "provider": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "model": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "role": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        },
+        "status": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Status",
+          "type": "string"
+        },
+        "latency_ms": {
+          "minimum": 0,
+          "title": "Latency Ms",
+          "type": "integer"
+        },
+        "cost_usd": {
+          "minimum": 0.0,
+          "title": "Cost Usd",
+          "type": "number"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "incident_id",
+        "provider",
+        "model",
+        "role",
+        "status",
+        "latency_ms",
+        "cost_usd",
+        "created_at"
+      ],
+      "title": "ConsoleModelRunSummary",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Tenant-scoped model operations without secrets or invented quality claims.",
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tenant_id": {
+      "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "counts": {
+      "$ref": "#/$defs/ConsoleModelOperationsCounts"
+    },
+    "provider_configuration": {
+      "$ref": "#/$defs/ConsoleModelProviderConfiguration"
+    },
+    "review_metrics": {
+      "$ref": "#/$defs/ConsoleModelReviewMetrics"
+    },
+    "review_quality": {
+      "$ref": "#/$defs/ConsoleModelReviewQuality",
+      "default": {
+        "labeled_performance_available": false,
+        "labeled_outcome_count": 0,
+        "precision": null,
+        "recall": null,
+        "ground_truth_agreement": null,
+        "false_positive_rate": null
+      }
+    },
+    "run_aggregates": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConsoleModelRunAggregate"
+      },
+      "maxItems": 100,
+      "title": "Run Aggregates",
+      "type": "array"
+    },
+    "recent_runs": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConsoleModelRunSummary"
+      },
+      "maxItems": 50,
+      "title": "Recent Runs",
+      "type": "array"
+    },
+    "truncated_sections": {
+      "default": [],
+      "items": {
+        "enum": [
+          "run_aggregates",
+          "recent_runs"
+        ],
+        "type": "string"
+      },
+      "maxItems": 2,
+      "title": "Truncated Sections",
+      "type": "array"
+    },
+    "provider_health_probe_available": {
+      "const": false,
+      "default": false,
+      "title": "Provider Health Probe Available",
+      "type": "boolean"
+    },
+    "credential_validation_available": {
+      "const": false,
+      "default": false,
+      "title": "Credential Validation Available",
+      "type": "boolean"
+    },
+    "labeled_feedback_linkage_available": {
+      "const": false,
+      "default": false,
+      "title": "Labeled Feedback Linkage Available",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "generated_at",
+    "counts",
+    "provider_configuration",
+    "review_metrics"
+  ],
+  "title": "ConsoleModelOperations",
+  "type": "object"
+}

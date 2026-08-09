@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from blue_team import __version__
 from blue_team.agent_core import (
     AgentProcessConfig,
     AgentProcessError,
@@ -17,6 +18,7 @@ from blue_team.agent_core import (
     load_agent_process_config,
     run_agent_process,
 )
+from blue_team.agent_core.queue import LocalDiskQueue, QueueConfig
 from blue_team.platform import LinuxPlatformAdapter
 from tests.unit.test_agent_contracts import AGENT_ID, BOOT_ID, HOST_ID, TENANT_ID
 
@@ -94,6 +96,7 @@ def test_configured_agent_process_persists_heartbeat_and_lifecycle_on_stop(
     heartbeat = heartbeats[0]
     assert heartbeat["kind"] == "heartbeat"
     assert heartbeat["payload"]["tenant_id"] == TENANT_ID  # type: ignore[index]
+    assert heartbeat["payload"]["agent_version"] == __version__  # type: ignore[index]
     lifecycle = jsonl(config.lifecycle_journal_path)
     kinds = [record["kind"] for record in lifecycle]
     assert kinds[0] == "process_starting"
@@ -127,6 +130,79 @@ def test_agent_process_config_is_bounded_private_and_absolute(tmp_path: Path) ->
     invalid["state_directory"] = "relative/state"
     with pytest.raises(ValidationError, match="absolute"):
         AgentProcessConfig.model_validate(invalid)
+
+    incomplete_audit = config_value(tmp_path / "state")
+    incomplete_audit["auditd_enabled"] = True
+    with pytest.raises(ValidationError, match="auditd_log_path"):
+        AgentProcessConfig.model_validate(incomplete_audit)
+
+
+def test_agent_process_registers_audit_collector_and_queues_event(tmp_path: Path) -> None:
+    audit_log = tmp_path / "audit.log"
+    audit_log.write_bytes(
+        b"type=SYSCALL msg=audit(1786176000.123:50): "
+        b'arch=c000003e syscall=59 success=yes ppid=49 pid=50 uid=0 exe="/bin/sh"\n'
+        b'type=EXECVE msg=audit(1786176000.123:50): argc=1 a0="sh"\n'
+        b"type=EOE msg=audit(1786176000.123:50):\n"
+    )
+    values = config_value(tmp_path / "state")
+    values.update(
+        {
+            "auditd_enabled": True,
+            "auditd_log_path": str(audit_log.absolute()),
+            "auditd_start_at_end": False,
+            "max_event_bytes": 4 * 1024 * 1024,
+        }
+    )
+    config = AgentProcessConfig.model_validate(values)
+    stop_event = threading.Event()
+    failures: list[BaseException] = []
+    probe: LocalDiskQueue | None = None
+
+    def run() -> None:
+        try:
+            run_agent_process(
+                config,
+                stop_event=stop_event,
+                capability_probe=LinuxPlatformAdapter().capabilities,
+            )
+        except BaseException as error:
+            failures.append(error)
+
+    process = threading.Thread(target=run)
+    process.start()
+    deadline = time.monotonic() + 10
+    queued = 0
+    while time.monotonic() < deadline:
+        if config.queue_path.exists():
+            probe = LocalDiskQueue(
+                QueueConfig(
+                    database_path=config.queue_path,
+                    tenant_id=TENANT_ID,
+                    agent_id=AGENT_ID,
+                    host_id=HOST_ID,
+                    max_payload_bytes=config.max_payload_bytes,
+                    critical_reserve_bytes=config.critical_reserve_bytes,
+                    max_event_bytes=config.max_event_bytes,
+                    min_free_bytes=config.min_free_bytes,
+                )
+            )
+            queued = probe.telemetry().queued_count
+            if queued:
+                break
+        time.sleep(0.02)
+    stop_event.set()
+    process.join(timeout=10)
+
+    assert not process.is_alive()
+    assert failures == []
+    assert queued == 1
+    assert probe is not None
+    batch = probe.reserve_batch()
+    assert batch is not None
+    assert batch.events[0].event.event_type == "process.exec"
+    assert batch.events[0].event.source.kind.value == "auditd"
+    assert config.auditd_state_path.exists()
 
 
 def test_agent_process_rejects_linked_or_shared_configuration(tmp_path: Path) -> None:

@@ -1,0 +1,1127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "AccountResponseTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "target_type": {
+          "const": "account",
+          "default": "account",
+          "title": "Target Type",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "expected_agent_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Agent Id",
+          "type": "string"
+        },
+        "username": {
+          "pattern": "^[a-z_][a-z0-9_-]{0,31}$",
+          "title": "Username",
+          "type": "string"
+        },
+        "uid": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Uid",
+          "type": "integer"
+        },
+        "shell": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Shell",
+          "type": "string"
+        },
+        "locked": {
+          "title": "Locked",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "host_id",
+        "expected_agent_id",
+        "username",
+        "uid",
+        "shell",
+        "locked"
+      ],
+      "title": "AccountResponseTarget",
+      "type": "object"
+    },
+    "AdapterExecutionResult": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/ExecutionResultStatus"
+        },
+        "adapter": {
+          "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
+          "title": "Adapter",
+          "type": "string"
+        },
+        "operation_reference": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Operation Reference",
+          "type": "string"
+        },
+        "before": {
+          "$ref": "#/$defs/TargetObservation"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TargetObservation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "verification_passed": {
+          "title": "Verification Passed",
+          "type": "boolean"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        }
+      },
+      "required": [
+        "status",
+        "adapter",
+        "operation_reference",
+        "before",
+        "verification_passed"
+      ],
+      "title": "AdapterExecutionResult",
+      "type": "object"
+    },
+    "AdapterRollbackResult": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/RollbackResultStatus"
+        },
+        "adapter": {
+          "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
+          "title": "Adapter",
+          "type": "string"
+        },
+        "operation_reference": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Operation Reference",
+          "type": "string"
+        },
+        "before": {
+          "$ref": "#/$defs/TargetObservation"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TargetObservation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "verification_passed": {
+          "title": "Verification Passed",
+          "type": "boolean"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        }
+      },
+      "required": [
+        "status",
+        "adapter",
+        "operation_reference",
+        "before",
+        "verification_passed"
+      ],
+      "title": "AdapterRollbackResult",
+      "type": "object"
+    },
+    "ApprovalDecision": {
+      "enum": [
+        "approve",
+        "reject"
+      ],
+      "title": "ApprovalDecision",
+      "type": "string"
+    },
+    "EvidenceCollectionKind": {
+      "enum": [
+        "logs",
+        "process_tree",
+        "file_metadata",
+        "pcap"
+      ],
+      "title": "EvidenceCollectionKind",
+      "type": "string"
+    },
+    "EvidenceCollectionTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "target_type": {
+          "const": "evidence_collection",
+          "default": "evidence_collection",
+          "title": "Target Type",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "expected_agent_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Agent Id",
+          "type": "string"
+        },
+        "collections": {
+          "items": {
+            "$ref": "#/$defs/EvidenceCollectionKind"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Collections",
+          "type": "array"
+        },
+        "max_bytes": {
+          "maximum": 1073741824,
+          "minimum": 1024,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "duration_seconds": {
+          "default": 60,
+          "maximum": 3600,
+          "minimum": 1,
+          "title": "Duration Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "host_id",
+        "expected_agent_id",
+        "collections",
+        "max_bytes"
+      ],
+      "title": "EvidenceCollectionTarget",
+      "type": "object"
+    },
+    "ExecutionResultStatus": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "verification_failed"
+      ],
+      "title": "ExecutionResultStatus",
+      "type": "string"
+    },
+    "FileResponseTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "target_type": {
+          "const": "file",
+          "default": "file",
+          "title": "Target Type",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "expected_agent_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Agent Id",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "inode": {
+          "minimum": 1,
+          "title": "Inode",
+          "type": "integer"
+        },
+        "device": {
+          "minimum": 0,
+          "title": "Device",
+          "type": "integer"
+        },
+        "uid": {
+          "minimum": 0,
+          "title": "Uid",
+          "type": "integer"
+        },
+        "gid": {
+          "minimum": 0,
+          "title": "Gid",
+          "type": "integer"
+        },
+        "mode": {
+          "maximum": 4095,
+          "minimum": 0,
+          "title": "Mode",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "host_id",
+        "expected_agent_id",
+        "path",
+        "sha256",
+        "inode",
+        "device",
+        "uid",
+        "gid",
+        "mode"
+      ],
+      "title": "FileResponseTarget",
+      "type": "object"
+    },
+    "HostResponseTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "target_type": {
+          "const": "host",
+          "default": "host",
+          "title": "Target Type",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "expected_agent_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Agent Id",
+          "type": "string"
+        },
+        "management_ip": {
+          "maxLength": 45,
+          "minLength": 2,
+          "title": "Management Ip",
+          "type": "string"
+        },
+        "allowlist_ips": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Allowlist Ips",
+          "type": "array"
+        }
+      },
+      "required": [
+        "host_id",
+        "expected_agent_id",
+        "management_ip",
+        "allowlist_ips"
+      ],
+      "title": "HostResponseTarget",
+      "type": "object"
+    },
+    "IpResponseTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "target_type": {
+          "const": "ip",
+          "default": "ip",
+          "title": "Target Type",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "expected_agent_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Agent Id",
+          "type": "string"
+        },
+        "ip_address": {
+          "maxLength": 45,
+          "minLength": 2,
+          "title": "Ip Address",
+          "type": "string"
+        }
+      },
+      "required": [
+        "host_id",
+        "expected_agent_id",
+        "ip_address"
+      ],
+      "title": "IpResponseTarget",
+      "type": "object"
+    },
+    "ProcessResponseTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "target_type": {
+          "const": "process",
+          "default": "process",
+          "title": "Target Type",
+          "type": "string"
+        },
+        "host_id": {
+          "pattern": "^host_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Host Id",
+          "type": "string"
+        },
+        "expected_agent_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Agent Id",
+          "type": "string"
+        },
+        "pid": {
+          "maximum": 2147483647,
+          "minimum": 2,
+          "title": "Pid",
+          "type": "integer"
+        },
+        "start_ticks": {
+          "minimum": 1,
+          "title": "Start Ticks",
+          "type": "integer"
+        },
+        "executable_path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Executable Path",
+          "type": "string"
+        },
+        "executable_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Executable Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "host_id",
+        "expected_agent_id",
+        "pid",
+        "start_ticks",
+        "executable_path",
+        "executable_sha256"
+      ],
+      "title": "ProcessResponseTarget",
+      "type": "object"
+    },
+    "ResponseActionEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "sequence": {
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "action_id": {
+          "pattern": "^rsa_[a-f0-9]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "from_status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResponseActionStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "to_status": {
+          "$ref": "#/$defs/ResponseActionStatus"
+        },
+        "actor": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Actor",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sequence",
+        "action_id",
+        "to_status",
+        "actor",
+        "reason",
+        "created_at"
+      ],
+      "title": "ResponseActionEvent",
+      "type": "object"
+    },
+    "ResponseActionKind": {
+      "enum": [
+        "collect_evidence",
+        "temporary_block_ip",
+        "isolate_file",
+        "terminate_process",
+        "disable_account",
+        "isolate_host"
+      ],
+      "title": "ResponseActionKind",
+      "type": "string"
+    },
+    "ResponseActionPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "0.1.0",
+          "default": "0.1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "action_id": {
+          "pattern": "^rsa_[a-f0-9]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "tenant_id": {
+          "pattern": "^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "incident_id": {
+          "maxLength": 132,
+          "minLength": 1,
+          "title": "Incident Id",
+          "type": "string"
+        },
+        "incident_revision": {
+          "minimum": 1,
+          "title": "Incident Revision",
+          "type": "integer"
+        },
+        "action": {
+          "$ref": "#/$defs/ResponseActionKind"
+        },
+        "tier": {
+          "$ref": "#/$defs/ResponseTier"
+        },
+        "status": {
+          "$ref": "#/$defs/ResponseActionStatus"
+        },
+        "target": {
+          "discriminator": {
+            "mapping": {
+              "account": "#/$defs/AccountResponseTarget",
+              "evidence_collection": "#/$defs/EvidenceCollectionTarget",
+              "file": "#/$defs/FileResponseTarget",
+              "host": "#/$defs/HostResponseTarget",
+              "ip": "#/$defs/IpResponseTarget",
+              "process": "#/$defs/ProcessResponseTarget"
+            },
+            "propertyName": "target_type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IpResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/ProcessResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/FileResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/AccountResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/HostResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/EvidenceCollectionTarget"
+            }
+          ],
+          "title": "Target"
+        },
+        "target_identity_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Target Identity Sha256",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "operation": {
+          "$ref": "#/$defs/ResponseOperation"
+        },
+        "adapter": {
+          "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
+          "title": "Adapter",
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/ResponsePolicyDecision"
+        },
+        "requested_by": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Requested By",
+          "type": "string"
+        },
+        "approval_count": {
+          "default": 0,
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Approval Count",
+          "type": "integer"
+        },
+        "ttl_seconds": {
+          "anyOf": [
+            {
+              "maximum": 86400,
+              "minimum": 60,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ttl Seconds"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "queued_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Queued At"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        }
+      },
+      "required": [
+        "action_id",
+        "tenant_id",
+        "incident_id",
+        "incident_revision",
+        "action",
+        "tier",
+        "status",
+        "target",
+        "target_identity_sha256",
+        "evidence_ids",
+        "reason",
+        "operation",
+        "adapter",
+        "policy",
+        "requested_by",
+        "created_at"
+      ],
+      "title": "ResponseActionPlan",
+      "type": "object"
+    },
+    "ResponseActionStatus": {
+      "enum": [
+        "pending_approval",
+        "approved",
+        "rejected",
+        "queued",
+        "executing",
+        "succeeded",
+        "verification_failed",
+        "failed",
+        "rollback_queued",
+        "rolling_back",
+        "rolled_back",
+        "rollback_failed",
+        "cancelled",
+        "expired"
+      ],
+      "title": "ResponseActionStatus",
+      "type": "string"
+    },
+    "ResponseApprovalRead": {
+      "additionalProperties": false,
+      "properties": {
+        "approval_id": {
+          "pattern": "^rap_[a-f0-9]{32}$",
+          "title": "Approval Id",
+          "type": "string"
+        },
+        "action_id": {
+          "pattern": "^rsa_[a-f0-9]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/$defs/ApprovalDecision"
+        },
+        "approver": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Approver",
+          "type": "string"
+        },
+        "comment": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Comment",
+          "type": "string"
+        },
+        "business_confirmation": {
+          "title": "Business Confirmation",
+          "type": "boolean"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "approval_id",
+        "action_id",
+        "decision",
+        "approver",
+        "comment",
+        "business_confirmation",
+        "created_at"
+      ],
+      "title": "ResponseApprovalRead",
+      "type": "object"
+    },
+    "ResponseExecutionRead": {
+      "additionalProperties": false,
+      "properties": {
+        "execution_id": {
+          "pattern": "^rex_[a-f0-9]{32}$",
+          "title": "Execution Id",
+          "type": "string"
+        },
+        "action_id": {
+          "pattern": "^rsa_[a-f0-9]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "attempt": {
+          "minimum": 1,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "maxLength": 128,
+          "minLength": 8,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ExecutionResultStatus"
+        },
+        "result": {
+          "$ref": "#/$defs/AdapterExecutionResult"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "completed_at": {
+          "format": "date-time",
+          "title": "Completed At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "execution_id",
+        "action_id",
+        "attempt",
+        "idempotency_key",
+        "status",
+        "result",
+        "started_at",
+        "completed_at"
+      ],
+      "title": "ResponseExecutionRead",
+      "type": "object"
+    },
+    "ResponseOperation": {
+      "enum": [
+        "firewall.block_ip",
+        "file.quarantine",
+        "process.terminate",
+        "account.disable",
+        "host.isolate",
+        "evidence.collect"
+      ],
+      "title": "ResponseOperation",
+      "type": "string"
+    },
+    "ResponsePolicyDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "policy_version": {
+          "const": "p11-response-policy-v0.1.0",
+          "default": "p11-response-policy-v0.1.0",
+          "title": "Policy Version",
+          "type": "string"
+        },
+        "allowed": {
+          "title": "Allowed",
+          "type": "boolean"
+        },
+        "tier": {
+          "$ref": "#/$defs/ResponseTier"
+        },
+        "required_approvals": {
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Required Approvals",
+          "type": "integer"
+        },
+        "rollback_required": {
+          "title": "Rollback Required",
+          "type": "boolean"
+        },
+        "rollback_supported": {
+          "title": "Rollback Supported",
+          "type": "boolean"
+        },
+        "target_revalidation_required": {
+          "const": true,
+          "default": true,
+          "title": "Target Revalidation Required",
+          "type": "boolean"
+        },
+        "execution_verification_required": {
+          "const": true,
+          "default": true,
+          "title": "Execution Verification Required",
+          "type": "boolean"
+        },
+        "business_confirmation_required": {
+          "title": "Business Confirmation Required",
+          "type": "boolean"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "allowed",
+        "tier",
+        "required_approvals",
+        "rollback_required",
+        "rollback_supported",
+        "business_confirmation_required",
+        "reasons"
+      ],
+      "title": "ResponsePolicyDecision",
+      "type": "object"
+    },
+    "ResponseRollbackRead": {
+      "additionalProperties": false,
+      "properties": {
+        "rollback_id": {
+          "pattern": "^rrb_[a-f0-9]{32}$",
+          "title": "Rollback Id",
+          "type": "string"
+        },
+        "action_id": {
+          "pattern": "^rsa_[a-f0-9]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "execution_id": {
+          "pattern": "^rex_[a-f0-9]{32}$",
+          "title": "Execution Id",
+          "type": "string"
+        },
+        "idempotency_key": {
+          "maxLength": 128,
+          "minLength": 8,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "requested_by": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Requested By",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/RollbackResultStatus"
+        },
+        "result": {
+          "$ref": "#/$defs/AdapterRollbackResult"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "completed_at": {
+          "format": "date-time",
+          "title": "Completed At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rollback_id",
+        "action_id",
+        "execution_id",
+        "idempotency_key",
+        "reason",
+        "requested_by",
+        "status",
+        "result",
+        "started_at",
+        "completed_at"
+      ],
+      "title": "ResponseRollbackRead",
+      "type": "object"
+    },
+    "ResponseTier": {
+      "enum": [
+        "r0_recommendation",
+        "r1_collection",
+        "r2_reversible_containment",
+        "r3_business_impact"
+      ],
+      "title": "ResponseTier",
+      "type": "string"
+    },
+    "RollbackResultStatus": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "verification_failed"
+      ],
+      "title": "RollbackResultStatus",
+      "type": "string"
+    },
+    "TargetObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "discriminator": {
+            "mapping": {
+              "account": "#/$defs/AccountResponseTarget",
+              "evidence_collection": "#/$defs/EvidenceCollectionTarget",
+              "file": "#/$defs/FileResponseTarget",
+              "host": "#/$defs/HostResponseTarget",
+              "ip": "#/$defs/IpResponseTarget",
+              "process": "#/$defs/ProcessResponseTarget"
+            },
+            "propertyName": "target_type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IpResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/ProcessResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/FileResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/AccountResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/HostResponseTarget"
+            },
+            {
+              "$ref": "#/$defs/EvidenceCollectionTarget"
+            }
+          ],
+          "title": "Target"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "state_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "State Sha256",
+          "type": "string"
+        },
+        "state": {
+          "additionalProperties": true,
+          "maxProperties": 32,
+          "title": "State",
+          "type": "object"
+        }
+      },
+      "required": [
+        "target",
+        "observed_at",
+        "state_sha256"
+      ],
+      "title": "TargetObservation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "plan": {
+      "$ref": "#/$defs/ResponseActionPlan"
+    },
+    "approvals": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ResponseApprovalRead"
+      },
+      "maxItems": 2,
+      "title": "Approvals",
+      "type": "array"
+    },
+    "executions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ResponseExecutionRead"
+      },
+      "maxItems": 100,
+      "title": "Executions",
+      "type": "array"
+    },
+    "rollbacks": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ResponseRollbackRead"
+      },
+      "maxItems": 100,
+      "title": "Rollbacks",
+      "type": "array"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/ResponseActionEvent"
+      },
+      "maxItems": 512,
+      "minItems": 1,
+      "title": "Events",
+      "type": "array"
+    }
+  },
+  "required": [
+    "plan",
+    "events"
+  ],
+  "title": "ResponseActionDetail",
+  "type": "object"
+}

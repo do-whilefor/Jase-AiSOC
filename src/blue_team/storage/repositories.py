@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from blue_team.api_server.tenant_tokens import issue_tenant_token
+from blue_team.credentials import issue_tenant_token
 from blue_team.domain import (
     Criticality,
     HostCreate,
@@ -21,6 +21,7 @@ from blue_team.domain import (
     TenantCreate,
     TenantRead,
 )
+from blue_team.domain.response import OperatorRole
 from blue_team.errors import ConflictError, NotFoundError
 from blue_team.storage.models import (
     AuditLogRecord,
@@ -109,6 +110,7 @@ async def create_tenant(
             id=issued_token.credential_id,
             tenant_id=record.id,
             token_digest=issued_token.token_digest,
+            roles=[OperatorRole.TENANT_ADMIN.value],
         )
     )
     session.add(

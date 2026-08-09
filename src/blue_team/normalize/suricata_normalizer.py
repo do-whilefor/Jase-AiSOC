@@ -109,11 +109,9 @@ def _network_from_eve(eve: dict[str, object]) -> dict[str, object] | None:
     }
 
 
-# Suricata SSH event_type values mapped to an auth outcome the detection engine
-# consumes. Suricata emits "ssh.open" on a banner/proceed and does not natively
-# report auth success/failure; we conservatively map an SSH record's presence to
-# an attempt and rely on the http.status analog (none for ssh) plus rule logic.
-# When the record carries a known failure signature we map to "failure".
+# Suricata SSH EVE records expose protocol metadata, not a trustworthy login
+# outcome. Only an explicit failure signature is mapped to ``failure``; every
+# other record remains ``unknown`` until an sshd/PAM/audit source corroborates it.
 _SSH_FAILURE_SIGNATURES = {"failed", "fail", "invalid", "error"}
 
 
@@ -152,7 +150,7 @@ def _extensions_from_eve(eve_type: str, eve: dict[str, object]) -> dict[str, str
         outcome = (
             "failure"
             if (isinstance(sig, str) and any(s in sig.lower() for s in _SSH_FAILURE_SIGNATURES))
-            else "success"
+            else "unknown"
         )
         extensions["ssh.auth_event"] = outcome
         auth_method = ssh.get("auth_method")

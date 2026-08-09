@@ -1,65 +1,65 @@
 # P4：网络/Web/SSH 检测与状态分层
 
-状态：首增量完成 + 检测 worker 已接入实时管道；后续增量 Nginx/Apache 适配、注入/异常方法规则、完整 ATT&CK 映射待推进。
+状态：首增量、批次 B、version-bound 规则治理与签名生命周期初版已实现；检测 worker 已接入 base 管道。完整质量指标和 PostgreSQL/Kali rollout 重验仍未完成，因此 P4 尚未退出。
 计划来源：项目计划书第 18 章"P4 网络、Web 与认证检测"，§8.2/§8.3 检测场景与状态机，§8.4 规则生命周期，§7.4 证据包与按需检索。
 
 ## 已完成（首增量，2026-08-04）
 
 ### 输入适配
-- `suricata_normalizer` 扩展：`network.http` 携带 `http.method`/`http.url`/`http.status`/`http.protocol`；`network.ssh` 携带 `ssh.auth_event`(success/failure)/`ssh.auth_method`/`ssh.client_ip`/`ssh.username`，全部走 `extensions`（不改顶层 Schema v0.1）。
+- `suricata_normalizer` 扩展：`network.http` 携带 `http.method`/`http.url`/`http.status`/`http.protocol`。Suricata SSH 只在存在明确失败签名时标记 failure，其余保持 unknown，不再把协议握手误写为登录成功。
+- `JournaldNormalizer` 从身份确认为 `sshd` 的 `Failed/Accepted` 消息生成真实 `network.ssh` 认证结果；非 sshd 服务即使伪造相同文本也不会成为认证事实。
+- `ServiceLogNormalizer` 支持 Nginx/Apache Common/Combined access log，统一输出 `network.http`，不合法格式进入 DLQ。
 - 新增 3 个 normalize 单测（HTTP extensions、SSH failure 映射、SSH client_ip）。
 
 ### 检测引擎
 - `src/blue_team/detection_engine/`：`base.py`（`Detection` dataclass、`Rule` Protocol、`RuleContext`、`AttackState` enum、`detect_bursts` 贪心非重叠滑窗 helper）；`rule_registry.py`（`@register` 装饰器 + `register_all`）；`engine.py`（`DetectionEngine.evaluate` 按 tenant+host 分组、按 `applicable_event_types` 分发）；`rules/web_recon_scan.py`、`rules/ssh_bruteforce.py`。
 - `domain/detection.py`：`AttackState`（attack_attempt/blocked/suspected_success/confirmed_compromise/unknown）、`DetectionCategory`、`DetectionStatus`、`DetectionCreate`/`DetectionRead`。
-- `storage/detection_repository.py`：`create_detection`（幂等：同 rule+window 返回已有行）、`get_detection`、`list_detections`。
-- Migration `20260804_0006_detection_engine`：`detections` 表 + 唯一约束 `(tenant_id, rule_id, window_start, window_end)` + 索引。`alembic check` 无漂移。
+- `storage/detection_repository.py`：`create_detection` 按 tenant/host/rule/version/entity/window 幂等，并在并发冲突时用 savepoint 返回已有行。
+- Migration `20260804_0006_detection_engine` 建表；`20260808_0007_detection_dedupe_scope` 修复原去重键遗漏 host/entity、导致跨主机或跨来源告警被吞掉的问题。
+- Migration `20260809_0016_p11_rule_lifecycle` 再把 rule_version 纳入去重键，并增加签名 lifecycle current/event、Shadow observation 与 detection governance 引用。
 - `schema_export`：新增 `detection-v0.1.schema.json`；`--check` 通过。
 - `settings.py`：`detection_window_seconds`、`detection_web_scan_*`、`detection_ssh_bruteforce_failures` 阈值字段，env 可调。
 
 ### 规则与状态机（§8.3）
 - Web 扫描：`request_count>300 AND unique_path_count>100 AND (4xx_ratio>0.70 OR sensitive_path_hits>=5)` → `web.recon.scanning`，`attack_state=attack_attempt`。
 - SSH 爆破：同源 60s 内失败登录 >10 → `auth.ssh.bruteforce`，`attack_state=attack_attempt`。
+- Web 注入：SQLi/XSS/命令注入的有界签名匹配；明确拒绝状态映射 `blocked`，其他只为 `attack_attempt`。
+- 异常方法：TRACE/CONNECT/WebDAV 等输出 `web.request.abnormal_method`，并记录授权 WebDAV/代理诊断这一预期误报条件。
 - `suspected_success`/`confirmed_compromise` 不在首增量判定（需 P5 主机证据），规则 `next_steps` 指向 P5。
 
 ### 测试与回放
-- 单测 `tests/unit/detection/`：25 用例（web 正例/反例/敏感路径/正常基线/跨 src_ip/窗口边界；ssh 阈值/成功不计数/窗口边界/混合；engine 分发/幂等/状态机）。
+- P4 检测单测覆盖扫描、SSH、注入、异常方法、边界/反例、engine 分发与状态机；P5 host behavior 另覆盖多段序列、PID reuse、跨 boot 和运维反例。
 - 集成测试 `tests/integration/test_detection_persistence.py`：真实 PostgreSQL 验证落库 + 幂等重放 + 审计。
-- 回放数据集 `tests/replay/{web_scan,ssh_bruteforce,normal_baseline}/`（EVE JSONL + manifest）；`scripts/replay_detection.py` 端到端验证。
+- `tests/replay/build_datasets.py` 可确定性重建 `web_scan`、真实 sshd journald `ssh_bruteforce`、`normal_baseline` 与 `web_injection`；manifest 固定来源、版本、许可和 SHA-256。
+- `scripts/replay_detection.py` 不读取本机 `.env`，并校验数据集哈希、DLQ、攻击状态、最小/最大命中数和意外类别。
 
 ### 实时管道接入（2026-08-04 补完）
-- `DetectionWorker`（`src/blue_team/detection_engine/worker.py`）：轮询 `normalized_events` active（lookback ≥ 2× 窗口）→ 重建 `SecurityEvent` → `DetectionEngine.evaluate` → `create_detection`（幂等）。
+- `DetectionWorker`（`src/blue_team/detection_engine/worker.py`）：轮询 `normalized_events` active（lookback ≥ 2×突发窗口且覆盖 P5 chain window）→ 重建 `SecurityEvent` → `DetectionEngine.evaluate` → `create_detection`（幂等）。
 - `NormalizeWorker`（`src/blue_team/normalize/worker.py`）：轮询 `agent_events.normalize_status='pending'` → normalize → `normalized_events`。
 - 两个 worker 作为 `blue-team-api` lifespan 后台任务运行；`blue-team-process` CLI 离线推进。
 - 端到端集成测试 `tests/integration/test_pipeline_e2e.py`：301 事件经 normalize → detect → `/api/v1/detections` 可查，幂等重放不重复。
-- 检测**在真实管道上触发**（非仅离线回放），P4 退出条件"检测在真实管道触发"满足。
+- 检测已在 PostgreSQL 集成管道测试中覆盖，但本轮按用户要求未启动 Docker/PostgreSQL；Kali 重验前只视为已有测试证据，不宣称当前环境再次通过。
 
 ## 退出条件对照（§18.1：核心 Web 扫描和 SSH 爆破达到 MVP 指标；正常基线误报可解释）
 
-- Web 扫描命中：回放 `web_scan` → 1 个 `web.recon.scanning`。✅
-- SSH 爆破命中：回放 `ssh_bruteforce` → 1 个 `auth.ssh.bruteforce`。✅
-- 正常基线无命中：回放 `normal_baseline` → 0 检测（误报可解释）。✅
-- 尝试与成功不混淆：所有检测 `attack_state=attack_attempt`；`suspected_success` 需 P5 主机证据，规则 `next_steps` 显式标记。✅
+- 九个确定性本地回放均通过：P4 的 Web 扫描 1、SSH 爆破 1、注入 3、正常基线 0；P5 成功链 5，其余正常/失败/缺源/超窗口各 0。✅
+- 尝试/阻断/疑似成功不混淆：P4 请求信号只输出 `attack_attempt`/`blocked`；P5 Web→shell 行为才允许 `suspected_success`。✅
+- MVP 的 Precision≥80%、Web 扫描 Recall≥90%、每主机日误报和数据源缺失敏感度尚无足量独立验收集。❌ P4 不得据当前四个小型合成集正式退出。
 
 ## 待完成（后续增量）
 
-### 批次 B：Nginx/Apache 适配 + 注入规则 + 异常方法
-- Nginx/Apache access log normalizer → `network.http`（复用 extensions 约定）。
-- 注入规则（SQLi/XSS/命令注入签名）+ 异常 HTTP 方法规则。
-- `blocked` 状态判定（命中注入 + 响应被拒绝 + 无主机后续异常）。
-
 ### 批次 C：完整状态机 + ATT&CK 映射
-- `suspected_success` 判定接入 P5 主机证据（Web 进程产生 shell/下载/外联）。
-- ATT&CK 技术映射（T1190/T1110 等）+ 归因限制模板。
-- 规则元数据完整化（owner、测试数据集、预期误报、抑制条件、回滚方案，§8.4）。
+- `suspected_success` 已有 Web 进程派生 shell、下载执行、外联和持久化的 P5 离线规则；仍需真实 Collector 与请求↔PID 关联来闭合影响链。
+- ATT&CK 技术映射（T1190/T1110 等）、owner、测试数据集、预期误报、抑制条件和回滚方案已进入 version-bound catalog。
+- Ed25519 tenant manifest 已实现 Draft→Shadow→Canary→Released、逐级 rollback、Deprecated 和新版本 upgrade；sequence、previous hash、catalog、完整 dataset evidence 与 Canary Host tenant membership 均 fail closed。Shadow/非 Canary Host 不进入 detection/Incident；Canary/Released detection 绑定 stage+manifest hash。
+- 真实 PostgreSQL 双租户并发 import/replay/rollback、过期/corruption 故障注入与持续 rollout 观察仍待 Kali。
 
 ### 批次 D：检测质量度量
 - Precision/Recall/每主机每天误报数度量（§8.4）。
 - 规则历史回放差异报告（规则变更触发受影响数据集回放）。
 - 数据源缺失敏感度分析。
 
-## 非目标（本轮）
+## 尚未完成边界
 
 - Incident 关联（P6）、AI 研判（P7+）、响应执行（P11）。
-- 主机行为链（P5）——`suspected_success` 依赖 P5 但本轮不实现 P5。
-- eBPF/auditd/Falco 检测（P5）。
+- eBPF/auditd 主动采集、真实 Falco 宿主接入和跨发行版验证属于 P5/Kali 门禁。

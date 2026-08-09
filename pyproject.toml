@@ -40,6 +40,9 @@ blue-team-ingest = "blue_team.ingest_gateway.__main__:main"
 blue-team-export-schemas = "blue_team.domain.schema_export:main"
 blue-team-probe-platform = "blue_team.platform.__main__:main"
 blue-team-process = "blue_team.process.__main__:main"
+blue-team-malware-worker = "blue_team.malware_engine.__main__:main"
+blue-team-notification-worker = "blue_team.notification_engine.__main__:main"
+blue-team-response-worker = "blue_team.response_engine.__main__:main"
 
 [dependency-groups]
 dev = [
