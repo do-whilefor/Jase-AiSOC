@@ -110,7 +110,9 @@ class BoundedFileTail:
                 self._discard_to_newline(stream)
                 lines.append(
                     TailLine(
-                        message=data[: self.config.max_line_bytes].decode("utf-8", errors="replace"),
+                        message=data[: self.config.max_line_bytes].decode(
+                            "utf-8", errors="replace"
+                        ),
                         error="line exceeds max_line_bytes",
                     )
                 )
@@ -119,7 +121,9 @@ class BoundedFileTail:
             if len(content) > self.config.max_line_bytes:
                 lines.append(
                     TailLine(
-                        message=content[: self.config.max_line_bytes].decode("utf-8", errors="replace"),
+                        message=content[: self.config.max_line_bytes].decode(
+                            "utf-8", errors="replace"
+                        ),
                         error="line exceeds max_line_bytes",
                     )
                 )

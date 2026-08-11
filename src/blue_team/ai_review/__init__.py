@@ -8,6 +8,7 @@ from blue_team.ai_review.evidence import (
 from blue_team.ai_review.gate import AiReviewGate
 from blue_team.ai_review.orchestrator import AiReviewOrchestrator, ReviewRateLimiter
 from blue_team.ai_review.tool_gateway import (
+    DatabaseReadOnlyToolDataSource,
     SqlReadOnlyToolDataSource,
     ToolAuthorizationError,
     ToolGateway,
@@ -18,6 +19,7 @@ from blue_team.ai_review.tool_gateway import (
 __all__ = [
     "AiReviewGate",
     "AiReviewOrchestrator",
+    "DatabaseReadOnlyToolDataSource",
     "EvidencePackageError",
     "ReviewRateLimiter",
     "SqlReadOnlyToolDataSource",

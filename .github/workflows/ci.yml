@@ -125,9 +125,47 @@ jobs:
       - name: Run PostgreSQL integration tests
         run: uv run pytest -m integration -vv
 
+  rust-extension:
+    name: Build and test the optional Rust accelerator
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@fc1eea494dc72fab8f7d4a6f0b9b3f1a1c4f2be0 # stable
+        with:
+          toolchain: stable
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: "0.8.24"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install locked dependencies and maturin
+        run: |
+          uv sync --locked --all-groups
+          uv tool install maturin
+
+      - name: Build and install the Rust extension into the venv
+        run: |
+          VIRTUAL_ENV="$(pwd)/.venv" maturin develop --manifest-path rust/blue-team-rust/Cargo.toml
+
+      - name: Verify the extension and run rust-hash tests
+        run: |
+          uv run python -c "import blue_team_rust; print(blue_team_rust.version())"
+          uv run pytest tests/unit/test_rust_hash.py -v
+
+      - name: Audit Rust dependencies
+        run: |
+          cargo install cargo-audit --locked --version "^0.21" --no-default-features
+          cargo audit --file rust/blue-team-rust/Cargo.lock
+
   build:
     name: Build Python and container artifacts
-    needs: [quality, supply-chain, integration]
+    needs: [quality, supply-chain, integration, rust-extension]
     runs-on: ubuntu-latest
     steps:
       - name: Check out source

@@ -273,6 +273,17 @@ async function writeSessionKey(): Promise<CryptoKey | Response> {
   if (!secret || secret.length < 32 || secret.length > 256 || !/^[\x21-\x7e]+$/.test(secret)) {
     return jsonError(503, "控制台写入会话未配置。", "console_write_session_unavailable");
   }
+  // Reject known-default/placeholder secrets from .env.example and similar
+  // templates so a verbatim copy of the example does not produce a public key.
+  const normalized = secret.toLowerCase();
+  if (
+    normalized.startsWith("replace-with") ||
+    normalized.startsWith("change-me") ||
+    normalized.startsWith("your-") ||
+    normalized.startsWith("placeholder")
+  ) {
+    return jsonError(503, "控制台写入会话密钥为占位值。", "console_write_session_unavailable");
+  }
   return crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),

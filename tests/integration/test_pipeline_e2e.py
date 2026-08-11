@@ -22,6 +22,8 @@ from blue_team.config import Settings
 from blue_team.detection_engine.worker import DetectionWorker
 from blue_team.normalize.worker import NormalizeWorker
 from blue_team.storage import Database, LocalObjectStore
+from blue_team.storage.models import HostRecord, TenantRecord
+from tests.integration._helpers import seed_released_lifecycle, truncate_all
 
 DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
 pytestmark = [
@@ -100,17 +102,31 @@ async def test_pipeline_normalize_detect_query_end_to_end(tmp_path: Path) -> Non
     object_store = LocalObjectStore(tmp_path / "evidence")
     await object_store.initialize()
 
-    async with database.engine.begin() as connection:
-        await connection.execute(text("DELETE FROM detections"))
-        await connection.execute(text("DELETE FROM normalized_events"))
-        await connection.execute(text("DELETE FROM agent_events"))
-        await connection.execute(
-            text(
-                "INSERT INTO tenants (id, name) VALUES (:tid, 'e2e-pipeline') "
-                "ON CONFLICT (id) DO NOTHING"
-            ),
-            {"tid": TENANT},
+    await truncate_all(database)
+    async with database.session() as session, session.begin():
+        session.add(TenantRecord(id=TENANT, name="e2e-pipeline"))
+        session.add(
+            HostRecord(
+                id=HOST,
+                tenant_id=TENANT,
+                hostname="e2e-pipeline-host",
+                agent_id="agent_e2e_pipeline",
+                distro="test",
+                kernel="test",
+                capabilities={},
+                criticality="medium",
+            )
         )
+
+    # The governed DetectionWorker fail-closes on rules with no Released
+    # lifecycle state, so drive web.recon.scanning to Released for this tenant
+    # before running the worker.
+    await seed_released_lifecycle(
+        database,
+        tenant_id=TENANT,
+        rule_id="web.recon.scanning",
+        canary_host_id=HOST,
+    )
 
     # 1. Insert 301 raw agent_events receipts with object-store envelopes.
     from blue_team.agent_core.contracts import canonical_envelope_bytes

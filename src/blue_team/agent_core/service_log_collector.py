@@ -169,7 +169,9 @@ class ServiceLogCollector:
             result = self._normalizer.normalize(raw)
             if result.event is None:
                 self._parse_error_count += 1
-                detail = result.dlq.detail if result.dlq is not None else "normalizer returned no event"
+                detail = (
+                    result.dlq.detail if result.dlq is not None else "normalizer returned no event"
+                )
                 self._emit_diagnostic(
                     reason="normalization_error",
                     message=line.message,
@@ -250,9 +252,11 @@ class ServiceLogCollector:
             (
                 f"{self.config.tenant_id}\0{self.config.host_id}\0"
                 f"{self.config.boot_id}\0{self.config.service_name}\0{reason}\0{message}"
-            ).encode("utf-8")
+            ).encode()
         ).hexdigest()
-        source_event_id = f"service-log-gap:{self.config.service_name}:{self.config.boot_id}:{digest[:16]}"
+        source_event_id = (
+            f"service-log-gap:{self.config.service_name}:{self.config.boot_id}:{digest[:16]}"
+        )
         event = SecurityEvent.model_validate(
             {
                 "event_id": f"evt_svcgap{digest[:16]}",
@@ -318,7 +322,9 @@ def _load_state(path: Path) -> _ServiceLogCollectorState | None:
     if metadata.st_size > _MAX_STATE_BYTES:
         raise ServiceLogCollectorError("service-log collector state exceeds its byte limit")
     if os.name != "nt" and stat.S_IMODE(metadata.st_mode) & 0o077:
-        raise ServiceLogCollectorError("service-log collector state is accessible by group or other")
+        raise ServiceLogCollectorError(
+            "service-log collector state is accessible by group or other"
+        )
     try:
         return _ServiceLogCollectorState.model_validate_json(path.read_bytes())
     except (OSError, ValidationError) as error:
@@ -337,7 +343,9 @@ def _save_state(path: Path, state: _ServiceLogCollectorState) -> None:
             or not stat.S_ISREG(metadata.st_mode)
             or metadata.st_nlink != 1
         ):
-            raise ServiceLogCollectorError("service-log collector state must be a private regular file")
+            raise ServiceLogCollectorError(
+                "service-log collector state must be a private regular file"
+            )
     temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     descriptor: int | None = None
@@ -362,7 +370,9 @@ def _save_state(path: Path, state: _ServiceLogCollectorState) -> None:
             finally:
                 os.close(directory)
     except OSError as error:
-        raise ServiceLogCollectorError("service-log collector state could not be persisted") from error
+        raise ServiceLogCollectorError(
+            "service-log collector state could not be persisted"
+        ) from error
     finally:
         if descriptor is not None:
             os.close(descriptor)

@@ -26,6 +26,7 @@ from blue_team.domain.ai_review import (
     ToolDefinition,
     ToolResult,
 )
+from blue_team.storage.database import Database
 from blue_team.storage.models import (
     IncidentEdgeRecord,
     IncidentEntityRecord,
@@ -422,6 +423,78 @@ class SqlReadOnlyToolDataSource:
         return tuple(result)
 
 
+class DatabaseReadOnlyToolDataSource:
+    """SQL data source that opens a short-lived session per tool call.
+
+    Unlike :class:`SqlReadOnlyToolDataSource` (which holds one session for its
+    entire lifetime), this variant opens and releases a session for each
+    individual tool query. This ensures no pooled database connection is held
+    while the model provider performs an HTTP round-trip between tool calls,
+    preventing connection-pool exhaustion under concurrent AI review requests.
+    """
+
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    async def search_events(
+        self,
+        scope: ToolQueryScope,
+        *,
+        event_types: tuple[str, ...],
+        limit: int,
+    ) -> tuple[dict[str, object], ...]:
+        async with self._database.session() as session:
+            return await SqlReadOnlyToolDataSource(session).search_events(
+                scope,
+                event_types=event_types,
+                limit=limit,
+            )
+
+    async def get_process_tree(
+        self,
+        scope: ToolQueryScope,
+        *,
+        pid: int | None,
+        limit: int,
+    ) -> tuple[dict[str, object], ...]:
+        async with self._database.session() as session:
+            return await SqlReadOnlyToolDataSource(session).get_process_tree(
+                scope,
+                pid=pid,
+                limit=limit,
+            )
+
+    async def get_incident_timeline(
+        self,
+        scope: ToolQueryScope,
+        *,
+        limit: int,
+        offset: int,
+    ) -> tuple[dict[str, object], ...]:
+        async with self._database.session() as session:
+            return await SqlReadOnlyToolDataSource(session).get_incident_timeline(
+                scope,
+                limit=limit,
+                offset=offset,
+            )
+
+    async def get_entity_graph(
+        self,
+        scope: ToolQueryScope,
+        *,
+        entity_types: tuple[str, ...],
+        include_edges: bool,
+        limit: int,
+    ) -> tuple[dict[str, object], ...]:
+        async with self._database.session() as session:
+            return await SqlReadOnlyToolDataSource(session).get_entity_graph(
+                scope,
+                entity_types=entity_types,
+                include_edges=include_edges,
+                limit=limit,
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class _ToolSpec:
     description: str
@@ -582,6 +655,7 @@ def _canonical_hash(value: object) -> str:
 
 
 __all__ = [
+    "DatabaseReadOnlyToolDataSource",
     "ReadOnlyToolDataSource",
     "SqlReadOnlyToolDataSource",
     "ToolAuthorizationError",

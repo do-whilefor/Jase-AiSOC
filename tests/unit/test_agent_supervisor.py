@@ -189,12 +189,28 @@ def test_launch_rejects_loader_environment_and_linked_executable(tmp_path: Path)
     assert error.value.reason is ProcessProbeFailure.INVALID_LAUNCH
 
 
-def test_real_agent_health_probe_runs_under_the_same_protocol() -> None:
+def _resolve_agent_executable() -> tuple[Path, tuple[str, ...]]:
+    """Resolve the real ``blue-team-agent`` health-probe entry point.
+
+    The supervisor deliberately rejects symlink executables (anti-symlink-attack
+    hardening in ``_validate_launch``), so ``Path(sys.executable).resolve()`` is
+    unsafe as-is: in a symlink-based uv venv it dereferences ``.venv/bin/python``
+    to the uv-managed base CPython, which has no ``blue_team`` installed and
+    exits with ``ModuleNotFoundError`` before emitting the STARTED marker. Prefer
+    the venv console script beside the running interpreter (a regular file whose
+    shebang points back at the venv interpreter) before that fallback.
+    """
     command = shutil.which("blue-team-agent")
-    executable = Path(command) if command is not None else Path(sys.executable).resolve()
-    arguments = (
-        ("health-probe",) if command is not None else ("-m", "blue_team.agent_core", "health-probe")
-    )
+    if command is not None:
+        return Path(command), ("health-probe",)
+    sibling = Path(sys.executable).parent / "blue-team-agent"
+    if sibling.is_file() and not sibling.is_symlink() and os.access(sibling, os.X_OK):
+        return sibling, ("health-probe",)
+    return Path(sys.executable).resolve(), ("-m", "blue_team.agent_core", "health-probe")
+
+
+def test_real_agent_health_probe_runs_under_the_same_protocol() -> None:
+    executable, arguments = _resolve_agent_executable()
     result = supervisor(startup=5, health=10, stop=2, kill=2).probe(
         ProcessLaunch(
             executable=executable,

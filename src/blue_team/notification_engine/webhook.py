@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import ipaddress
 import json
 from collections.abc import Mapping
@@ -14,6 +12,7 @@ from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import httpx
 
+from blue_team._rusthash import hmac_sha256_hex, sha256_hex
 from blue_team.storage.notification_repository import NotificationLease
 
 _PAYLOAD_FIELDS: dict[str, tuple[type[object], int]] = {
@@ -152,7 +151,7 @@ class NotificationWebhookClient:
         delivered_at = now or datetime.now(UTC)
         timestamp = str(int(delivered_at.timestamp()))
         signature_input = timestamp.encode() + b"." + body
-        signature = hmac.new(self._signing_key, signature_input, hashlib.sha256).hexdigest()
+        signature = hmac_sha256_hex(self._signing_key, signature_input)
         headers = {
             "Content-Type": "application/cloudevents+json; charset=utf-8",
             "Idempotency-Key": lease.notification_id,
@@ -234,7 +233,7 @@ def validate_webhook_destination(
     return WebhookDestination(
         url=canonical,
         host=host,
-        destination_id=hashlib.sha256(canonical.encode()).hexdigest(),
+        destination_id=sha256_hex(canonical.encode()),
     )
 
 

@@ -248,6 +248,7 @@ dependencies = [
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "structlog" },
     { name = "uvicorn" },
+    { name = "yara-x" },
 ]
 
 [package.dev-dependencies]
@@ -278,6 +279,7 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.41,<3" },
     { name = "structlog", specifier = ">=25.4,<26" },
     { name = "uvicorn", specifier = ">=0.35,<1" },
+    { name = "yara-x", specifier = ">=1.19.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -2195,6 +2197,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/1d/7a/eb316761ec35664ea5174709a68bbd3389de60d4a1ebab8808bfc264ed67/webcolors-25.10.0.tar.gz", hash = "sha256:62abae86504f66d0f6364c2a8520de4a0c47b80c03fc3a5f1815fedbef7c19bf", size = 53491, upload-time = "2025-10-31T07:51:03.977Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e2/cc/e097523dd85c9cf5d354f78310927f1656c422bd7b2613b2db3e3f9a0f2c/webcolors-25.10.0-py3-none-any.whl", hash = "sha256:032c727334856fc0b968f63daa252a1ac93d33db2f5267756623c210e57a4f1d", size = 14905, upload-time = "2025-10-31T07:51:01.778Z" },
+]
+
+[[package]]
+name = "yara-x"
+version = "1.19.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/97/ff/aaf61b589abdd40f877c4070788c914b0fc02e3e5e82cc55f01451c807ff/yara_x-1.19.0-cp38-abi3-macosx_14_0_arm64.whl", hash = "sha256:6b62018986ae575406680fa876006ee6fcfaff730052106dc3e88ddcac9bf088", size = 8436579, upload-time = "2026-06-24T12:21:48.478Z" },
+    { url = "https://files.pythonhosted.org/packages/68/76/45f471b4ebb6ffb0d01558955233bbfa956e96f368f0b793d9a78e875308/yara_x-1.19.0-cp38-abi3-macosx_14_0_x86_64.whl", hash = "sha256:f38e19b0bd3f6af8366ac789778d0c39e359a897473b86c3ff6f9b0c255e631e", size = 9167113, upload-time = "2026-06-24T12:21:50.935Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/42/d341e3879493ea35dba7d79742eda35372ad5bfa2e2a514badecad68979e/yara_x-1.19.0-cp38-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:b1c8b2e41bb06932db66cd9a73dc5ae41086861a89287d45878880596c335d2b", size = 9318362, upload-time = "2026-06-24T12:21:53.182Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/b2/4f91d617491489921ed4a73a0fe1e85b5009ead452b25c3ad4e557fc665c/yara_x-1.19.0-cp38-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:9fe18e0da101608a31249852f451235f2443eed5406bfe0cbf910a207114cfba", size = 9706350, upload-time = "2026-06-24T12:21:55.513Z" },
+    { url = "https://files.pythonhosted.org/packages/63/ca/2ef773b3b58bba9ff8fa2105f88e10e11af711fbb918ca6cc87fb3d9494c/yara_x-1.19.0-cp38-abi3-win_amd64.whl", hash = "sha256:ab13d236f24e906cb3ec386b5e85d4e4bd5783f30656ee4c4dc090599b69661d", size = 8181257, upload-time = "2026-06-24T12:21:57.747Z" },
 ]
 
 [[package]]

@@ -1029,7 +1029,7 @@ class ConsoleModelRunSummary(ConsoleContract):
 
 class ConsoleModelProviderConfiguration(ConsoleContract):
     enabled: bool
-    provider: Literal["openai_compatible", "kimi", "glm"]
+    provider: Literal["openai_compatible", "kimi", "glm", "deepseek", "openai"]
     model_name: Annotated[str | None, Field(max_length=128)] = None
     api_key_state: Literal["configured", "not_configured"]
     base_url_state: Literal["configured", "not_configured", "not_required"]
@@ -1068,7 +1068,8 @@ class ConsoleModelProviderConfiguration(ConsoleContract):
                 raise ValueError("a complete OpenAI-compatible provider requires a base URL")
         elif self.base_url_state != "not_required":
             raise ValueError(
-                "Kimi/GLM provider configuration must not report a base URL requirement"
+                "Kimi/GLM/DeepSeek/OpenAI provider configuration "
+                "must not report a base URL requirement"
             )
         if self.enabled and not self.configuration_complete:
             raise ValueError("an enabled model provider must have complete configuration")

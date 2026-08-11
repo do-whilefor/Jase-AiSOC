@@ -5,7 +5,7 @@
 ## 当前状态
 
 项目处于 **P0/P1 正式门禁未关闭、P2-P5 按实验增量推进、P6-P11 非 Docker 初版继续实现**。
-P3 base 管道、P4 Nginx/Apache/sshd 适配及扫描/爆破/注入/异常方法规则已实现；P5 已有 Falco/audit normalizer、真实 audit.log polling 接入代码、持久 sequence/cursor+pending serial、DB 回看重建和四类主机行为链；P6 已有确定性聚合、版本化证据/Claim/时间线/实体边、查询引用、数据缩减审计及 merge/split/close/feedback；P7 已有 Review Gate、EvidencePackage、Provider、只读 Tool Gateway、预算/熔断、单 Analyzer、追加写审计与 API；P8 已有程序校验、盲 Verifier slots、冲突检测、可选 Adjudicator、assurance 和模型历史路由；P9 已有独立 AES-GCM quarantine、有界静态检查、多信号结论、文件上下文、租约 worker、样本/扫描 API 和签名沙箱报告入口；P10 已有跨 Incident/Host evidence graph、初始入口/key path/影响范围、有限 ATT&CK mapping、精确基础设施 cluster、有界 graph query 和 hash export，identity assertion 被固定为 0；P11 已有 typed 响应策略、RBAC/审批、执行租约/审计/outbox、目标重验证 Runner、显式 local-single-node 原生 worker 初版、迁移 0013-0016、独立签名 Webhook worker、Ed25519 tenant-scoped 规则生命周期、控制台 Snapshot API、Incident revision 与恶意文件上下文调查工作区、基于固定 seed Incident 的跨主机攻击溯源视图、只读规则治理/情报缓存、无 secret 的模型运营和 auditor/admin 系统运营真相视图及响应详情/审批/排队/回滚 UI。P2 VM 级、P3 NATS/新鲜度、P4 独立质量指标与生命周期的真实 PostgreSQL/双租户 rollout 验证、P5 原生 Linux auditd/Falco/eBPF、高 EPS PostgreSQL，以及 P6-P11 真实 PostgreSQL、Provider/Scanner、双租户 HTTP、并发、多主机 Agent-side 响应/真实回滚、真实 Webhook、动态沙箱、真实攻击回放和 Kali 门禁仍未完成。
+P3 base 管道、新鲜度监控后台任务（`FreshnessMonitor` + `/api/v1/freshness`(+`/metrics`)）、P4 Nginx/Apache/sshd 适配及扫描/爆破/注入/异常方法规则已实现；P5 已有 Falco/audit normalizer、真实 audit.log polling 接入代码、持久 sequence/cursor+pending serial、DB 回看重建和四类主机行为链；P6 已有确定性聚合、版本化证据/Claim/时间线/实体边、查询引用、数据缩减审计及 merge/split/close/feedback；P7 已有 Review Gate、EvidencePackage、Provider、只读 Tool Gateway、预算/熔断、单 Analyzer、追加写审计与 API；P8 已有程序校验、盲 Verifier slots、冲突检测、可选 Adjudicator、assurance 和模型历史路由；P9 已有独立 AES-GCM quarantine、有界静态检查、多信号结论、文件上下文、租约 worker、样本/扫描 API 和签名沙箱报告入口；P10 已有跨 Incident/Host evidence graph、初始入口/key path/影响范围、有限 ATT&CK mapping、精确基础设施 cluster、有界 graph query 和 hash export，identity assertion 被固定为 0；P11 已有 typed 响应策略、RBAC/审批、执行租约/审计/outbox、目标重验证 Runner、显式 local-single-node 原生 worker 初版、迁移 0013-0016、独立签名 Webhook worker、Ed25519 tenant-scoped 规则生命周期、控制台 Snapshot API、Incident revision 与恶意文件上下文调查工作区、基于固定 seed Incident 的跨主机攻击溯源视图、只读规则治理/情报缓存、无 secret 的模型运营和 auditor/admin 系统运营真相视图及响应详情/审批/排队/回滚 UI。P2 VM 级、P3 NATS/新鲜度、P4 独立质量指标与生命周期的真实 PostgreSQL/双租户 rollout 验证、P5 原生 Linux auditd/Falco/eBPF、高 EPS PostgreSQL，以及 P6-P11 真实 PostgreSQL、Provider/Scanner、双租户 HTTP、并发、多主机 Agent-side 响应/真实回滚、真实 Webhook、动态沙箱、真实攻击回放和 Kali 门禁仍未完成。
 `blue-team-ingest` 负责 mTLS 上传；`blue-team-api` 可启动 normalize/detect/query 后台任务。二者是独立进程，不再把单独启动 API 描述成完整 ingest 闭环。
 当前基线包括：
 
@@ -42,7 +42,9 @@ P3 base 管道、P4 Nginx/Apache/sshd 适配及扫描/爆破/注入/异常方法
 - P7 AI Review 默认关闭且只审核 Incident revision；普通低阈值 Incident 零模型调用。EvidencePackage 最多
   20 个主样本，system instructions 与不可信证据分离；Provider 受 timeout/retry/circuit/token/cost
   预算约束。Tool Gateway 只读且固定 tenant/Incident/revision/query_ref；最终 Claim 只能引用 package
-  或已审计 Tool evidence。迁移 `20260809_0009` 和真实 PostgreSQL 集成测试已提交，当前留待 Kali。
+  或已审计 Tool evidence。Provider 支持 Kimi/GLM/DeepSeek/OpenAI 官方与自定义 OpenAI 兼容端点
+  （`PROVIDER_PRESETS` 集中管理固定 base；接入见 [docs/model-providers.md](docs/model-providers.md)）。
+  迁移 `20260809_0009` 和真实 PostgreSQL 集成测试已提交，当前留待 Kali。
 - P8 在 Analyzer 后无条件执行程序化 Claim-Evidence 校验；高风险、关键资产、破坏性动作以及
   unsupported/conflicting Claim 触发盲 Verifier。Verifier 不接收 Analyzer verdict/score/identity；冲突由
   可选 Adjudicator 处理，确定性矛盾不能被模型覆盖。默认三角色共用 3 次模型调用，缺少审核或未解决
@@ -125,6 +127,25 @@ uv run blue-team-export-schemas --check
 uv run alembic check
 uv run pytest
 ```
+
+集成测试需要 PostgreSQL（见 `docs/phase-p3-plan.md` 与 `tests/integration/_helpers.py`）：
+
+```bash
+export BLUE_TEAM_TEST_DATABASE_URL="postgresql+asyncpg://blue_team:blue_team_dev@127.0.0.1:55432/blue_team"
+uv run alembic upgrade head
+uv run pytest tests/integration -v
+```
+
+### 可选 Rust 加速器
+
+少量纯函数（SHA-256 / HMAC-SHA256）在 `rust/blue-team-rust` 用 PyO3 实现，由 `src/blue_team/_rusthash.py` 封装并在扩展缺失时回退到标准库 `hashlib`/`hmac`（输出逐字节一致，由 `tests/unit/test_rust_hash.py` 校验）。不构建扩展时平台与全部测试仍可通过：
+
+```bash
+uv tool install maturin   # 一次
+VIRTUAL_ENV="$(pwd)/.venv" maturin develop --manifest-path rust/blue-team-rust/Cargo.toml
+# 或 make rust-extension
+```
+
 
 端到端验证（需 PostgreSQL，见 `docs/phase-p3-plan.md`）：
 

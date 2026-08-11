@@ -8,21 +8,29 @@ from blue_team.ai_review.providers.client import (
     ResilientModelClient,
 )
 from blue_team.ai_review.providers.openai_compatible import (
+    PROVIDER_PRESETS,
+    DeepSeekProvider,
     GlmProvider,
     KimiProvider,
     OpenAICompatibleConfig,
     OpenAICompatibleProvider,
+    OpenAIProvider,
+    ProviderPreset,
 )
 
 __all__ = [
+    "PROVIDER_PRESETS",
     "CircuitOpenError",
+    "DeepSeekProvider",
     "GlmProvider",
     "KimiProvider",
     "ModelProvider",
     "ModelProviderError",
     "OpenAICompatibleConfig",
     "OpenAICompatibleProvider",
+    "OpenAIProvider",
     "ProviderCallFailed",
     "ProviderCallResult",
+    "ProviderPreset",
     "ResilientModelClient",
 ]

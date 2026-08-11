@@ -4,7 +4,7 @@
 
 P9 已完成非 Docker 基础实现，但阶段门禁未关闭。当前实现覆盖独立加密隔离区、受限静态
 检查、多信号结论、文件上下文关联、租户作用域 API、租约式独立 worker、签名沙箱报告导入
-契约及迁移 `20260809_0011`。YARA-X、ClamAV、真实信誉源、动态沙箱、PostgreSQL 并发、
+契约及迁移 `20260809_0011`。**YARA-X 已接入真实 `yara-x` Python 包**（`malware_engine/yara_x_scanner.py` 的 `YaraXAdapter`：从配置的规则文件/目录编译、线程内扫描、匹配输出为 `SUSPICIOUS` 单点信号并提取 `family`/`malware_type` 元数据；`__main__` 在 `malware_yara_x_rules_path` 配置时构造该 adapter，未配置时仍回退为 `builtin-yara-x=not_configured`，由 `tests/unit/test_yara_x_scanner.py` 在真实 yara-x 上验证）。ClamAV、真实信誉源、动态沙箱、PostgreSQL 并发、
 双租户 HTTP、Linux 不可执行挂载与 Kali 逃逸/外联门禁尚未动态验证。
 
 因此当前 P9 状态仍是 `technical_hit / unrated`，不能把本地单元测试、fake scanner 或离线 DDL

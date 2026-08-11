@@ -29,6 +29,10 @@ state/plan_render/
 state/*.log
 state/*.err.log
 
+# Rust extension build artifacts (source committed; target/ regenerated)
+rust/**/target/
+rust/**/*.so
+
 # Console frontend build artifacts (source committed; node_modules regenerated)
 console/node_modules/
 console/.next/

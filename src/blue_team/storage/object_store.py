@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import hmac
 import os
 import re
 from contextlib import suppress
@@ -14,7 +12,9 @@ from typing import Protocol
 from urllib.parse import urlsplit
 from uuid import uuid4
 
+from blue_team._rusthash import secure_compare, sha256_hex
 from blue_team.errors import AuthorizationError, EvidenceIntegrityError, NotFoundError
+from blue_team.storage._safe_open import open_exclusive_under_root
 
 _TENANT_ID = re.compile(r"^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$")
 
@@ -58,11 +58,11 @@ class LocalObjectStore:
         self._validate_tenant(tenant_id)
         if not media_type or len(media_type) > 255:
             raise ValueError("media_type must contain between 1 and 255 characters")
-        digest = hashlib.sha256(data).hexdigest()
+        digest = sha256_hex(data)
         object_id = uuid4().hex
         relative = Path(tenant_id, digest[:2], f"{object_id}.evidence")
-        destination = self._safe_path(relative)
-        await asyncio.to_thread(self._write_once, destination, data)
+        self._safe_path(relative)  # defense-in-depth escape check
+        await asyncio.to_thread(self._write_once, self._root, relative, data)
         return ObjectMetadata(
             ref=f"evidence://{tenant_id}/{digest}/{object_id}",
             sha256=digest,
@@ -86,7 +86,7 @@ class LocalObjectStore:
             data = await asyncio.to_thread(path.read_bytes)
         except FileNotFoundError as error:
             raise NotFoundError("evidence", ref) from error
-        if not hmac.compare_digest(hashlib.sha256(data).hexdigest(), digest):
+        if not secure_compare(sha256_hex(data), digest):
             raise EvidenceIntegrityError(ref)
         return data
 
@@ -102,8 +102,6 @@ class LocalObjectStore:
             raise ValueError("invalid tenant identifier")
 
     @staticmethod
-    def _write_once(destination: Path, data: bytes) -> None:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        descriptor = os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        with os.fdopen(descriptor, "wb") as output:
+    def _write_once(root: Path, relative: Path, data: bytes) -> None:
+        with open_exclusive_under_root(root, relative) as output:
             output.write(data)

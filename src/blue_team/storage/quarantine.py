@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import hmac
 import os
 import re
 import stat
@@ -18,7 +16,9 @@ from uuid import uuid4
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from blue_team._rusthash import secure_compare, sha256_hex
 from blue_team.errors import AuthorizationError, NotFoundError, SampleIntegrityError
+from blue_team.storage._safe_open import open_exclusive_under_root
 
 _TENANT_ID = re.compile(r"^ten_[A-Za-z0-9][A-Za-z0-9_-]{7,127}$")
 _HEX_64 = re.compile(r"^[a-f0-9]{64}$")
@@ -102,15 +102,15 @@ class LocalQuarantineStore:
         self._validate_tenant(tenant_id)
         if not media_type or len(media_type) > 255:
             raise ValueError("media_type must contain between 1 and 255 characters")
-        digest = hashlib.sha256(data).hexdigest()
+        digest = sha256_hex(data)
         object_id = uuid4().hex
         ref = f"quarantine://{tenant_id}/{digest}/{object_id}"
         relative = Path(tenant_id, digest[:2], f"{object_id}.quarantine")
-        destination = self._safe_path(relative)
+        self._safe_path(relative)  # defense-in-depth escape check
         nonce = os.urandom(_NONCE_BYTES)
         aad = self._aad(tenant_id, digest, object_id)
         encrypted = _MAGIC + nonce + self._cipher.encrypt(nonce, data, aad)
-        await asyncio.to_thread(self._write_once, destination, encrypted)
+        await asyncio.to_thread(self._write_once, self._root, relative, encrypted)
         return QuarantineMetadata(
             ref=ref,
             sha256=digest,
@@ -127,7 +127,7 @@ class LocalQuarantineStore:
         except FileNotFoundError as error:
             raise NotFoundError("quarantined sample", ref) from error
         minimum = len(_MAGIC) + _NONCE_BYTES + 16
-        if len(encrypted) < minimum or not hmac.compare_digest(encrypted[:4], _MAGIC):
+        if len(encrypted) < minimum or not secure_compare(encrypted[:4], _MAGIC):
             raise SampleIntegrityError(ref)
         nonce = encrypted[len(_MAGIC) : len(_MAGIC) + _NONCE_BYTES]
         ciphertext = encrypted[len(_MAGIC) + _NONCE_BYTES :]
@@ -139,7 +139,7 @@ class LocalQuarantineStore:
             )
         except InvalidTag as error:
             raise SampleIntegrityError(ref) from error
-        if not hmac.compare_digest(hashlib.sha256(data).hexdigest(), digest):
+        if not secure_compare(sha256_hex(data), digest):
             raise SampleIntegrityError(ref)
         return data
 
@@ -172,18 +172,9 @@ class LocalQuarantineStore:
     def _aad(tenant_id: str, digest: str, object_id: str) -> bytes:
         return b"\0".join((_MAGIC, tenant_id.encode(), digest.encode(), object_id.encode()))
 
-    def _write_once(self, destination: Path, data: bytes) -> None:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        with suppress(OSError):
-            destination.parent.chmod(0o700)
-        resolved_parent = destination.parent.resolve()
-        if not resolved_parent.is_relative_to(self._root):
-            raise AuthorizationError("quarantine path escaped the configured store")
-        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
-        if hasattr(os, "O_NOFOLLOW"):
-            flags |= os.O_NOFOLLOW
-        descriptor = os.open(destination, flags, 0o600)
-        with os.fdopen(descriptor, "wb") as output:
+    @staticmethod
+    def _write_once(root: Path, relative: Path, data: bytes) -> None:
+        with open_exclusive_under_root(root, relative) as output:
             output.write(data)
 
 

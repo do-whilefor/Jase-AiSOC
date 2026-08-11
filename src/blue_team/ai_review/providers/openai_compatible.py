@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol, Self
 from urllib.parse import urlparse
@@ -171,6 +172,88 @@ class OpenAICompatibleConfig(BaseModel):
         if not self.api_key.get_secret_value():
             raise ValueError("api_key cannot be empty")
         return self
+
+    @classmethod
+    def from_preset(
+        cls,
+        preset_name: str,
+        *,
+        api_key: SecretStr,
+        model_name: str,
+        context_tokens: int,
+        timeout_seconds: float,
+        max_response_bytes: int,
+        input_cost_per_million_tokens: float,
+        output_cost_per_million_tokens: float,
+    ) -> OpenAICompatibleConfig:
+        """Build a config from a fixed-base :data:`PROVIDER_PRESETS` entry.
+
+        Centralizes the base_url/completion_path/models_path/capability data so
+        adding a new fixed-base provider is one preset entry plus one thin
+        subclass, rather than data duplicated across files. ``"openai_compatible"``
+        is not a preset — it uses a caller-supplied ``base_url``.
+        """
+        if preset_name not in PROVIDER_PRESETS:
+            raise ValueError(f"unknown model provider preset: {preset_name!r}")
+        preset = PROVIDER_PRESETS[preset_name]
+        return cls(
+            provider_name=preset.provider_name,
+            base_url=preset.base_url,
+            api_key=api_key,
+            model_name=model_name,
+            completion_path=preset.completion_path,
+            models_path=preset.models_path,
+            supports_tools=preset.supports_tools,
+            supports_json_schema=preset.supports_json_schema,
+            context_tokens=context_tokens,
+            timeout_seconds=timeout_seconds,
+            max_response_bytes=max_response_bytes,
+            input_cost_per_million_tokens=input_cost_per_million_tokens,
+            output_cost_per_million_tokens=output_cost_per_million_tokens,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderPreset:
+    """Fixed-base provider endpoint and capability data (no secrets)."""
+
+    provider_name: str
+    base_url: str
+    completion_path: str = "/v1/chat/completions"
+    models_path: str = "/v1/models"
+    supports_tools: bool = True
+    supports_json_schema: bool = True
+
+
+PROVIDER_PRESETS: dict[str, ProviderPreset] = {
+    "kimi": ProviderPreset(
+        "kimi",
+        "https://api.moonshot.cn",
+        supports_json_schema=False,
+    ),
+    "glm": ProviderPreset(
+        "glm",
+        "https://open.bigmodel.cn/api/paas/v4",
+        completion_path="/chat/completions",
+        models_path="/models",
+        supports_json_schema=False,
+    ),
+    "deepseek": ProviderPreset(
+        "deepseek",
+        "https://api.deepseek.com",
+        completion_path="/chat/completions",
+        models_path="/models",
+        supports_json_schema=False,
+    ),
+    # OpenAI's base_url already carries the /v1 version prefix, so the API paths
+    # must NOT repeat it (else the joined URL becomes .../v1/v1/chat/completions).
+    "openai": ProviderPreset(
+        "openai",
+        "https://api.openai.com/v1",
+        completion_path="/chat/completions",
+        models_path="/models",
+    ),
+}
 
 
 class OpenAICompatibleProvider:
@@ -399,13 +482,10 @@ class KimiProvider(OpenAICompatibleProvider):
         output_cost_per_million_tokens: float = 0.0,
     ) -> None:
         super().__init__(
-            OpenAICompatibleConfig(
-                provider_name="kimi",
-                base_url="https://api.moonshot.cn",
+            OpenAICompatibleConfig.from_preset(
+                "kimi",
                 api_key=api_key,
                 model_name=model_name,
-                supports_tools=True,
-                supports_json_schema=False,
                 context_tokens=context_tokens,
                 timeout_seconds=timeout_seconds,
                 max_response_bytes=max_response_bytes,
@@ -430,15 +510,70 @@ class GlmProvider(OpenAICompatibleProvider):
         output_cost_per_million_tokens: float = 0.0,
     ) -> None:
         super().__init__(
-            OpenAICompatibleConfig(
-                provider_name="glm",
-                base_url="https://open.bigmodel.cn/api/paas/v4",
+            OpenAICompatibleConfig.from_preset(
+                "glm",
                 api_key=api_key,
                 model_name=model_name,
-                completion_path="/chat/completions",
-                models_path="/models",
-                supports_tools=True,
-                supports_json_schema=False,
+                context_tokens=context_tokens,
+                timeout_seconds=timeout_seconds,
+                max_response_bytes=max_response_bytes,
+                input_cost_per_million_tokens=input_cost_per_million_tokens,
+                output_cost_per_million_tokens=output_cost_per_million_tokens,
+            ),
+            transport=transport,
+        )
+
+
+class DeepSeekProvider(OpenAICompatibleProvider):
+    """DeepSeek (``https://api.deepseek.com``) OpenAI-compatible adapter."""
+
+    def __init__(
+        self,
+        *,
+        api_key: SecretStr,
+        model_name: str,
+        transport: JsonHttpTransport | None = None,
+        context_tokens: int = 32_000,
+        timeout_seconds: float = 30.0,
+        max_response_bytes: int = 2 * 1024 * 1024,
+        input_cost_per_million_tokens: float = 0.0,
+        output_cost_per_million_tokens: float = 0.0,
+    ) -> None:
+        super().__init__(
+            OpenAICompatibleConfig.from_preset(
+                "deepseek",
+                api_key=api_key,
+                model_name=model_name,
+                context_tokens=context_tokens,
+                timeout_seconds=timeout_seconds,
+                max_response_bytes=max_response_bytes,
+                input_cost_per_million_tokens=input_cost_per_million_tokens,
+                output_cost_per_million_tokens=output_cost_per_million_tokens,
+            ),
+            transport=transport,
+        )
+
+
+class OpenAIProvider(OpenAICompatibleProvider):
+    """OpenAI official (``https://api.openai.com/v1``) adapter."""
+
+    def __init__(
+        self,
+        *,
+        api_key: SecretStr,
+        model_name: str,
+        transport: JsonHttpTransport | None = None,
+        context_tokens: int = 32_000,
+        timeout_seconds: float = 30.0,
+        max_response_bytes: int = 2 * 1024 * 1024,
+        input_cost_per_million_tokens: float = 0.0,
+        output_cost_per_million_tokens: float = 0.0,
+    ) -> None:
+        super().__init__(
+            OpenAICompatibleConfig.from_preset(
+                "openai",
+                api_key=api_key,
+                model_name=model_name,
                 context_tokens=context_tokens,
                 timeout_seconds=timeout_seconds,
                 max_response_bytes=max_response_bytes,
@@ -450,10 +585,14 @@ class GlmProvider(OpenAICompatibleProvider):
 
 
 __all__ = [
+    "PROVIDER_PRESETS",
     "AioHttpJsonTransport",
+    "DeepSeekProvider",
     "GlmProvider",
     "JsonHttpTransport",
     "KimiProvider",
     "OpenAICompatibleConfig",
     "OpenAICompatibleProvider",
+    "OpenAIProvider",
+    "ProviderPreset",
 ]

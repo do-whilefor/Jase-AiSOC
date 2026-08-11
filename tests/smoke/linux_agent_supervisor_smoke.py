@@ -395,11 +395,11 @@ def _expect_failure(
 
 
 def _getuid() -> int:
-    return int(os.getuid())  # type: ignore[attr-defined]
+    return int(os.getuid())
 
 
 def _kill_process_group(pid: int, requested: signal.Signals) -> None:
-    os.killpg(pid, requested)  # type: ignore[attr-defined]
+    os.killpg(pid, requested)
 
 
 if __name__ == "__main__":

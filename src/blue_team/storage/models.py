@@ -62,7 +62,7 @@ class TenantCredentialRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -93,7 +93,7 @@ class HostRecord(Base):
     id: Mapped[str] = mapped_column(String(133), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -120,13 +120,13 @@ class AgentRegistrationTokenRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
     host_id: Mapped[str] = mapped_column(
         String(133),
-        ForeignKey("hosts.id", ondelete="CASCADE"),
+        ForeignKey("hosts.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -156,13 +156,13 @@ class AgentIdentityRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
     host_id: Mapped[str] = mapped_column(
         String(133),
-        ForeignKey("hosts.id", ondelete="CASCADE"),
+        ForeignKey("hosts.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
     )
     agent_id: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -183,13 +183,15 @@ class AgentCertificateRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     identity_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("agent_identities.id", ondelete="CASCADE"),
+        ForeignKey(
+            "agent_identities.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"
+        ),
         nullable=False,
         index=True,
     )
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -212,12 +214,16 @@ class AgentSessionRecord(Base):
 
     identity_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("agent_identities.id", ondelete="CASCADE"),
+        ForeignKey(
+            "agent_identities.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"
+        ),
         primary_key=True,
     )
     certificate_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("agent_certificates.id", ondelete="CASCADE"),
+        ForeignKey(
+            "agent_certificates.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"
+        ),
         nullable=False,
     )
     session_id: Mapped[str] = mapped_column(String(132), unique=True, nullable=False)
@@ -234,6 +240,8 @@ class IncidentRecord(Base):
             ["hosts.tenant_id", "hosts.id"],
             name="fk_incidents_tenant_primary_host",
             ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint("tenant_id", "id", name="uq_incidents_tenant_id_id"),
         UniqueConstraint(
@@ -247,7 +255,7 @@ class IncidentRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -295,6 +303,8 @@ class IncidentRevisionRecord(Base):
             ["incidents.tenant_id", "incidents.id"],
             name="fk_incident_revisions_tenant_incident",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -340,12 +350,16 @@ class IncidentDetectionRecord(Base):
             ],
             name="fk_incident_detections_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "detection_id"],
             ["detections.tenant_id", "detections.id"],
             name="fk_incident_detections_detection",
             ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -382,12 +396,16 @@ class IncidentEvidenceRecord(Base):
             ],
             name="fk_incident_evidence_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "event_id"],
             ["normalized_events.tenant_id", "normalized_events.event_id"],
             name="fk_incident_evidence_event",
             ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -426,6 +444,8 @@ class IncidentQueryRecord(Base):
             ],
             name="fk_incident_queries_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -451,6 +471,8 @@ class IncidentDataReductionRecord(Base):
             ],
             name="fk_incident_data_reductions_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision", "query_ref"],
@@ -462,6 +484,8 @@ class IncidentDataReductionRecord(Base):
             ],
             name="fk_incident_data_reductions_query",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -490,6 +514,8 @@ class IncidentTimelineRecord(Base):
             ],
             name="fk_incident_timeline_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -524,6 +550,8 @@ class IncidentTimelineEvidenceRecord(Base):
             ],
             name="fk_incident_timeline_evidence_timeline",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision", "event_id"],
@@ -535,6 +563,8 @@ class IncidentTimelineEvidenceRecord(Base):
             ],
             name="fk_incident_timeline_evidence_event",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -566,6 +596,8 @@ class IncidentClaimRecord(Base):
             ],
             name="fk_incident_claims_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -594,6 +626,8 @@ class IncidentClaimEvidenceRecord(Base):
             ],
             name="fk_incident_claim_evidence_claim",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision", "event_id"],
@@ -605,6 +639,8 @@ class IncidentClaimEvidenceRecord(Base):
             ],
             name="fk_incident_claim_evidence_event",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -636,6 +672,8 @@ class IncidentEntityRecord(Base):
             ],
             name="fk_incident_entities_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -670,6 +708,8 @@ class IncidentEdgeRecord(Base):
             ],
             name="fk_incident_edges_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision", "source_entity_id"],
@@ -681,6 +721,8 @@ class IncidentEdgeRecord(Base):
             ],
             name="fk_incident_edges_source_entity",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision", "target_entity_id"],
@@ -692,6 +734,8 @@ class IncidentEdgeRecord(Base):
             ],
             name="fk_incident_edges_target_entity",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -720,6 +764,8 @@ class IncidentEdgeEvidenceRecord(Base):
             ],
             name="fk_incident_edge_evidence_edge",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision", "event_id"],
@@ -731,6 +777,8 @@ class IncidentEdgeEvidenceRecord(Base):
             ],
             name="fk_incident_edge_evidence_event",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -760,12 +808,16 @@ class IncidentLineageRecord(Base):
             ["incidents.tenant_id", "incidents.id"],
             name="fk_incident_lineage_source",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "target_incident_id"],
             ["incidents.tenant_id", "incidents.id"],
             name="fk_incident_lineage_target",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -799,6 +851,8 @@ class IncidentFeedbackRecord(Base):
             ["incidents.tenant_id", "incidents.id"],
             name="fk_incident_feedback_incident",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         Index("ix_incident_feedback_tenant_incident", "tenant_id", "incident_id"),
     )
@@ -823,7 +877,7 @@ class EvidenceObjectRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -844,7 +898,7 @@ class AuditLogRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        ForeignKey("tenants.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -883,7 +937,7 @@ class AgentEventRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -925,7 +979,7 @@ class AgentHeartbeatRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -962,13 +1016,13 @@ class NormalizedEventRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
     raw_event_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("agent_events.id", ondelete="RESTRICT"),
+        ForeignKey("agent_events.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -1014,13 +1068,13 @@ class EventDlqRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
     raw_event_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("agent_events.id", ondelete="RESTRICT"),
+        ForeignKey("agent_events.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -1045,7 +1099,7 @@ class EventWatermarkRecord(Base):
     partition_key: Mapped[str] = mapped_column(String(512), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -1066,8 +1120,9 @@ class EventFreshnessRecord(Base):
 
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
+        primary_key=True,
         index=True,
     )
     host_id: Mapped[str] = mapped_column(String(133), primary_key=True)
@@ -1099,7 +1154,7 @@ class EnrichmentCacheRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -1156,7 +1211,7 @@ class RuleLifecycleStateRecord(Base):
 
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         primary_key=True,
     )
     rule_id: Mapped[str] = mapped_column(String(128), primary_key=True)
@@ -1229,7 +1284,7 @@ class RuleLifecycleEventRecord(Base):
     event_id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
     )
     rule_id: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -1270,6 +1325,8 @@ class RuleShadowObservationRecord(Base):
             ["hosts.tenant_id", "hosts.id"],
             name="fk_rule_shadow_observations_host",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         CheckConstraint("lifecycle_stage IN ('shadow','canary')", name="lifecycle_stage"),
         UniqueConstraint(
@@ -1294,7 +1351,7 @@ class RuleShadowObservationRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
     )
     host_id: Mapped[str] = mapped_column(String(133), nullable=False)
@@ -1364,7 +1421,7 @@ class DetectionRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
     )
     host_id: Mapped[str] = mapped_column(String(132), nullable=False, index=True)
@@ -1408,6 +1465,8 @@ class AiReviewTaskRecord(Base):
             ],
             name="fk_ai_review_tasks_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint("tenant_id", "id", name="uq_ai_review_tasks_tenant_id"),
         UniqueConstraint(
@@ -1475,6 +1534,8 @@ class AiModelRunRecord(Base):
             ["ai_review_tasks.tenant_id", "ai_review_tasks.id"],
             name="fk_ai_model_runs_task",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision"],
@@ -1485,6 +1546,8 @@ class AiModelRunRecord(Base):
             ],
             name="fk_ai_model_runs_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -1535,6 +1598,8 @@ class AiToolCallRecord(Base):
             ["ai_review_tasks.tenant_id", "ai_review_tasks.id"],
             name="fk_ai_tool_calls_task",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "review_task_id", "run_id"],
@@ -1545,6 +1610,8 @@ class AiToolCallRecord(Base):
             ],
             name="fk_ai_tool_calls_model_run",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision"],
@@ -1555,6 +1622,8 @@ class AiToolCallRecord(Base):
             ],
             name="fk_ai_tool_calls_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -1594,6 +1663,8 @@ class AiAnalyzerClaimRecord(Base):
             ["ai_review_tasks.tenant_id", "ai_review_tasks.id"],
             name="fk_ai_analyzer_claims_task",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision"],
@@ -1604,6 +1675,8 @@ class AiAnalyzerClaimRecord(Base):
             ],
             name="fk_ai_analyzer_claims_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -1646,6 +1719,8 @@ class AiAnalyzerClaimEvidenceRecord(Base):
             ],
             name="fk_ai_claim_evidence_claim",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision"],
@@ -1656,12 +1731,16 @@ class AiAnalyzerClaimEvidenceRecord(Base):
             ],
             name="fk_ai_claim_evidence_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "event_id"],
             ["normalized_events.tenant_id", "normalized_events.event_id"],
             name="fk_ai_claim_evidence_event",
             ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "review_task_id", "tool_call_id"],
@@ -1672,6 +1751,8 @@ class AiAnalyzerClaimEvidenceRecord(Base):
             ],
             name="fk_ai_claim_evidence_tool_call",
             ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -1707,6 +1788,8 @@ class AiClaimProgramVerificationRecord(Base):
             ],
             name="fk_ai_program_verifications_claim",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision"],
@@ -1717,6 +1800,8 @@ class AiClaimProgramVerificationRecord(Base):
             ],
             name="fk_ai_program_verifications_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -1741,6 +1826,8 @@ class AiVerifierReportRecord(Base):
             ["ai_review_tasks.tenant_id", "ai_review_tasks.id"],
             name="fk_ai_verifier_reports_task",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision"],
@@ -1751,6 +1838,8 @@ class AiVerifierReportRecord(Base):
             ],
             name="fk_ai_verifier_reports_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -1784,6 +1873,8 @@ class AiVerifierClaimReviewRecord(Base):
             ],
             name="fk_ai_verifier_claim_reviews_report",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "review_task_id", "claim_id"],
@@ -1794,6 +1885,8 @@ class AiVerifierClaimReviewRecord(Base):
             ],
             name="fk_ai_verifier_claim_reviews_claim",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -1830,6 +1923,8 @@ class AiClaimConflictRecord(Base):
             ],
             name="fk_ai_claim_conflicts_claim",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision"],
@@ -1840,6 +1935,8 @@ class AiClaimConflictRecord(Base):
             ],
             name="fk_ai_claim_conflicts_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -1866,6 +1963,8 @@ class AiAdjudicationRecord(Base):
             ["ai_review_tasks.tenant_id", "ai_review_tasks.id"],
             name="fk_ai_adjudications_task",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "revision"],
@@ -1876,6 +1975,8 @@ class AiAdjudicationRecord(Base):
             ],
             name="fk_ai_adjudications_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -1898,6 +1999,8 @@ class AiAdjudicationResolutionRecord(Base):
             ["ai_adjudications.tenant_id", "ai_adjudications.review_task_id"],
             name="fk_ai_adjudication_resolutions_adjudication",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "review_task_id", "claim_id"],
@@ -1908,6 +2011,8 @@ class AiAdjudicationResolutionRecord(Base):
             ],
             name="fk_ai_adjudication_resolutions_claim",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -1937,6 +2042,8 @@ class AiModelHistoryRecord(Base):
             ["tenants.id"],
             name="fk_ai_model_history_tenant",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -1968,7 +2075,7 @@ class MalwareSampleRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -1997,12 +2104,16 @@ class MalwareFileContextRecord(Base):
             ["malware_samples.tenant_id", "malware_samples.id"],
             name="fk_malware_file_contexts_sample",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "host_id"],
             ["hosts.tenant_id", "hosts.id"],
             name="fk_malware_file_contexts_host",
             ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         Index("ix_malware_file_contexts_tenant_host", "tenant_id", "host_id"),
     )
@@ -2035,6 +2146,8 @@ class MalwareScanTaskRecord(Base):
             ["malware_samples.tenant_id", "malware_samples.id"],
             name="fk_malware_scan_tasks_sample",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         Index(
             "ix_malware_scan_tasks_claim",
@@ -2084,12 +2197,16 @@ class MalwareScanEngineResultRecord(Base):
             ["malware_scan_tasks.tenant_id", "malware_scan_tasks.id"],
             name="fk_malware_scan_engine_results_task",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "sample_id"],
             ["malware_samples.tenant_id", "malware_samples.id"],
             name="fk_malware_scan_engine_results_sample",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -2125,6 +2242,8 @@ class MalwareSandboxReportRecord(Base):
             ["malware_samples.tenant_id", "malware_samples.id"],
             name="fk_malware_sandbox_reports_sample",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -2149,6 +2268,8 @@ class AttackTraceRecord(Base):
             ["incidents.tenant_id", "incidents.id"],
             name="fk_attack_traces_seed_incident",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint("tenant_id", "id", name="uq_attack_traces_tenant_id_id"),
         UniqueConstraint(
@@ -2162,7 +2283,7 @@ class AttackTraceRecord(Base):
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
         nullable=False,
         index=True,
     )
@@ -2194,6 +2315,8 @@ class AttackTraceRevisionRecord(Base):
             ["attack_traces.tenant_id", "attack_traces.id"],
             name="fk_attack_trace_revisions_trace",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -2226,6 +2349,8 @@ class AttackTraceIncidentRecord(Base):
             ],
             name="fk_attack_trace_incidents_trace_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "incident_revision"],
@@ -2236,6 +2361,8 @@ class AttackTraceIncidentRecord(Base):
             ],
             name="fk_attack_trace_incidents_incident_revision",
             ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -2266,6 +2393,8 @@ class AttackTraceEvidenceRecord(Base):
             ],
             name="fk_attack_trace_evidence_trace_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "incident_revision", "event_id"],
@@ -2277,6 +2406,8 @@ class AttackTraceEvidenceRecord(Base):
             ],
             name="fk_attack_trace_evidence_incident_evidence",
             ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -2309,6 +2440,8 @@ class AttackTraceEntityRecord(Base):
             ],
             name="fk_attack_trace_entities_trace_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -2343,6 +2476,8 @@ class AttackTraceEdgeRecord(Base):
             ],
             name="fk_attack_trace_edges_trace_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "trace_id", "trace_revision", "source_entity_id"],
@@ -2354,6 +2489,8 @@ class AttackTraceEdgeRecord(Base):
             ],
             name="fk_attack_trace_edges_source_entity",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "trace_id", "trace_revision", "target_entity_id"],
@@ -2365,6 +2502,8 @@ class AttackTraceEdgeRecord(Base):
             ],
             name="fk_attack_trace_edges_target_entity",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -2394,6 +2533,8 @@ class AttackTraceEdgeEvidenceRecord(Base):
             ],
             name="fk_attack_trace_edge_evidence_edge",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "trace_id", "trace_revision", "trace_evidence_id"],
@@ -2405,6 +2546,8 @@ class AttackTraceEdgeEvidenceRecord(Base):
             ],
             name="fk_attack_trace_edge_evidence_evidence",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -2436,6 +2579,8 @@ class AttackTraceTechniqueRecord(Base):
             ],
             name="fk_attack_trace_techniques_trace_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -2463,6 +2608,8 @@ class AttackTraceTechniqueEvidenceRecord(Base):
             ],
             name="fk_attack_trace_technique_evidence_technique",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "trace_id", "trace_revision", "trace_evidence_id"],
@@ -2474,6 +2621,8 @@ class AttackTraceTechniqueEvidenceRecord(Base):
             ],
             name="fk_attack_trace_technique_evidence_evidence",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -2505,6 +2654,8 @@ class AttackTraceExportRecord(Base):
             ],
             name="fk_attack_trace_exports_trace_revision",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         Index("ix_attack_trace_exports_tenant_trace", "tenant_id", "trace_id"),
     )
@@ -2535,12 +2686,16 @@ class ResponseActionRecord(Base):
             ],
             name="fk_response_actions_incident_revision",
             ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "host_id"],
             ["hosts.tenant_id", "hosts.id"],
             name="fk_response_actions_host",
             ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint("tenant_id", "id", name="uq_response_actions_tenant_id"),
         Index(
@@ -2570,7 +2725,9 @@ class ResponseActionRecord(Base):
 
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
-        String(132), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(132),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
+        nullable=False,
     )
     incident_id: Mapped[str] = mapped_column(String(132), nullable=False)
     incident_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -2623,6 +2780,8 @@ class ResponseActionEvidenceRecord(Base):
             ["response_actions.tenant_id", "response_actions.id"],
             name="fk_response_action_evidence_action",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "incident_id", "incident_revision", "event_id"],
@@ -2634,6 +2793,8 @@ class ResponseActionEvidenceRecord(Base):
             ],
             name="fk_response_action_evidence_incident_evidence",
             ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -2661,6 +2822,8 @@ class ResponseApprovalRecord(Base):
             ["response_actions.tenant_id", "response_actions.id"],
             name="fk_response_approvals_action",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -2694,6 +2857,8 @@ class ResponseActionEventRecord(Base):
             ["response_actions.tenant_id", "response_actions.id"],
             name="fk_response_action_events_action",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -2719,6 +2884,8 @@ class ResponseExecutionRecord(Base):
             ["response_actions.tenant_id", "response_actions.id"],
             name="fk_response_executions_action",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -2762,6 +2929,8 @@ class ResponseRollbackRecord(Base):
             ["response_actions.tenant_id", "response_actions.id"],
             name="fk_response_rollbacks_action",
             ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "action_id", "execution_id"],
@@ -2772,6 +2941,8 @@ class ResponseRollbackRecord(Base):
             ],
             name="fk_response_rollbacks_execution",
             ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         UniqueConstraint(
             "tenant_id",
@@ -2821,7 +2992,9 @@ class NotificationOutboxRecord(Base):
 
     id: Mapped[str] = mapped_column(String(132), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
-        String(132), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(132),
+        ForeignKey("tenants.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
+        nullable=False,
     )
     topic: Mapped[str] = mapped_column(String(64), nullable=False)
     aggregate_type: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -2882,7 +3055,9 @@ class NotificationDeliveryAttemptRecord(Base):
     attempt_id: Mapped[str] = mapped_column(String(132), primary_key=True)
     notification_id: Mapped[str] = mapped_column(
         String(132),
-        ForeignKey("notification_outbox.id", ondelete="CASCADE"),
+        ForeignKey(
+            "notification_outbox.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"
+        ),
         nullable=False,
     )
     attempt_number: Mapped[int] = mapped_column(BigInteger, nullable=False)

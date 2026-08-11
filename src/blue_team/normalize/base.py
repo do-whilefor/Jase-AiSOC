@@ -9,11 +9,11 @@ Normalization failures produce a ``DlqEntry`` so the raw evidence is preserved.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blue_team._rusthash import sha256_hex
 from blue_team.agent_core.contracts import AgentEnvelope
 from blue_team.domain.security_event import SecurityEvent, SourceKind
 
@@ -99,12 +99,12 @@ def dedupe_key(
         )
     )
     if source_event_id:
-        digest = hashlib.sha256(f"{scope}\0{source_event_id}".encode()).hexdigest()
+        digest = sha256_hex(f"{scope}\0{source_event_id}".encode())
         return f"sid:{digest}"
-    digest = hashlib.sha256(
+    digest = sha256_hex(
         f"{scope}\0{raw.envelope.sequence if raw.envelope else ''}\0"
-        f"{hashlib.sha256(canonical).hexdigest()}".encode()
-    ).hexdigest()
+        f"{sha256_hex(canonical)}".encode()
+    )
     return f"hsh:{digest}"
 
 

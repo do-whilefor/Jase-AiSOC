@@ -10,7 +10,7 @@ import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 
 from blue_team.domain import (
     AttackState,
@@ -35,6 +35,7 @@ from blue_team.storage.models import (
     NormalizedEventRecord,
     TenantRecord,
 )
+from tests.integration._helpers import truncate_all
 
 DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
 pytestmark = [
@@ -97,15 +98,7 @@ def _detection(now: datetime) -> DetectionRead:
 
 
 async def _clean(database: Database) -> None:
-    async with database.engine.begin() as connection:
-        await connection.execute(
-            text("DELETE FROM audit_logs WHERE tenant_id = :tenant_id"),
-            {"tenant_id": TENANT},
-        )
-        await connection.execute(
-            text("DELETE FROM tenants WHERE id = :tenant_id"),
-            {"tenant_id": TENANT},
-        )
+    await truncate_all(database)
 
 
 @pytest.mark.asyncio

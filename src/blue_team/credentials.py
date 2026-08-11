@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 import secrets
 from dataclasses import dataclass, field
+
+from blue_team._rusthash import secure_compare, sha256_hex
 
 _CREDENTIAL_ID = re.compile(r"^cred_[a-f0-9]{32}$")
 _TOKEN_SECRET = re.compile(r"^[A-Za-z0-9_-]{40,128}$")
@@ -44,11 +45,11 @@ def credential_id_from_token(value: str) -> str | None:
 
 def token_matches(value: str, expected_digest: str) -> bool:
     """Compare a presented bearer token with a stored SHA-256 digest."""
-    return secrets.compare_digest(_digest(value), expected_digest)
+    return secure_compare(_digest(value), expected_digest)
 
 
 def _digest(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+    return sha256_hex(value.encode("utf-8"))
 
 
 __all__ = [

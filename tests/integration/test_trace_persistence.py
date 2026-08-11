@@ -10,7 +10,7 @@ import hashlib
 import os
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 
 from blue_team.errors import NotFoundError
 from blue_team.storage import Database
@@ -34,6 +34,7 @@ from blue_team.storage.trace_repository import (
     persist_attack_trace,
 )
 from blue_team.trace_engine import AttackTraceBuilder
+from tests.integration._helpers import truncate_all
 from tests.unit.test_trace_builder import TENANT, _inputs
 
 DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
@@ -44,15 +45,7 @@ pytestmark = [
 
 
 async def _clean(database: Database) -> None:
-    async with database.engine.begin() as connection:
-        await connection.execute(
-            text("DELETE FROM audit_logs WHERE tenant_id = :tenant_id"),
-            {"tenant_id": TENANT},
-        )
-        await connection.execute(
-            text("DELETE FROM tenants WHERE id = :tenant_id"),
-            {"tenant_id": TENANT},
-        )
+    await truncate_all(database)
 
 
 def _digest(value: str) -> str:

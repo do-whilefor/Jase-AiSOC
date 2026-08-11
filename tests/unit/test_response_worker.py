@@ -186,3 +186,63 @@ async def test_response_worker_does_not_reclassify_result_persistence_failure(
     assert await worker.run_once() == 0
     assert adapter.calls == ["inspect", "execute", "verify_execution"]
     assert failure_calls == []
+
+
+@pytest.mark.asyncio
+async def test_response_worker_passes_boundary_to_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Worker passes its tenant/host boundary so the claim query is scoped."""
+    database = FakeDatabase()
+    lease, adapter = _lease()
+    captured: dict[str, object] = {}
+
+    async def claim(*_args: object, **kwargs: object) -> ResponseLease:
+        captured.update(kwargs)
+        return lease
+
+    async def complete(*_args: object, **_kwargs: object) -> None:
+        pass
+
+    monkeypatch.setattr("blue_team.response_engine.worker.claim_next_response_action", claim)
+    monkeypatch.setattr("blue_team.response_engine.worker.complete_response_execution", complete)
+    worker = ResponseWorker(
+        cast(Database, database),
+        ResponseAdapterRegistry((adapter,)),
+        worker_id="response-worker-test",
+        tenant_id="ten_test01",
+        host_id="host_node01",
+    )
+
+    assert await worker.run_once() == 1
+    assert captured["tenant_id"] == "ten_test01"
+    assert captured["host_id"] == "host_node01"
+
+
+@pytest.mark.asyncio
+async def test_response_worker_omits_boundary_when_not_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without a boundary the worker passes None so the claim is unscoped."""
+    database = FakeDatabase()
+    lease, adapter = _lease()
+    captured: dict[str, object] = {}
+
+    async def claim(*_args: object, **kwargs: object) -> ResponseLease:
+        captured.update(kwargs)
+        return lease
+
+    async def complete(*_args: object, **_kwargs: object) -> None:
+        pass
+
+    monkeypatch.setattr("blue_team.response_engine.worker.claim_next_response_action", claim)
+    monkeypatch.setattr("blue_team.response_engine.worker.complete_response_execution", complete)
+    worker = ResponseWorker(
+        cast(Database, database),
+        ResponseAdapterRegistry((adapter,)),
+        worker_id="response-worker-test",
+    )
+
+    assert await worker.run_once() == 1
+    assert captured["tenant_id"] is None
+    assert captured["host_id"] is None

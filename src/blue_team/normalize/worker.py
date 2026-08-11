@@ -19,23 +19,28 @@ import asyncio
 import logging
 from contextlib import suppress
 from dataclasses import replace
+from datetime import UTC, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from blue_team.agent_core.contracts import AgentEnvelope
 from blue_team.domain.security_event import SourceKind
+from blue_team.enrich import Enricher
 from blue_team.normalize import RawInput, get_normalizer
 from blue_team.normalize.base import Normalizer, NormalizeResult
 from blue_team.normalize.watermark import WatermarkSnapshot, advance
 from blue_team.storage import Database, ObjectStore
 from blue_team.storage.event_repository import (
     advance_watermark,
+    claim_dlq_for_replay,
+    complete_dlq_replay,
+    fail_dlq_attempt,
     get_watermark,
     insert_dlq,
     insert_normalized_event,
 )
-from blue_team.storage.models import AgentEventRecord
+from blue_team.storage.models import AgentEventRecord, EventDlqRecord
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +56,14 @@ class NormalizeWorker:
         batch_size: int = 100,
         poll_seconds: float = 1.0,
         allowed_lateness_seconds: int = 300,
+        enricher: Enricher | None = None,
     ) -> None:
         self._database = database
         self._object_store = object_store
         self._batch_size = batch_size
         self._poll_seconds = poll_seconds
         self._allowed_lateness_seconds = allowed_lateness_seconds
+        self._enricher = enricher or Enricher()
         self._agent_normalizer: Normalizer | None = get_normalizer(SourceKind.AGENT)
         self._task: asyncio.Task[None] | None = None
 
@@ -136,13 +143,27 @@ class NormalizeWorker:
         )
         result = normalizer.normalize(raw)
         if result.event is not None:
+            # Enrich the normalized event with asset and external data before
+            # persisting. Enrichment is non-blocking: failures return the
+            # original event unchanged (plan §3 "资产富化").
+            enriched_event = result.event
+            try:
+                enriched_event = await self._enricher.orchestrate(
+                    result.event,
+                    session,
+                    tenant_id=record.tenant_id,
+                    host_id=record.host_id,
+                )
+            except Exception as error:
+                logger.warning("enrichment failed for %s: %s", record.id, error)
+            result = replace(result, event=enriched_event)
             current = await get_watermark(session, partition_key=result.partition_key)
             snapshot = WatermarkSnapshot(
                 partition_key=result.partition_key,
                 max_seen_event_time=(current.max_seen_event_time if current is not None else None),
                 allowed_lateness_seconds=self._allowed_lateness_seconds,
             )
-            watermark_result = advance(snapshot, result.event.event_time)
+            watermark_result = advance(snapshot, enriched_event.event_time)
             result = replace(result, is_late=watermark_result.is_late)
         await self._persist_result(session, record, result, normalizer)
         if result.event is not None:
@@ -192,11 +213,94 @@ class NormalizeWorker:
             .values(normalize_status=status)
         )
 
+    async def run_dlq_replay_once(self) -> int:
+        """Re-attempt normalization of pending DLQ records; return the count processed.
+
+        For each pending DLQ record with remaining retry budget, re-reads the
+        raw envelope from the object store and re-runs the normalizer. On
+        success the DLQ is marked ``replayed`` and the normalized event is
+        persisted; on failure the attempt count is incremented and the record
+        is marked ``dead`` when the budget is exhausted.
+        """
+        normalizer = self._agent_normalizer
+        if normalizer is None:
+            return 0
+        async with self._database.session() as session:
+            dlq_rows = await claim_dlq_for_replay(session, batch_size=self._batch_size)
+            if not dlq_rows:
+                return 0
+            processed = 0
+            for dlq in dlq_rows:
+                await self._replay_one(session, dlq, normalizer)
+                processed += 1
+            await session.commit()
+            return processed
+
+    async def _replay_one(
+        self, session: AsyncSession, dlq: EventDlqRecord, normalizer: Normalizer
+    ) -> None:
+        """Re-attempt normalization for a single DLQ record."""
+        # Fetch the original agent_event record to recover received_at.
+        record = await session.scalar(
+            select(AgentEventRecord).where(AgentEventRecord.id == dlq.raw_event_id)
+        )
+        received_at = record.received_at if record is not None else datetime.now(UTC)
+        try:
+            raw_bytes = await self._object_store.get(dlq.tenant_id, dlq.raw_ref)
+        except Exception as error:
+            logger.warning("dlq replay object_store read failed for %s: %s", dlq.id, error)
+            await fail_dlq_attempt(session, dlq=dlq, detail=f"replay read failed: {error}")
+            return
+        try:
+            envelope = AgentEnvelope.model_validate_json(raw_bytes)
+        except Exception as error:
+            logger.warning("dlq replay envelope parse failed for %s: %s", dlq.id, error)
+            await fail_dlq_attempt(session, dlq=dlq, detail=f"replay parse failed: {error}")
+            return
+        raw = RawInput(
+            source_kind=SourceKind.AGENT,
+            raw_payload=raw_bytes,
+            raw_ref=dlq.raw_ref,
+            tenant_id=dlq.tenant_id,
+            host_id=envelope.host_id,
+            agent_id=envelope.agent_id,
+            boot_id=envelope.boot_id,
+            received_at=received_at,
+            envelope=envelope,
+        )
+        result = normalizer.normalize(raw)
+        if result.event is not None:
+            await insert_normalized_event(
+                session,
+                tenant_id=dlq.tenant_id,
+                raw_event_id=dlq.raw_event_id,
+                result=result,
+                raw_ref=dlq.raw_ref,
+                normalizer_version=normalizer.version,
+            )
+            if result.event is not None:
+                await advance_watermark(
+                    session,
+                    partition_key=result.partition_key,
+                    tenant_id=dlq.tenant_id,
+                    event_time=result.event.event_time,
+                    allowed_lateness_seconds=self._allowed_lateness_seconds,
+                )
+            await complete_dlq_replay(session, dlq=dlq)
+        else:
+            reason = result.dlq.reason if result.dlq else "unknown"
+            await fail_dlq_attempt(
+                session,
+                dlq=dlq,
+                detail=f"replay normalize returned no event: {reason}",
+            )
+
     async def run_loop(self) -> None:
         """Loop forever until cancelled; safe to wrap in ``asyncio.create_task``."""
         while True:
             try:
                 await self.run_once()
+                await self.run_dlq_replay_once()
             except Exception:
                 logger.exception("normalize cycle failed")
             await asyncio.sleep(self._poll_seconds)

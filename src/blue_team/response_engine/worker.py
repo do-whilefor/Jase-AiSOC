@@ -34,6 +34,8 @@ class ResponseWorker:
         *,
         settings: Settings | None = None,
         worker_id: str | None = None,
+        tenant_id: str | None = None,
+        host_id: str | None = None,
     ) -> None:
         resolved = settings or get_settings()
         self._database = database
@@ -41,6 +43,8 @@ class ResponseWorker:
         self._worker_id = worker_id or f"response-worker-{uuid4().hex}"
         self._poll_seconds = resolved.response_worker_poll_seconds
         self._lease_seconds = resolved.response_execution_lease_seconds
+        self._tenant_id = tenant_id
+        self._host_id = host_id
         if not self._worker_id or len(self._worker_id) > 128:
             raise ValueError("worker_id must contain 1 to 128 characters")
         self._task: asyncio.Task[None] | None = None
@@ -51,6 +55,8 @@ class ResponseWorker:
                 session,
                 worker_id=self._worker_id,
                 lease_seconds=self._lease_seconds,
+                tenant_id=self._tenant_id,
+                host_id=self._host_id,
             )
         if lease is None:
             return 0

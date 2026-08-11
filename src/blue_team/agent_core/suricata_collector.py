@@ -164,7 +164,9 @@ class SuricataCollector:
             result = self._normalizer.normalize(raw)
             if result.event is None:
                 self._parse_error_count += 1
-                detail = result.dlq.detail if result.dlq is not None else "normalizer returned no event"
+                detail = (
+                    result.dlq.detail if result.dlq is not None else "normalizer returned no event"
+                )
                 self._emit_diagnostic(
                     reason="normalization_error",
                     message=line.message,
@@ -245,7 +247,7 @@ class SuricataCollector:
             (
                 f"{self.config.tenant_id}\0{self.config.host_id}\0"
                 f"{self.config.boot_id}\0{reason}\0{message}"
-            ).encode("utf-8")
+            ).encode()
         ).hexdigest()
         source_event_id = f"suricata-gap:{self.config.boot_id}:{digest[:16]}"
         event = SecurityEvent.model_validate(

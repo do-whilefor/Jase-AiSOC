@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import secrets
 from datetime import datetime
@@ -12,6 +11,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from blue_team._rusthash import sha256_hex
 from blue_team.domain import SecurityEvent
 from blue_team.domain.identifiers import AgentId, AgentVersion, HostId, TenantId
 from blue_team.platform import CapabilityReport
@@ -246,4 +246,4 @@ def _batch_digest(
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
+    return sha256_hex(canonical)

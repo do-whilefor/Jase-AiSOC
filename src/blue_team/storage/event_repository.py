@@ -9,7 +9,7 @@ of the existing immutable fact.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -180,6 +180,70 @@ async def insert_dlq(
     session.add(record)
     await session.flush()
     return record
+
+
+async def claim_dlq_for_replay(
+    session: AsyncSession,
+    *,
+    batch_size: int = 10,
+) -> list[EventDlqRecord]:
+    """Claim pending DLQ records that have not exhausted their retry budget.
+
+    Selects ``status='pending'`` rows with ``attempts < max_attempts``, locks
+    them with ``FOR UPDATE SKIP LOCKED`` so concurrent workers don't collide,
+    and returns up to ``batch_size`` records. The caller is responsible for
+    re-attempting normalization and calling :func:`complete_dlq_replay` or
+    :func:`fail_dlq_attempt`.
+    """
+
+    rows = (
+        (
+            await session.execute(
+                select(EventDlqRecord)
+                .where(
+                    EventDlqRecord.status == "pending",
+                    EventDlqRecord.attempts < EventDlqRecord.max_attempts,
+                )
+                .order_by(EventDlqRecord.created_at)
+                .limit(batch_size)
+                .with_for_update(skip_locked=True)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return list(rows)
+
+
+async def complete_dlq_replay(
+    session: AsyncSession,
+    *,
+    dlq: EventDlqRecord,
+) -> None:
+    """Mark a DLQ record as successfully replayed (normalized)."""
+
+    dlq.status = "replayed"
+    dlq.last_attempt_at = datetime.now(UTC)
+    await session.flush()
+
+
+async def fail_dlq_attempt(
+    session: AsyncSession,
+    *,
+    dlq: EventDlqRecord,
+    detail: str | None = None,
+    now: datetime | None = None,
+) -> None:
+    """Record a failed replay attempt; mark as 'dead' when the budget is exhausted."""
+
+    started_at = now or datetime.now(UTC)
+    dlq.attempts += 1
+    dlq.last_attempt_at = started_at
+    if detail is not None:
+        dlq.detail = detail[:2048] if len(detail) > 2048 else detail
+    if dlq.attempts >= dlq.max_attempts:
+        dlq.status = "dead"
+    await session.flush()
 
 
 async def advance_watermark(

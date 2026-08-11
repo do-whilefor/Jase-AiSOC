@@ -39,7 +39,9 @@
           "enum": [
             "openai_compatible",
             "kimi",
-            "glm"
+            "glm",
+            "deepseek",
+            "openai"
           ],
           "title": "Provider",
           "type": "string"

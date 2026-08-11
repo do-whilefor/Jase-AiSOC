@@ -517,6 +517,8 @@ async def claim_next_response_action(
     worker_id: str,
     lease_seconds: int,
     now: datetime | None = None,
+    tenant_id: str | None = None,
+    host_id: str | None = None,
 ) -> ResponseLease | None:
     started_at = now or datetime.now(UTC)
     stale = await session.scalar(
@@ -567,17 +569,24 @@ async def claim_next_response_action(
         )
         await session.flush()
         return None
-    record = await session.scalar(
-        select(ResponseActionRecord)
-        .where(
-            ResponseActionRecord.status.in_(
-                (
-                    ResponseActionStatus.QUEUED.value,
-                    ResponseActionStatus.ROLLBACK_QUEUED.value,
-                )
+    claim_query = select(ResponseActionRecord).where(
+        ResponseActionRecord.status.in_(
+            (
+                ResponseActionStatus.QUEUED.value,
+                ResponseActionStatus.ROLLBACK_QUEUED.value,
             )
         )
-        .order_by(ResponseActionRecord.queued_at, ResponseActionRecord.created_at)
+    )
+    # When the worker provides its boundary, only claim actions scoped to its
+    # own tenant and host. Without this filter a local_single_node worker could
+    # claim an action targeting a different host, fail the boundary check, and
+    # terminally FAIL the action — making it unavailable to the correct worker.
+    if tenant_id is not None:
+        claim_query = claim_query.where(ResponseActionRecord.tenant_id == tenant_id)
+    if host_id is not None:
+        claim_query = claim_query.where(ResponseActionRecord.host_id == host_id)
+    record = await session.scalar(
+        claim_query.order_by(ResponseActionRecord.queued_at, ResponseActionRecord.created_at)
         .with_for_update(skip_locked=True)
         .limit(1)
     )

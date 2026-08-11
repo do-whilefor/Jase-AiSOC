@@ -26,10 +26,23 @@ sudo bash deploy/kali/install.sh
 2. 创建非特权服务用户 `blue-team`
 3. 在 `/opt/blue-team/.venv` 建立 Python 虚拟环境并安装本包
 4. 初始化本地 PostgreSQL 数据库与角色
-5. 写入 `/etc/blue-team/blue-team.env` 并运行 Alembic 迁移
-6. 用 openssl 生成本地 mTLS CA 与 Agent 证书
+5. 写入 `/etc/blue-team/blue-team.env`（含 Ingest mTLS CA 路径）并运行 Alembic 迁移
+6. 用 openssl 生成本地 mTLS CA
 7. 写入 `/etc/blue-team/agent.json`（默认开启 journald + auditd 采集）
-8. 安装 systemd 单元并 `daemon-reload`
+8. 通过 `scripts/bootstrap_agent_enrollment.py` 在 PostgreSQL 注册租户/主机/Agent 身份，并签发真实 mTLS 客户端证书（Ingest 网关按 `agent_certificates` 表校验客户端证书，不能使用独立签发的证书）。幂等：已注册则跳过。
+9. 安装 systemd 单元并 `daemon-reload`
+
+> 可选采集器：`suricata`、`auditd`、`nginx` 默认不随 `install.sh` 安装。启用对应采集器需先 `sudo apt install suricata auditd nginx` 并在 `/etc/blue-team/agent.json` 打开开关，确认日志文件存在且 `blue-team` 用户可读。
+
+## P0–P6 本地可行性验证（已确认）
+
+在不使用 root 的条件下，以下闭环已在 Kali 上动态验证通过（用户级 PostgreSQL 55432）：
+
+- `blue-team-api` 启动、`/health/live` 200、后台 worker（含 FreshnessMonitor）运行
+- `blue-team-ingest` 启动、mTLS 握手成功
+- `blue-team-agent health-probe` 输出 STARTED/HEALTHY
+- 平台能力探测（`blue-team-probe-platform`）真实报告 Kali L1：journald enabled、auditd failed（auditctl 缺失）、eBPF degraded
+- `scripts/bootstrap_agent_enrollment.py` 注册 Agent 并签发证书，用该证书经 mTLS 向 Ingest 网关发送心跳，返回 200 且心跳持久化到 PostgreSQL
 
 ## 启动服务
 

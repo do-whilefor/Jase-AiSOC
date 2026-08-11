@@ -372,6 +372,22 @@ def test_disabled_model_configuration_does_not_claim_health_or_roles() -> None:
     assert configuration.health_status == "not_probed"
 
 
+def test_deepseek_provider_configuration_reports_fixed_base_without_url_requirement() -> None:
+    configuration = _console_model_provider_configuration(
+        Settings(
+            ai_review_enabled=True,
+            ai_review_provider="deepseek",
+            ai_review_api_key=SecretStr("provider-key"),
+            ai_review_model_name="deepseek-chat",
+        )
+    )
+
+    assert configuration.provider == "deepseek"
+    assert configuration.base_url_state == "not_required"
+    assert configuration.api_key_state == "configured"
+    assert configuration.configuration_complete is True
+
+
 @pytest.mark.asyncio
 async def test_system_operations_are_tenant_scoped_bounded_and_do_not_expose_tokens() -> None:
     tenant = TenantRecord(id=TENANT, name="Console Tenant", created_at=NOW)

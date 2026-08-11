@@ -48,6 +48,18 @@ def test_ai_review_is_disabled_by_default_and_requires_complete_provider_config(
         )
 
 
+def test_preset_providers_do_not_require_a_base_url() -> None:
+    """Fixed-base presets (kimi/glm/deepseek/openai) need only key + model."""
+    for provider in ("kimi", "glm", "deepseek", "openai"):
+        settings = Settings(
+            ai_review_enabled=True,
+            ai_review_provider=provider,
+            ai_review_api_key=SecretStr("provider-key"),
+            ai_review_model_name="model",
+        )
+        assert settings.ai_review_provider == provider
+
+
 def test_ai_review_api_secret_is_masked() -> None:
     secret = "never-render-provider-api-secret"
     settings = Settings(

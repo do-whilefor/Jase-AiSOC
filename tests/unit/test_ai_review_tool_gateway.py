@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from typing import cast
 
 import pytest
 
 from blue_team.ai_review.tool_gateway import (
+    DatabaseReadOnlyToolDataSource,
     ReadOnlyToolDataSource,
     ToolAuthorizationError,
     ToolGateway,
@@ -19,6 +23,7 @@ from blue_team.domain import (
     IncidentEvidenceRef,
     ModelToolCall,
 )
+from blue_team.storage import Database
 
 TENANT = "ten_01JP7TOOLS0000"
 HOST = "host_01JP7TOOLS000"
@@ -230,3 +235,59 @@ def test_tool_definitions_are_closed_to_the_read_only_registry() -> None:
     )
     with pytest.raises(ToolAuthorizationError, match="unknown tool"):
         gateway.definitions(("delete_events",))
+
+
+# ---------------------------------------------------------------------------
+# DatabaseReadOnlyToolDataSource — short-session-per-call data source
+# ---------------------------------------------------------------------------
+
+
+class _CountingDatabase:
+    """Minimal Database stand-in that counts session openings."""
+
+    def __init__(self) -> None:
+        self.session_count = 0
+
+    @asynccontextmanager
+    async def session(self) -> AsyncIterator[_NullSession]:
+        self.session_count += 1
+        yield _NullSession()
+
+
+class _NullSession:
+    """Session whose scalar() returns None, triggering the revision check error."""
+
+    async def scalar(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_database_data_source_opens_a_fresh_session_per_call() -> None:
+    database = _CountingDatabase()
+    source = DatabaseReadOnlyToolDataSource(cast("Database", database))
+
+    # Each call should open exactly one session. We don't care about the
+    # result (the null session will make SqlReadOnlyToolDataSource raise
+    # on the revision check); we only verify the session lifecycle.
+    for _ in range(3):
+        with pytest.raises(Exception, match="Incident revision"):
+            await source.search_events(
+                ToolQueryScope(
+                    tenant_id=TENANT,
+                    incident_id=INCIDENT,
+                    revision=1,
+                    query_ref=QUERY,
+                ),
+                event_types=(),
+                limit=10,
+            )
+
+    assert database.session_count == 3
+
+
+def test_database_data_source_satisfies_read_only_protocol() -> None:
+    source = DatabaseReadOnlyToolDataSource.__new__(DatabaseReadOnlyToolDataSource)
+    assert hasattr(source, "search_events")
+    assert hasattr(source, "get_process_tree")
+    assert hasattr(source, "get_incident_timeline")
+    assert hasattr(source, "get_entity_graph")

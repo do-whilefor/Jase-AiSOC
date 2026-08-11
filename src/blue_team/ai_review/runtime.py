@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from blue_team.ai_review.orchestrator import ReviewRateLimiter
 from blue_team.ai_review.providers import (
+    PROVIDER_PRESETS,
     GlmProvider,
     KimiProvider,
     ModelProvider,
@@ -77,6 +78,19 @@ def build_model_provider(settings: Settings) -> ModelProvider:
         return KimiProvider(**common)  # type: ignore[arg-type]
     if settings.ai_review_provider == "glm":
         return GlmProvider(**common)  # type: ignore[arg-type]
+    if settings.ai_review_provider in PROVIDER_PRESETS:
+        return OpenAICompatibleProvider(
+            OpenAICompatibleConfig.from_preset(
+                settings.ai_review_provider,
+                api_key=api_key,
+                model_name=model_name,
+                context_tokens=settings.ai_review_model_context_tokens,
+                timeout_seconds=settings.ai_review_provider_timeout_seconds,
+                max_response_bytes=settings.ai_review_model_max_response_bytes,
+                input_cost_per_million_tokens=settings.ai_review_input_cost_per_million_tokens,
+                output_cost_per_million_tokens=settings.ai_review_output_cost_per_million_tokens,
+            )
+        )
     if settings.ai_review_base_url is None:
         raise ValueError("OpenAI-compatible provider requires ai_review_base_url")
     return OpenAICompatibleProvider(

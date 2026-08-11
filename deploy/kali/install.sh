@@ -103,6 +103,9 @@ BLUE_TEAM_DATABASE_URL=postgresql+asyncpg://${PG_USER}:${PG_PASSWORD}@127.0.0.1:
 BLUE_TEAM_OBJECT_STORE_ROOT=${STATE_DIR}/evidence
 BLUE_TEAM_INGEST_HOST=127.0.0.1
 BLUE_TEAM_INGEST_PORT=8001
+# mTLS CA used by the Ingest gateway to verify Agent client certificates.
+BLUE_TEAM_AGENT_CA_CERTIFICATE_PATH=${CONFIG_DIR}/ca.crt
+BLUE_TEAM_AGENT_CA_PRIVATE_KEY_PATH=${CONFIG_DIR}/ca.key
 EOF
 
 log "running Alembic migrations"
@@ -117,22 +120,14 @@ cp -a "${PROJECT_ROOT}/migrations" "${INSTALL_PREFIX}/migrations"
 chown -R root:"$APP_GROUP" "${INSTALL_PREFIX}/migrations"
 
 # 7. mTLS certificates for the Agent transport -----------------------------
-log "generating local mTLS CA and Agent certificate"
+log "generating local mTLS CA"
 if [[ ! -f "${CONFIG_DIR}/ca.crt" ]]; then
   openssl genrsa -out "${CONFIG_DIR}/ca.key" 4096 2>/dev/null
   openssl req -x509 -new -nodes -key "${CONFIG_DIR}/ca.key" -sha256 -days 3650 \
     -subj "/CN=blue-team-local-ca" -out "${CONFIG_DIR}/ca.crt" 2>/dev/null
+  chmod 0640 "${CONFIG_DIR}/ca.key"
+  chown root:"$APP_GROUP" "${CONFIG_DIR}/ca.crt" "${CONFIG_DIR}/ca.key"
 fi
-if [[ ! -f "${CONFIG_DIR}/agent.crt" ]]; then
-  openssl genrsa -out "${CONFIG_DIR}/agent.key" 2048 2>/dev/null
-  openssl req -new -key "${CONFIG_DIR}/agent.key" -subj "/CN=blue-team-agent" \
-    -out "${CONFIG_DIR}/agent.csr" 2>/dev/null
-  openssl x509 -req -in "${CONFIG_DIR}/agent.csr" -CA "${CONFIG_DIR}/ca.crt" \
-    -CAkey "${CONFIG_DIR}/ca.key" -CAcreateserial -days 825 -sha256 \
-    -out "${CONFIG_DIR}/agent.crt" 2>/dev/null
-fi
-chmod 0640 "${CONFIG_DIR}/ca.key" "${CONFIG_DIR}/agent.key"
-chown root:"$APP_GROUP" "${CONFIG_DIR}"/*.crt "${CONFIG_DIR}"/*.key
 
 # 8. Agent config -----------------------------------------------------------
 log "writing Agent config"
@@ -169,6 +164,22 @@ EOF
 install -m 0640 -o root -g "$APP_GROUP" /dev/stdin "${CONFIG_DIR}/agent.env" <<'EOF'
 # Reserved for future Agent environment overrides.
 EOF
+
+# 8b. Enroll the Agent identity and issue its real mTLS client certificate.
+# The Ingest gateway verifies Agent client certificates against the
+# agent_certificates table (not just the CA), so the agent must be registered
+# through the server enrollment flow rather than using a standalone cert.
+log "enrolling Agent identity and issuing client certificate"
+install -d -m 0750 -o root -g "$APP_GROUP" "${CONFIG_DIR}"
+env \
+  BLUE_TEAM_DATABASE_URL="postgresql+asyncpg://${PG_USER}:${PG_PASSWORD}@127.0.0.1:5432/${PG_DB}" \
+  "${VENV_DIR}/bin/python" "${PROJECT_ROOT}/scripts/bootstrap_agent_enrollment.py" \
+  --config "${CONFIG_DIR}/agent.json" \
+  --database-url "postgresql+asyncpg://${PG_USER}:${PG_PASSWORD}@127.0.0.1:5432/${PG_DB}" \
+  --ca-certificate "${CONFIG_DIR}/ca.crt" \
+  --ca-private-key "${CONFIG_DIR}/ca.key"
+chmod 0640 "${CONFIG_DIR}/agent.crt" "${CONFIG_DIR}/agent.key"
+chown root:"$APP_GROUP" "${CONFIG_DIR}/agent.crt" "${CONFIG_DIR}/agent.key"
 
 # 9. systemd units ----------------------------------------------------------
 log "installing systemd units"

@@ -7,7 +7,7 @@ PIP := $(VENV)/bin/pip
 PY := $(VENV)/bin/python
 ALEMBIC := $(VENV)/bin/alembic
 
-.PHONY: venv install dev-install migrate run-api run-ingest run-agent probe test lint typecheck clean help
+.PHONY: venv install dev-install migrate run-api run-ingest run-agent probe test lint typecheck rust-extension clean help
 
 help:
 	@echo "Blue Team AI Agent - common targets:"
@@ -22,6 +22,7 @@ help:
 	@echo "  make test          - run the unit test suite"
 	@echo "  make lint          - run ruff"
 	@echo "  make typecheck     - run mypy"
+	@echo "  make rust-extension - build+install the optional Rust accelerator (.venv)"
 
 venv:
 	$(PYTHON) -m venv $(VENV)
@@ -57,6 +58,13 @@ lint:
 
 typecheck:
 	$(VENV)/bin/mypy
+
+# Optional Rust accelerator (PyO3/maturin). Not required: the Python package
+# falls back to hashlib/hmac when this extension is absent.
+rust-extension:
+	@command -v maturin >/dev/null 2>&1 || { \
+		echo "install maturin: uv tool install maturin"; exit 1; }
+	VIRTUAL_ENV="$$(pwd)/$(VENV)" maturin develop --manifest-path rust/blue-team-rust/Cargo.toml
 
 clean:
 	rm -rf $(VENV) .mypy_cache .pytest_cache .ruff_cache build dist *.egg-info

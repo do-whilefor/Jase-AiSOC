@@ -1,15 +1,25 @@
 """Tenant-scoped empty Incident creation for the P1 exit gate."""
 
+import hashlib
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from blue_team.ai_review.orchestrator import AiReviewOrchestrator
 from blue_team.ai_review.runtime import AiReviewRuntime
-from blue_team.ai_review.tool_gateway import SqlReadOnlyToolDataSource, ToolGateway
+from blue_team.ai_review.tool_gateway import (
+    DatabaseReadOnlyToolDataSource,
+    ToolGateway,
+)
 from blue_team.api_server.auth import RequestPrincipal, require_tenant_principal
-from blue_team.api_server.dependencies import get_ai_review_runtime, get_session, get_settings
+from blue_team.api_server.dependencies import (
+    get_ai_review_runtime,
+    get_database,
+    get_session,
+    get_settings,
+)
 from blue_team.config import Settings
 from blue_team.domain import (
     IncidentClaimBundle,
@@ -36,7 +46,7 @@ from blue_team.incident_engine.lifecycle import (
     record_incident_feedback,
     split_incident,
 )
-from blue_team.storage import repositories
+from blue_team.storage import Database, repositories
 from blue_team.storage.ai_review_repository import (
     find_ai_review_outcome,
     get_ai_review_outcome,
@@ -135,26 +145,54 @@ async def get_incident_graph(
     )
 
 
+def _review_lock_key(
+    tenant_id: str,
+    incident_id: str,
+    revision: int,
+    policy_version: str,
+) -> int:
+    """Derive a stable 63-bit advisory-lock key for one review task scope.
+
+    The key material mirrors the ``review_task_id`` and the
+    ``uq_ai_review_tasks_revision_policy`` unique constraint so that concurrent
+    reviews of the *same* ``(tenant, incident, revision, policy_version)``
+    serialize on the same lock.
+    """
+    material = f"{tenant_id}\0{incident_id}\0{revision}\0{policy_version}"
+    digest = hashlib.sha256(material.encode()).digest()
+    return int.from_bytes(digest[:8], "big") & 0x7FFFFFFFFFFFFFFF
+
+
 @router.post("/{incident_id}/review", response_model=ReviewOutcome)
 async def review_incident(
     incident_id: str,
     principal: Annotated[RequestPrincipal, Depends(require_tenant_principal)],
-    session: Annotated[AsyncSession, Depends(get_session)],
+    database: Annotated[Database, Depends(get_database)],
     runtime: Annotated[AiReviewRuntime, Depends(get_ai_review_runtime)],
 ) -> ReviewOutcome:
     tenant_id = principal.require_tenant_id()
-    incident = await get_incident_review_input(
-        session,
-        tenant_id=tenant_id,
-        incident_id=incident_id,
-    )
-    context = await get_incident_review_context(
-        session,
-        tenant_id=tenant_id,
-        incident=incident,
-    )
-    gateway = ToolGateway(SqlReadOnlyToolDataSource(session), runtime.policy)
-    model_history = await get_model_history_scores(session, tenant_id=tenant_id)
+
+    # Phase 1 — read context and existing outcome in a short transaction so
+    # the pooled connection is released before any model provider HTTP call.
+    async with database.session() as session, session.begin():
+        incident = await get_incident_review_input(
+            session,
+            tenant_id=tenant_id,
+            incident_id=incident_id,
+        )
+        context = await get_incident_review_context(
+            session,
+            tenant_id=tenant_id,
+            incident=incident,
+        )
+        evidence = await get_incident_evidence_bundle(
+            session,
+            tenant_id=tenant_id,
+            incident_id=incident_id,
+        )
+        model_history = await get_model_history_scores(session, tenant_id=tenant_id)
+
+    gateway = ToolGateway(DatabaseReadOnlyToolDataSource(database), runtime.policy)
     orchestrator = AiReviewOrchestrator(
         runtime.policy,
         runtime.model_client,
@@ -165,27 +203,55 @@ async def review_incident(
         model_history=model_history,
     )
     _, review_task_id = orchestrator.plan(incident, context)
-    existing = await find_ai_review_outcome(
-        session,
-        tenant_id=tenant_id,
-        incident_id=incident_id,
-        review_task_id=review_task_id,
+
+    # Phase 2 — acquire a session-level advisory lock keyed on the exact
+    # (tenant, incident, revision, policy_version) scope. This serializes
+    # concurrent reviews of the same Incident revision so that only one
+    # request proceeds to billable model calls; losers re-check the existing
+    # outcome and return the winner's committed result without billing.
+    lock_key = _review_lock_key(
+        tenant_id,
+        incident_id,
+        incident.revision,
+        runtime.policy.policy_version,
     )
-    if existing is not None:
-        return existing
-    evidence = await get_incident_evidence_bundle(
-        session,
-        tenant_id=tenant_id,
-        incident_id=incident_id,
-    )
-    outcome = await orchestrator.review(incident, context, evidence)
-    return await persist_ai_review_outcome(
-        session,
-        incident=incident,
-        policy=runtime.policy,
-        outcome=outcome,
-        actor=principal.actor,
-    )
+    async with database.engine.connect() as lock_connection:
+        await lock_connection.execute(
+            text("SELECT pg_advisory_lock(:key)"),
+            {"key": lock_key},
+        )
+        try:
+            # Re-check after acquiring the lock: a concurrent winner may have
+            # already committed the outcome while we waited.
+            async with database.session() as session:
+                existing = await find_ai_review_outcome(
+                    session,
+                    tenant_id=tenant_id,
+                    incident_id=incident_id,
+                    review_task_id=review_task_id,
+                )
+            if existing is not None:
+                return existing
+
+            # Phase 3 — model execution. The DatabaseReadOnlyToolDataSource
+            # opens short sessions only for tool calls, so no pooled connection
+            # is held during provider HTTP round-trips.
+            outcome = await orchestrator.review(incident, context, evidence)
+
+            # Phase 4 — persist the outcome in a short transaction.
+            async with database.session() as session, session.begin():
+                return await persist_ai_review_outcome(
+                    session,
+                    incident=incident,
+                    policy=runtime.policy,
+                    outcome=outcome,
+                    actor=principal.actor,
+                )
+        finally:
+            await lock_connection.execute(
+                text("SELECT pg_advisory_unlock(:key)"),
+                {"key": lock_key},
+            )
 
 
 @router.get(

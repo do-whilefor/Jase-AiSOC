@@ -29,8 +29,9 @@ P6 Incident revision
   始终标为 untrusted。
 - system instructions 与 EvidencePackage/tool result 分别进入 system/user 消息；证据里的 Prompt
   注入文本不能进入受信 system instructions。
-- Provider 只暴露 `complete/health/capabilities`。OpenAI-compatible、Kimi、GLM adapter 使用固定 HTTPS
-  端点（仅 loopback 允许 HTTP），不跟随重定向，限制响应字节，API key 使用 `SecretStr`。
+- Provider 只暴露 `complete/health/capabilities`。OpenAI-compatible、Kimi、GLM、DeepSeek、OpenAI 官方
+  adapter 使用固定 HTTPS 端点（仅 loopback 允许 HTTP），不跟随重定向，限制响应字节，API key 使用
+  `SecretStr`。固定 base 由 `PROVIDER_PRESETS` 集中管理；接入见 [docs/model-providers.md](model-providers.md)。
 - 仅 timeout、HTTP 429 和 5xx 可重试；达到阈值后熔断。失败返回 `model_unavailable`，且
   `deterministic_result_preserved=true`。
 - 默认预算为 20 samples、16k context tokens、8 tool calls、3 model runs、30 reviews/minute；每个

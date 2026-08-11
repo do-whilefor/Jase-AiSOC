@@ -55,7 +55,13 @@ async def _run() -> None:
     )
     configure_logging(settings)
     database = Database(settings.database_url, echo=settings.database_echo)
-    worker = ResponseWorker(database, registry, settings=settings)
+    worker = ResponseWorker(
+        database,
+        registry,
+        settings=settings,
+        tenant_id=boundary.tenant_id,
+        host_id=boundary.host_id,
+    )
     try:
         await worker.run_loop()
     finally:

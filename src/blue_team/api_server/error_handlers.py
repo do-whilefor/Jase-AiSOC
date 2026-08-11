@@ -31,6 +31,25 @@ def _trace_id(request: Request) -> str:
     return value
 
 
+def _redact_details(details: dict[str, object] | None) -> dict[str, object] | None:
+    """Strip internal quarantine:// references from error details.
+
+    ``quarantine://`` refs are internal storage pointers that must never be
+    exposed through a public API response. This is a defense-in-depth scrub:
+    no current request path raises a ref-bearing error, but this prevents a
+    future regression from leaking the ref.
+    """
+    if details is None:
+        return None
+    redacted: dict[str, object] = {}
+    for key, value in details.items():
+        if isinstance(value, str) and value.startswith("quarantine://"):
+            redacted[key] = "[redacted]"
+        else:
+            redacted[key] = value
+    return redacted
+
+
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, error: AppError) -> JSONResponse:
@@ -41,7 +60,7 @@ def install_error_handlers(app: FastAPI) -> None:
                     code=error.code,
                     message=error.message,
                     trace_id=_trace_id(request),
-                    details=error.details,
+                    details=_redact_details(error.details),
                 )
             ).model_dump(mode="json"),
         )

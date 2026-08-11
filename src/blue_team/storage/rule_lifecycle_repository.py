@@ -20,7 +20,6 @@ from blue_team.detection_engine.governance import (
 from blue_team.detection_engine.lifecycle import (
     RuleLifecycleTrustKey,
     RuleRuntimePolicy,
-    canonical_rule_lifecycle_manifest,
     emission_scope_for_stage,
     rule_catalog_sha256,
     verify_signed_rule_lifecycle_manifest,

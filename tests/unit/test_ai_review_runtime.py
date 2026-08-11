@@ -124,3 +124,29 @@ def test_provider_factory_selects_custom_kimi_and_glm_adapters() -> None:
     assert kimi.provider_name == "kimi"
     assert isinstance(glm, GlmProvider)
     assert glm.provider_name == "glm"
+
+
+def test_provider_factory_selects_deepseek_and_openai_adapters() -> None:
+    deepseek = build_model_provider(
+        Settings(
+            ai_review_enabled=True,
+            ai_review_api_key=SecretStr("provider-key"),
+            ai_review_model_name="deepseek-chat",
+            ai_review_provider="deepseek",
+        )
+    )
+    openai = build_model_provider(
+        Settings(
+            ai_review_enabled=True,
+            ai_review_api_key=SecretStr("provider-key"),
+            ai_review_model_name="gpt-4o-mini",
+            ai_review_provider="openai",
+        )
+    )
+
+    # The factory builds fixed-base presets via OpenAICompatibleConfig.from_preset,
+    # yielding a base OpenAICompatibleProvider carrying the preset's provider_name
+    # and fixed HTTPS base URL (no loopback-HTTP shortcut).
+    assert isinstance(deepseek, OpenAICompatibleProvider)
+    assert deepseek.provider_name == "deepseek"
+    assert openai.provider_name == "openai"

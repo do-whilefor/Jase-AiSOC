@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 
 from blue_team.detection_engine.governance import get_rule_governance
 from blue_team.detection_engine.lifecycle import (
@@ -36,6 +36,7 @@ from blue_team.storage.models import (
     TenantRecord,
 )
 from blue_team.storage.rule_lifecycle_repository import import_rule_lifecycle_manifest
+from tests.integration._helpers import truncate_all
 
 DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
 pytestmark = [
@@ -114,11 +115,7 @@ def _trust_key(private_key: Ed25519PrivateKey) -> RuleLifecycleTrustKey:
 
 
 async def _clean(database: Database) -> None:
-    async with database.engine.begin() as connection:
-        await connection.execute(
-            text("DELETE FROM tenants WHERE id IN (:tenant_id, :other_tenant_id)"),
-            {"tenant_id": TENANT, "other_tenant_id": OTHER_TENANT},
-        )
+    await truncate_all(database)
 
 
 async def _seed(database: Database) -> None:

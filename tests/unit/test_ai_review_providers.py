@@ -11,12 +11,15 @@ from pydantic import SecretStr, ValidationError
 
 from blue_team.ai_review.prompting import build_model_request
 from blue_team.ai_review.providers import (
+    PROVIDER_PRESETS,
     CircuitOpenError,
+    DeepSeekProvider,
     GlmProvider,
     KimiProvider,
     ModelProviderError,
     OpenAICompatibleConfig,
     OpenAICompatibleProvider,
+    OpenAIProvider,
     ProviderCallFailed,
     ResilientModelClient,
 )
@@ -317,6 +320,37 @@ async def test_kimi_glm_and_custom_paths_are_not_double_prefixed() -> None:
     assert glm_transport.post_urls == ["https://open.bigmodel.cn/api/paas/v4/chat/completions"]
     assert glm_transport.get_urls == ["https://open.bigmodel.cn/api/paas/v4/models"]
     assert custom_transport.post_urls == ["https://model.example/prefix/v1/chat/completions"]
+
+
+@pytest.mark.asyncio
+async def test_deepseek_and_openai_paths_are_not_double_prefixed() -> None:
+    deepseek_transport = RecordingTransport()
+    openai_transport = RecordingTransport()
+    deepseek = DeepSeekProvider(
+        api_key=SecretStr("deepseek-key"), model_name="deepseek-chat", transport=deepseek_transport
+    )
+    openai = OpenAIProvider(
+        api_key=SecretStr("openai-key"), model_name="gpt-4o-mini", transport=openai_transport
+    )
+
+    await deepseek.complete(_request())
+    await openai.complete(_request())
+    await openai.health()
+
+    # DeepSeek base carries no /v1 prefix, so paths are /chat/completions and /models.
+    assert deepseek_transport.post_urls == ["https://api.deepseek.com/chat/completions"]
+    # OpenAI base already ends in /v1, so paths must NOT repeat it (no /v1/v1/...).
+    assert openai_transport.post_urls == ["https://api.openai.com/v1/chat/completions"]
+    assert openai_transport.get_urls == ["https://api.openai.com/v1/models"]
+
+
+def test_preset_registry_covers_fixed_base_providers() -> None:
+    """Every fixed-base preset uses HTTPS (no loopback-HTTP shortcut)."""
+    assert set(PROVIDER_PRESETS) == {"kimi", "glm", "deepseek", "openai"}
+    for preset in PROVIDER_PRESETS.values():
+        assert preset.base_url.startswith("https://"), preset
+        assert preset.provider_name and preset.completion_path.startswith("/")
+        assert preset.models_path.startswith("/")
 
 
 def test_provider_config_rejects_unsafe_urls_and_masks_secret() -> None:

@@ -26,6 +26,7 @@ from blue_team.storage.detection_repository import (
     list_detections,
 )
 from blue_team.storage.models import AuditLogRecord, DetectionRecord
+from tests.integration._helpers import truncate_all
 
 DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
 pytestmark = [
@@ -105,8 +106,8 @@ async def test_detection_persist_and_idempotent_replay(tmp_path: Path) -> None:
         log_format="json",
     )
     database = Database(DATABASE_URL)
+    await truncate_all(database)
     async with database.engine.begin() as connection:
-        await connection.execute(text("DELETE FROM detections"))
         # Ensure the tenant FK target exists (detections.tenant_id -> tenants).
         await connection.execute(
             text(
@@ -207,7 +208,7 @@ async def test_detection_persist_and_idempotent_replay(tmp_path: Path) -> None:
         )
         fetched = await get_detection(session, tenant_id=TENANT, detection_id=detection_id)
 
-    assert total == 2
-    assert {item.id for item in listed} == {detection_id, other_entity.id}
+    assert total == 3
+    assert {item.id for item in listed} == {detection_id, other_entity.id, next_rule_version.id}
     assert fetched.id == detection_id
     assert fetched.aggregate_metrics["request_count"] == 301

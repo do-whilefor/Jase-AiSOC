@@ -127,7 +127,9 @@ class Settings(BaseSettings):
     ai_review_verify_destructive_action: bool = True
     ai_review_max_verifier_slots: int = Field(default=1, ge=0, le=16)
     ai_review_adjudicator_enabled: bool = True
-    ai_review_provider: Literal["openai_compatible", "kimi", "glm"] = "openai_compatible"
+    ai_review_provider: Literal[
+        "openai_compatible", "kimi", "glm", "deepseek", "openai"
+    ] = "openai_compatible"
     ai_review_base_url: str | None = None
     ai_review_api_key: SecretStr | None = None
     ai_review_model_name: str | None = None
@@ -169,11 +171,25 @@ class Settings(BaseSettings):
     malware_worker_poll_seconds: float = Field(default=2.0, ge=0.1, le=3600.0)
     malware_scan_lease_seconds: int = Field(default=300, ge=30, le=86_400)
     malware_scan_max_attempts: int = Field(default=3, ge=1, le=100)
+    # P9 real YARA-X adapter: optional path to a .yara/.yar file or a directory of
+    # rule files. When set and resolvable, the malware worker compiles the rules
+    # and scans samples; when unset, the YARA-X engine stays unavailable (the
+    # orchestrator records builtin-yara-x as not_configured).
+    malware_yara_x_rules_path: Path | None = None
     malware_sandbox_max_report_bytes: int = Field(
         default=2 * 1024 * 1024,
         ge=1024,
         le=20 * 1024 * 1024,
     )
+    # P9 real ClamAV adapter: connect to a clamd daemon via Unix socket or TCP.
+    # When socket_path is set the adapter connects via Unix socket; when
+    # host+port are set it connects via TCP. When both are unset the ClamAV
+    # engine stays unavailable (the orchestrator records builtin-clamav as
+    # not_configured).
+    malware_clamav_socket_path: Path | None = None
+    malware_clamav_host: str | None = None
+    malware_clamav_port: int | None = None
+    malware_clamav_scan_timeout_seconds: int = Field(default=30, ge=1, le=300)
 
     # P10 on-demand trace building. Candidate retrieval is tenant/time bounded;
     # the deterministic builder then selects only the seed's connected component.

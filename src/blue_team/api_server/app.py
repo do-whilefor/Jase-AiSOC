@@ -22,6 +22,7 @@ from blue_team.api_server.routes import (
     console,
     detections,
     events,
+    freshness,
     health,
     hosts,
     incidents,
@@ -39,6 +40,7 @@ from blue_team.incident_engine.worker import IncidentWorker
 from blue_team.malware_engine import SandboxTrustKey
 from blue_team.normalize.worker import NormalizeWorker
 from blue_team.observability import Metrics, bind_trace_id, configure_logging, get_logger
+from blue_team.observability.freshness import FreshnessMonitor
 from blue_team.observability.logging import reset_trace_id
 from blue_team.storage import (
     Database,
@@ -93,6 +95,7 @@ def create_app(
         normalize_worker: NormalizeWorker | None = None
         detection_worker: DetectionWorker | None = None
         incident_worker: IncidentWorker | None = None
+        freshness_monitor: FreshnessMonitor | None = None
         worker_tasks: list[asyncio.Task[None]] = []
         if resolved_settings.workers_enabled:
             normalize_worker = NormalizeWorker(
@@ -114,9 +117,14 @@ def create_app(
                 poll_seconds=resolved_settings.incident_worker_poll_seconds,
                 lookback_seconds=resolved_settings.incident_lookback_seconds,
             )
+            freshness_monitor = FreshnessMonitor(
+                resolved_database,
+                settings=resolved_settings,
+            )
             worker_tasks.append(normalize_worker.start())
             worker_tasks.append(detection_worker.start())
             worker_tasks.append(incident_worker.start())
+            worker_tasks.append(freshness_monitor.start())
             logger.info("pipeline_workers_started")
         logger.info(
             "api_server_started",
@@ -165,6 +173,7 @@ def create_app(
     app.include_router(responses.router)
     app.include_router(rules.router)
     app.include_router(console.router)
+    app.include_router(freshness.router)
 
     @app.middleware("http")
     async def request_context(

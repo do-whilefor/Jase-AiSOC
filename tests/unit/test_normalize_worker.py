@@ -84,7 +84,9 @@ def _session_returning(records: list[object]) -> AsyncMock:
     execute_result = MagicMock()
     execute_result.scalars.return_value.all.return_value = records
     session.execute = AsyncMock(return_value=execute_result)
-    session.scalar = AsyncMock(side_effect=[None, None, MagicMock()])
+    # Extra None accounts for the enrichment asset-lookup scalar call
+    # (Enricher._asset_enrichment → get_host) added to the normalize pipeline.
+    session.scalar = AsyncMock(side_effect=[None, None, None, MagicMock()])
     session.commit = AsyncMock()
     session.flush = AsyncMock()
     session.add = MagicMock()

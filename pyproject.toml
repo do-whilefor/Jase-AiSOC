@@ -31,6 +31,7 @@ dependencies = [
   "sqlalchemy[asyncio]>=2.0.41,<3",
   "structlog>=25.4,<26",
   "uvicorn>=0.35,<1",
+  "yara-x>=1.19.0",
 ]
 
 [project.scripts]

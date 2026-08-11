@@ -36,7 +36,7 @@
 - `src/blue_team/api_server/routes/events.py`：`GET /api/v1/events`（list + filters）、`GET /api/v1/events/{id}`。
 - `src/blue_team/api_server/routes/detections.py`：`GET /api/v1/detections`（list + filters）、`GET /api/v1/detections/{id}`。
 - `NormalizedEventRead` 领域模型；`DetectionRead` schema 导出。
-- **新鲜度监控后台任务（FreshnessMonitor）尚未实现**，列为后续增量。
+- **新鲜度监控后台任务（FreshnessMonitor）已实现**（见 2026-08-09 增量）：`observability/freshness.py` 按 (tenant, host) 从 active `normalized_events` 计算最新 event_time 滞后、对照 verify/production SLO 分类（fresh/stale/degraded）并以 `ON CONFLICT (tenant_id, host_id)` 幂等 upsert `event_freshness`；`api_server/routes/freshness.py` 暴露租户隔离的 `GET /api/v1/freshness` 与 `/metrics`；接入 api_server lifespan 后台 worker；`tests/unit/test_freshness_monitor.py` + `tests/integration/test_freshness.py` 覆盖分类、幂等与租户隔离。
 
 ## 2026-08-08 审计修正
 
@@ -47,7 +47,9 @@
   tenant/host/agent/boot/source 后再使用 source ID 或内容摘要；双主机单测证明相同 native payload 或
   audit boot+serial 不会互相吞并，同一主机重放仍稳定。真实 PostgreSQL 对照留到 Kali。
 
-## 待完成（stream profile + 新鲜度）
+## 待完成（stream profile）
+
+> 新鲜度（FreshnessMonitor + `/api/v1/freshness` + `/metrics`）已于 2026-08-09 实现（见上文批次 E 与 `observability/freshness.py`），并经 `tests/integration/test_freshness.py` 在真实 PostgreSQL 上验证。剩余仅 stream profile（NATS JetStream）。
 
 ### 批次 D-stream：JetStream
 - 抽 `ingest_gateway/server.py::_events` per-envelope block 到 `ingest_pipeline.py`（`BaseIngestPipeline` 进程内 worker + `StreamIngestPipeline`）；`normalize_status` 由 worker 置 `done`/`failed`；崩溃恢复扫 `pending`。
