@@ -1,6 +1,6 @@
 # P4：网络/Web/SSH 检测与状态分层
 
-状态：首增量、批次 B、version-bound 规则治理与签名生命周期初版已实现；检测 worker 已接入 base 管道。完整质量指标和 PostgreSQL/Kali rollout 重验仍未完成，因此 P4 尚未退出。
+状态：首增量、批次 B、version-bound 规则治理与签名生命周期初版已实现；检测 worker 已接入 base 管道。完整质量指标和 PostgreSQL/Linux VM rollout 重验仍未完成，因此 P4 尚未退出。
 计划来源：项目计划书第 18 章"P4 网络、Web 与认证检测"，§8.2/§8.3 检测场景与状态机，§8.4 规则生命周期，§7.4 证据包与按需检索。
 
 ## 已完成（首增量，2026-08-04）
@@ -12,7 +12,7 @@
 - 新增 3 个 normalize 单测（HTTP extensions、SSH failure 映射、SSH client_ip）。
 
 ### 检测引擎
-- `src/blue_team/detection_engine/`：`base.py`（`Detection` dataclass、`Rule` Protocol、`RuleContext`、`AttackState` enum、`detect_bursts` 贪心非重叠滑窗 helper）；`rule_registry.py`（`@register` 装饰器 + `register_all`）；`engine.py`（`DetectionEngine.evaluate` 按 tenant+host 分组、按 `applicable_event_types` 分发）；`rules/web_recon_scan.py`、`rules/ssh_bruteforce.py`。
+- `src/aisoc/detection_engine/`：`base.py`（`Detection` dataclass、`Rule` Protocol、`RuleContext`、`AttackState` enum、`detect_bursts` 贪心非重叠滑窗 helper）；`rule_registry.py`（`@register` 装饰器 + `register_all`）；`engine.py`（`DetectionEngine.evaluate` 按 tenant+host 分组、按 `applicable_event_types` 分发）；`rules/web_recon_scan.py`、`rules/ssh_bruteforce.py`。
 - `domain/detection.py`：`AttackState`（attack_attempt/blocked/suspected_success/confirmed_compromise/unknown）、`DetectionCategory`、`DetectionStatus`、`DetectionCreate`/`DetectionRead`。
 - `storage/detection_repository.py`：`create_detection` 按 tenant/host/rule/version/entity/window 幂等，并在并发冲突时用 savepoint 返回已有行。
 - Migration `20260804_0006_detection_engine` 建表；`20260808_0007_detection_dedupe_scope` 修复原去重键遗漏 host/entity、导致跨主机或跨来源告警被吞掉的问题。
@@ -34,11 +34,11 @@
 - `scripts/replay_detection.py` 不读取本机 `.env`，并校验数据集哈希、DLQ、攻击状态、最小/最大命中数和意外类别。
 
 ### 实时管道接入（2026-08-04 补完）
-- `DetectionWorker`（`src/blue_team/detection_engine/worker.py`）：轮询 `normalized_events` active（lookback ≥ 2×突发窗口且覆盖 P5 chain window）→ 重建 `SecurityEvent` → `DetectionEngine.evaluate` → `create_detection`（幂等）。
-- `NormalizeWorker`（`src/blue_team/normalize/worker.py`）：轮询 `agent_events.normalize_status='pending'` → normalize → `normalized_events`。
-- 两个 worker 作为 `blue-team-api` lifespan 后台任务运行；`blue-team-process` CLI 离线推进。
+- `DetectionWorker`（`src/aisoc/detection_engine/worker.py`）：轮询 `normalized_events` active（lookback ≥ 2×突发窗口且覆盖 P5 chain window）→ 重建 `SecurityEvent` → `DetectionEngine.evaluate` → `create_detection`（幂等）。
+- `NormalizeWorker`（`src/aisoc/normalize/worker.py`）：轮询 `agent_events.normalize_status='pending'` → normalize → `normalized_events`。
+- 两个 worker 作为 `aisoc-api` lifespan 后台任务运行；`aisoc-process` CLI 离线推进。
 - 端到端集成测试 `tests/integration/test_pipeline_e2e.py`：301 事件经 normalize → detect → `/api/v1/detections` 可查，幂等重放不重复。
-- 检测已在 PostgreSQL 集成管道测试中覆盖，但本轮按用户要求未启动 Docker/PostgreSQL；Kali 重验前只视为已有测试证据，不宣称当前环境再次通过。
+- 检测已在 PostgreSQL 集成管道测试中覆盖，但本轮按用户要求未启动 Docker/PostgreSQL；Linux VM 重验前只视为已有测试证据，不宣称当前环境再次通过。
 
 ## 退出条件对照（§18.1：核心 Web 扫描和 SSH 爆破达到 MVP 指标；正常基线误报可解释）
 
@@ -52,7 +52,7 @@
 - `suspected_success` 已有 Web 进程派生 shell、下载执行、外联和持久化的 P5 离线规则；仍需真实 Collector 与请求↔PID 关联来闭合影响链。
 - ATT&CK 技术映射（T1190/T1110 等）、owner、测试数据集、预期误报、抑制条件和回滚方案已进入 version-bound catalog。
 - Ed25519 tenant manifest 已实现 Draft→Shadow→Canary→Released、逐级 rollback、Deprecated 和新版本 upgrade；sequence、previous hash、catalog、完整 dataset evidence 与 Canary Host tenant membership 均 fail closed。Shadow/非 Canary Host 不进入 detection/Incident；Canary/Released detection 绑定 stage+manifest hash。
-- 真实 PostgreSQL 双租户并发 import/replay/rollback、过期/corruption 故障注入与持续 rollout 观察仍待 Kali。
+- 真实 PostgreSQL 双租户并发 import/replay/rollback、过期/corruption 故障注入与持续 rollout 观察仍待 Linux VM。
 
 ### 批次 D：检测质量度量
 - Precision/Recall/每主机每天误报数度量（§8.4）。
@@ -62,4 +62,4 @@
 ## 尚未完成边界
 
 - Incident 关联（P6）、AI 研判（P7+）、响应执行（P11）。
-- eBPF/auditd 主动采集、真实 Falco 宿主接入和跨发行版验证属于 P5/Kali 门禁。
+- eBPF/auditd 主动采集、真实 Falco 宿主接入和跨发行版验证属于 P5/Linux VM 门禁。

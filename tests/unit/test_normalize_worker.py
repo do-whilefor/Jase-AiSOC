@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from blue_team.agent_core.contracts import AgentEnvelope, EventPriority
-from blue_team.domain.security_event import SecurityEvent
-from blue_team.normalize.worker import NormalizeWorker
+from aisoc.agent_core.contracts import AgentEnvelope, EventPriority
+from aisoc.domain.security_event import SecurityEvent
+from aisoc.normalize.worker import NormalizeWorker
 
 
 def _envelope_bytes(event_id: str = "evt_01JWORKER001") -> bytes:
@@ -134,7 +134,7 @@ async def test_normalize_worker_records_object_store_failure_in_dlq() -> None:
     database = _mock_database_with_session(session)
     dlq = AsyncMock()
 
-    with patch("blue_team.normalize.worker.insert_dlq", dlq):
+    with patch("aisoc.normalize.worker.insert_dlq", dlq):
         worker = _StatusSpy(database, object_store, batch_size=10)
         processed = await worker.run_once()
 
@@ -157,9 +157,9 @@ async def test_normalize_worker_marks_event_older_than_watermark_as_late() -> No
     persist_watermark = AsyncMock()
 
     with (
-        patch("blue_team.normalize.worker.get_watermark", get_current),
-        patch("blue_team.normalize.worker.insert_normalized_event", insert_event),
-        patch("blue_team.normalize.worker.advance_watermark", persist_watermark),
+        patch("aisoc.normalize.worker.get_watermark", get_current),
+        patch("aisoc.normalize.worker.insert_normalized_event", insert_event),
+        patch("aisoc.normalize.worker.advance_watermark", persist_watermark),
     ):
         worker = _StatusSpy(
             database,

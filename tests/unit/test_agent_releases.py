@@ -10,7 +10,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import ValidationError
 
-from blue_team.agent_core import (
+from aisoc.agent_core import (
     AppliedRelease,
     ArtifactKind,
     ReleaseDecisionStatus,
@@ -139,9 +139,8 @@ def test_signed_release_is_verified_recorded_and_loaded_after_restart(
         release_verifier.verify(signed, PAYLOAD, restarted, now=NOW).status
         is ReleaseDecisionStatus.ALREADY_APPLIED
     )
-    if os.name != "nt":
-        assert stat.S_IMODE(store.root.stat().st_mode) == 0o700
-        assert stat.S_IMODE(store.state_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(store.root.stat().st_mode) == 0o700
+    assert stat.S_IMODE(store.state_path.stat().st_mode) == 0o600
 
 
 def test_payload_signature_manifest_and_target_tampering_are_rejected() -> None:
@@ -448,10 +447,7 @@ def test_release_state_store_rejects_non_regular_and_linked_state(tmp_path: Path
     store.state_path.rmdir()
     target = tmp_path / "attacker-state.json"
     target.write_text(ReleaseState().model_dump_json(), encoding="utf-8")
-    try:
-        store.state_path.symlink_to(target)
-    except OSError:
-        pytest.skip("this Windows account cannot create symbolic links")
+    store.state_path.symlink_to(target)
     with pytest.raises(ReleaseStateError, match="private regular file"):
         store.load()
 
@@ -460,10 +456,7 @@ def test_release_state_store_rejects_a_symlink_root(tmp_path: Path) -> None:
     real_root = tmp_path / "real-state"
     real_root.mkdir()
     linked_root = tmp_path / "linked-state"
-    try:
-        linked_root.symlink_to(real_root, target_is_directory=True)
-    except OSError:
-        pytest.skip("this Windows account cannot create symbolic links")
+    linked_root.symlink_to(real_root, target_is_directory=True)
 
     with pytest.raises(ReleaseStateError, match="private directory"):
         ReleaseStateStore(linked_root).load()

@@ -4,13 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from blue_team.platform import (
+from aisoc.platform import (
     CapabilityLevel,
     CgroupVersion,
     CollectorState,
     InitSystem,
     LinuxPlatformAdapter,
     LinuxProbePaths,
+    PackageManager,
     parse_os_release,
 )
 
@@ -25,6 +26,12 @@ def probe_paths(root: Path) -> LinuxProbePaths:
         lsm_list=root / "sys" / "kernel" / "security" / "lsm",
         journal_socket=root / "run" / "systemd" / "journal" / "socket",
         auditctl_candidates=(root / "sbin" / "auditctl",),
+        apt_candidates=(root / "usr" / "bin" / "apt-get",),
+        dnf_candidates=(root / "usr" / "bin" / "dnf",),
+        yum_candidates=(root / "usr" / "bin" / "yum",),
+        zypper_candidates=(root / "usr" / "bin" / "zypper",),
+        pacman_candidates=(root / "usr" / "bin" / "pacman",),
+        apk_candidates=(root / "sbin" / "apk",),
     )
 
 
@@ -66,6 +73,7 @@ def test_linux_probe_reports_facts_and_conservative_degradation(tmp_path: Path) 
     write(paths.lsm_list, "lockdown,capability,apparmor\n")
     write(paths.journal_socket)
     write(paths.auditctl_candidates[0])
+    write(paths.apt_candidates[0])
 
     adapter = LinuxPlatformAdapter(
         paths,
@@ -79,6 +87,7 @@ def test_linux_probe_reports_facts_and_conservative_degradation(tmp_path: Path) 
     assert report.platform.distro_id == "ubuntu"
     assert report.platform.distro_like == ("debian",)
     assert report.platform.init_system is InitSystem.SYSTEMD
+    assert report.platform.package_manager is PackageManager.APT
     assert report.platform.btf_available is True
     assert report.platform.cgroup_version is CgroupVersion.V2
     assert report.platform.security_modules == ("lockdown", "capability", "apparmor")

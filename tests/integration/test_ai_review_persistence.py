@@ -1,7 +1,7 @@
 """P8 real-PostgreSQL review, verification, conflict, and tenant gate.
 
 This remains skipped in the non-Docker development pass and is intended for
-the later Kali/PostgreSQL validation environment.
+a Linux/PostgreSQL integration environment.
 """
 
 from __future__ import annotations
@@ -12,14 +12,14 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import func, select
 
-from blue_team.ai_review import (
+from aisoc.ai_review import (
     AiReviewGate,
     SqlReadOnlyToolDataSource,
     ToolAuthorizationError,
     ToolGateway,
     build_evidence_package,
 )
-from blue_team.domain import (
+from aisoc.domain import (
     AdjudicationReport,
     AdjudicationResolution,
     AiReviewPolicy,
@@ -50,13 +50,13 @@ from blue_team.domain import (
     VerifierRecommendation,
     VerifierReport,
 )
-from blue_team.errors import NotFoundError
-from blue_team.storage import Database
-from blue_team.storage.ai_review_repository import (
+from aisoc.errors import NotFoundError
+from aisoc.storage import Database
+from aisoc.storage.ai_review_repository import (
     get_ai_review_outcome,
     persist_ai_review_outcome,
 )
-from blue_team.storage.models import (
+from aisoc.storage.models import (
     AgentEventRecord,
     AiAdjudicationRecord,
     AiAdjudicationResolutionRecord,
@@ -77,7 +77,7 @@ from blue_team.storage.models import (
 )
 from tests.integration._helpers import truncate_all
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(DATABASE_URL is None, reason="PostgreSQL integration URL is not set"),

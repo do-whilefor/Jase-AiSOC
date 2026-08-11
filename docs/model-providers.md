@@ -5,21 +5,21 @@ DeepSeek、OpenAI 官方与自定义 OpenAI 兼容端点（含本地 vLLM）配�
 
 ## 配置入口
 
-所有 Provider 共用三个环境变量（前缀 `BLUE_TEAM_AI_REVIEW_`）：
+所有 Provider 共用三个环境变量（前缀 `AISOC_AI_REVIEW_`）：
 
 | 环境变量 | 说明 |
 |---|---|
-| `BLUE_TEAM_AI_REVIEW_PROVIDER` | `kimi` / `glm` / `deepseek` / `openai` / `openai_compatible` |
-| `BLUE_TEAM_AI_REVIEW_API_KEY` | Provider API key（SecretStr，**永不提交 git 或写入 `.env.example`**） |
-| `BLUE_TEAM_AI_REVIEW_MODEL_NAME` | 模型名，如 `moonshot-v1-32k` |
+| `AISOC_AI_REVIEW_PROVIDER` | `kimi` / `glm` / `deepseek` / `openai` / `openai_compatible` |
+| `AISOC_AI_REVIEW_API_KEY` | Provider API key（SecretStr，**永不提交 git 或写入 `.env.example`**） |
+| `AISOC_AI_REVIEW_MODEL_NAME` | 模型名，如 `moonshot-v1-32k` |
 
 固定 base 的预设 Provider（kimi/glm/deepseek/openai）只需上述三项；`openai_compatible`
-还需 `BLUE_TEAM_AI_REVIEW_BASE_URL`。默认关闭：设 `BLUE_TEAM_AI_REVIEW_ENABLED=true`
+还需 `AISOC_AI_REVIEW_BASE_URL`。默认关闭：设 `AISOC_AI_REVIEW_ENABLED=true`
 启用。完整预算/熔断/审批项见 `.env.example`。
 
 ## Provider 预设
 
-固定 base 的 Provider 由 `src/blue_team/ai_review/providers/openai_compatible.py` 的
+固定 base 的 Provider 由 `src/aisoc/ai_review/providers/openai_compatible.py` 的
 `PROVIDER_PRESETS` 集中定义；新增固定 base Provider = 一条预设 + 一个瘦子类。
 
 | Provider | 固定 base | 推荐模型 | API key 获取 |
@@ -33,29 +33,29 @@ DeepSeek、OpenAI 官方与自定义 OpenAI 兼容端点（含本地 vLLM）配�
 ### 示例：接入 DeepSeek
 
 ```bash
-BLUE_TEAM_AI_REVIEW_ENABLED=true
-BLUE_TEAM_AI_REVIEW_PROVIDER=deepseek
-BLUE_TEAM_AI_REVIEW_MODEL_NAME=deepseek-chat
-BLUE_TEAM_AI_REVIEW_API_KEY=sk-从-secret-manager-加载
+AISOC_AI_REVIEW_ENABLED=true
+AISOC_AI_REVIEW_PROVIDER=deepseek
+AISOC_AI_REVIEW_MODEL_NAME=deepseek-chat
+AISOC_AI_REVIEW_API_KEY=sk-从-secret-manager-加载
 ```
 
 ### 示例：接入 OpenAI 官方
 
 ```bash
-BLUE_TEAM_AI_REVIEW_ENABLED=true
-BLUE_TEAM_AI_REVIEW_PROVIDER=openai
-BLUE_TEAM_AI_REVIEW_MODEL_NAME=gpt-4o-mini
-BLUE_TEAM_AI_REVIEW_API_KEY=sk-从-secret-manager-加载
+AISOC_AI_REVIEW_ENABLED=true
+AISOC_AI_REVIEW_PROVIDER=openai
+AISOC_AI_REVIEW_MODEL_NAME=gpt-4o-mini
+AISOC_AI_REVIEW_API_KEY=sk-从-secret-manager-加载
 ```
 
 ### 示例：本地 vLLM（OpenAI 兼容）
 
 ```bash
-BLUE_TEAM_AI_REVIEW_ENABLED=true
-BLUE_TEAM_AI_REVIEW_PROVIDER=openai_compatible
-BLUE_TEAM_AI_REVIEW_BASE_URL=http://127.0.0.1:8000/v1
-BLUE_TEAM_AI_REVIEW_MODEL_NAME=Qwen2.5-7B-Instruct
-# BLUE_TEAM_AI_REVIEW_API_KEY 可留空或填 vLLM 配置的占位 key
+AISOC_AI_REVIEW_ENABLED=true
+AISOC_AI_REVIEW_PROVIDER=openai_compatible
+AISOC_AI_REVIEW_BASE_URL=http://127.0.0.1:8000/v1
+AISOC_AI_REVIEW_MODEL_NAME=Qwen2.5-7B-Instruct
+# AISOC_AI_REVIEW_API_KEY 可留空或填 vLLM 配置的占位 key
 ```
 
 > `openai_compatible` 是唯一允许 `http://` 的分支，且**仅限 loopback**
@@ -78,7 +78,7 @@ BLUE_TEAM_AI_REVIEW_MODEL_NAME=Qwen2.5-7B-Instruct
 
 ## 运维
 
-- **key 轮换**：改 `BLUE_TEAM_AI_REVIEW_API_KEY` 后重启进程即可；key 不落库，无迁移。
+- **key 轮换**：改 `AISOC_AI_REVIEW_API_KEY` 后重启进程即可；key 不落库，无迁移。
 - **健康检查**：`GET /api/v1/models/providers` 与控制台模型运营视图显示 `api_key_state`
   与 Provider 健康（`health_status`）；不可用时不阻塞确定性检测主链路。
 - **降级**：模型不可用/预算耗尽时 Review Gate 自动降级为 `Deterministic Only`，

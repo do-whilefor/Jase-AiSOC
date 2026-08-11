@@ -10,25 +10,25 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
 from sqlalchemy import func, select, text
 
-from blue_team.agent_core import (
+from aisoc.agent_core import (
     AgentCertificateIdentity,
     LocalCertificateAuthority,
     create_agent_csr,
     sign_rotation_challenge,
     validate_agent_certificate,
 )
-from blue_team.api_server import create_app
-from blue_team.config import Settings
-from blue_team.errors import AuthenticationError, ConflictError
-from blue_team.storage import Database, agent_identity
-from blue_team.storage.agent_identity import IssuedSessionLease
-from blue_team.storage.models import (
+from aisoc.api_server import create_app
+from aisoc.config import Settings
+from aisoc.errors import AuthenticationError, ConflictError
+from aisoc.storage import Database, agent_identity
+from aisoc.storage.agent_identity import IssuedSessionLease
+from aisoc.storage.models import (
     AgentCertificateRecord,
     AgentIdentityRecord,
     AgentRegistrationTokenRecord,
 )
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(DATABASE_URL is None, reason="PostgreSQL integration URL is not set"),
@@ -105,7 +105,7 @@ async def test_agent_enrollment_rotation_revocation_and_clone_lease(tmp_path: Pa
         forged_csr = create_agent_csr(
             first_key,
             common_name="forged-admin-agent",
-            claimed_san_uris=("spiffe://blue-team.local/tenant/ten_other/agent/admin",),
+            claimed_san_uris=("spiffe://aisoc.local/tenant/ten_other/agent/admin",),
         )
         invalid_csr = await client.post(
             "/api/v1/agent-enrollments",

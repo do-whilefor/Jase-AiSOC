@@ -9,7 +9,7 @@ version-bound 规则治理目录与 tenant-scoped rule/intelligence 只读 API�
 控制台中基于固定 seed Incident 的 current P10 跨主机攻击溯源、规则运营、无 secret 模型运营、
 auditor/admin 系统运营真相视图、响应详情、审批/拒绝、执行排队和回滚请求工作流。
 
-本阶段仍不能描述为“响应执行已完成”：仓库已有独立 `blue-team-response-worker` 和 nftables/
+本阶段仍不能描述为“响应执行已完成”：仓库已有独立 `aisoc-response-worker` 和 nftables/
 firewalld 临时封禁、普通文件隔离、精确 allowlist 账号禁用的原生初版，但它被限制为读取本机私有
 Agent config 的 `local_single_node` profile，不是多主机远程执行器；三类真实回滚证据仍为 0。
 控制台当前覆盖总览、Incident、资产、攻击溯源、恶意文件、模型审核、规则与情报、响应队列、系统运营九个视图，并已实现当前 Incident
@@ -26,7 +26,7 @@ validation 和带金标的 precision/recall/agreement/FPR 均明确不可用。�
 age、物理容量、依赖探测、deployment inventory、human user directory、签名升级编排/自动回滚和备份恢复
 证据均明确不可用。对象存储原始字节交互尚未实现。
 Webhook 当前是非 Docker 初版，尚未连接真实接收端或运行
-PostgreSQL/Kali 故障注入，因此不能视为运营集成已验收。
+PostgreSQL/Linux VM 故障注入，因此不能视为运营集成已验收。
 
 ## 信任与执行边界
 
@@ -113,8 +113,8 @@ tenant admin -> Ed25519 manifest -> tenant/rule/version/catalog/dataset/sequence
   allowlist、最低 UID，显式拒绝 root，并以 getent/passwd 状态验证 shell/lock rollback checkpoint。
 - 写入已尝试后遇到 timeout/output/非零状态或 post-check 失败统一记录 `verification_failed`；结果落库
   失败不会再伪造成 action 已知失败，而是保留租约等待过期恢复为未知状态。
-- 以上仍是 Windows 上的 stateful fake backend/文件协议测试；没有执行任何 nft、usermod、mv/chown，
-  不能替代 Kali 原生故障注入。远程 Host 动作必须另建认证的 Agent-side 固定通道。
+- 以上仍是本地 stateful fake backend/文件协议测试；没有执行任何 nft、usermod、mv/chown，
+  不能替代 Linux 原生故障注入。远程 Host 动作必须另建认证的 Agent-side 固定通道。
 
 ### 通知投递
 
@@ -122,7 +122,7 @@ tenant admin -> Ed25519 manifest -> tenant/rule/version/catalog/dataset/sequence
   append-only attempt metadata；领取使用 `FOR UPDATE SKIP LOCKED`。
 - 过期投递租约不会在同一 worker cycle 立即重放；先标记失败 attempt，再按有界指数退避重试，
   达到上限或遇到永久 HTTP/redirect 拒绝时进入 `dead_letter`。
-- `blue-team-notification-worker` 在短事务内 claim/finalize，在事务外发送 HTTP；默认关闭且必须同时
+- `aisoc-notification-worker` 在短事务内 claim/finalize，在事务外发送 HTTP；默认关闭且必须同时
   配置 32-byte base64url 独立签名 key、固定 URL 和精确 host allowlist 才能启动。
 - 当前仅有 fake/loopback HTTP 和仓储单元证据；`tests/integration/test_notification_persistence.py`
   已提交但等待真实 PostgreSQL migration 0014。
@@ -220,14 +220,14 @@ tenant admin -> Ed25519 manifest -> tenant/rule/version/catalog/dataset/sequence
   6 项 production worker 测试覆盖 SSR/内存凭据、Origin/nonce/ID 拒绝、固定
   Incident/attack-trace/malware/rule/response path/body、query/path substitution、redirect 和超大响应；production dependency
   audit 为 0。
-- 本轮没有启动 Docker、PostgreSQL、Kali 原生命令、Agent 响应后端或站点发布。
+- 本轮没有启动 Docker、PostgreSQL、Linux 原生命令、Agent 响应后端或站点发布。
 
 ## 未关闭门禁
 
-1. 在隔离的 Kali 单节点 profile 部署 `blue-team-response-worker`，验证预置 nftables/firewalld、
+1. 在隔离的 Linux 单节点 profile 部署 `aisoc-response-worker`，验证预置 nftables/firewalld、
    文件隔离和专用测试账号三类 Adapter；对生产多主机 profile，另行实现认证的 Agent-side 固定
    动作通道，中央服务不得代执行远端 Host 动作。
-2. 在 Kali 上验证 R2 TTL、执行后健康检查和可重复回滚；对 PID 复用、inode/path replacement、
+2. 在 Linux VM 上验证 R2 TTL、执行后健康检查和可重复回滚；对 PID 复用、inode/path replacement、
    账号状态变化、nft set 缺失、进程崩溃、租约过期和重复请求做故障注入。
 3. 在真实 PostgreSQL 运行迁移 0013-0016 与 `tests/integration/test_response_persistence.py`、
    `tests/integration/test_notification_persistence.py`、`tests/integration/test_ingest_mtls.py`，使用两个租户、
@@ -246,7 +246,7 @@ tenant admin -> Ed25519 manifest -> tenant/rule/version/catalog/dataset/sequence
    CSRF/Origin、幂等和服务端 RBAC。
 5. 将 notification worker 连接真实 HTTPS 接收端与 PostgreSQL，验证双 worker 并发 claim、DNS/
    证书/超时/429/5xx/redirect/超大响应、签名轮换、重放幂等、DLQ 运营和敏感字段最小化。
-6. 在 Kali 以 HTTPS/反向代理连接控制台与 API，验证错误令牌、过期/吊销角色、跨租户对象、current
+6. 在 Linux VM 以 HTTPS/反向代理连接控制台与 API，验证错误令牌、过期/吊销角色、跨租户对象、current
    trace 并发 revision、corrupt snapshot、各 trace section limit+1、超大/慢响应、重定向和控制面故障；
    目前的 Mock、静态/SSR 测试不能替代真实 PostgreSQL 锁、双租户和浏览器动态边界。
 7. 完成至少三类动作的真实可验证回滚后，才能评估 P11 退出条件；P12 仍未开始。

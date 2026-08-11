@@ -5,7 +5,7 @@ Mirrors the assertions of tests/integration/test_ingest_mtls.py but packaged as 
 standalone smoke harness (JSON summary, POSIX UID 10001 guard) so it can run inside
 a P2 container against the compose PostgreSQL. Run with ``docker compose -f
 deploy/compose/p2.yml up -d postgres migrate`` and then, with
-``BLUE_TEAM_TEST_DATABASE_URL`` pointing at the compose PostgreSQL, execute::
+``AISOC_TEST_DATABASE_URL`` pointing at the compose PostgreSQL, execute::
 
     .venv/Scripts/python tests/smoke/linux_ingest_e2e_smoke.py
 
@@ -27,28 +27,28 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import func, select, text
 
-from blue_team.agent_core.contracts import (
+from aisoc.agent_core.contracts import (
     AgentEnvelope,
     AgentHeartbeat,
     EventPriority,
     QueueTelemetry,
     build_event_batch,
 )
-from blue_team.agent_core.identity import LocalCertificateAuthority, create_agent_csr
-from blue_team.config import Settings
-from blue_team.domain import HostCreate, SecurityEvent, TenantCreate
-from blue_team.ingest_gateway.server import IngestServer
-from blue_team.platform import (
+from aisoc.agent_core.identity import LocalCertificateAuthority, create_agent_csr
+from aisoc.config import Settings
+from aisoc.domain import HostCreate, SecurityEvent, TenantCreate
+from aisoc.ingest_gateway.server import IngestServer
+from aisoc.platform import (
     CapabilityLevel,
     CapabilityReport,
     CollectorCapability,
     CollectorState,
     PlatformInfo,
 )
-from blue_team.storage import Database, LocalObjectStore, agent_identity, repositories
-from blue_team.storage.models import AgentEventRecord, AgentHeartbeatRecord, AgentSessionRecord
+from aisoc.storage import Database, LocalObjectStore, agent_identity, repositories
+from aisoc.storage.models import AgentEventRecord, AgentHeartbeatRecord, AgentSessionRecord
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 TENANT_NAME = "p2-ingest-smoke"
 HOSTNAME = "ingest-smoke-host"
 AGENT_ID = "agent_ingest_smoke01"
@@ -105,14 +105,14 @@ def _client_ssl_context(cert_path: Path, key_path: Path, ca_pem: str) -> ssl.SSL
     context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
     context.load_cert_chain(certfile=str(cert_path), keyfile=str(key_path))
     context.load_verify_locations(cadata=ca_pem)
-    context.check_hostname = False
+    context.check_hostname = True
     context.verify_mode = ssl.CERT_REQUIRED
     return context
 
 
 async def run_smoke(tmp_path: Path) -> dict[str, object]:
     if DATABASE_URL is None:
-        raise RuntimeError("BLUE_TEAM_TEST_DATABASE_URL must be set")
+        raise RuntimeError("AISOC_TEST_DATABASE_URL must be set")
     database = Database(DATABASE_URL)
     async with database.engine.begin() as connection:
         await connection.execute(
@@ -178,7 +178,8 @@ async def run_smoke(tmp_path: Path) -> dict[str, object]:
         object_store_root=tmp_path / "evidence",
         agent_ca_certificate_path=ca_cert_path,
         agent_ca_private_key_path=ca_key_path,
-        ingest_host="127.0.0.1",
+        ingest_host="0.0.0.0",
+        ingest_server_name="127.0.0.1",
         ingest_port=0,
         ingest_session_lease_seconds=120,
     )
@@ -191,7 +192,12 @@ async def run_smoke(tmp_path: Path) -> dict[str, object]:
 
     summary: dict[str, object] = {"port": port, "tenant": tenant.id, "host": host.id}
     try:
-        async with httpx.AsyncClient(verify=client_context, timeout=10.0) as client:
+        async with httpx.AsyncClient(
+            verify=client_context,
+            timeout=10.0,
+            trust_env=False,
+            follow_redirects=False,
+        ) as client:
             heartbeat = _heartbeat(tenant.id, host.id)
             heartbeat_response = await client.post(
                 f"{base_url}/v1/agent/heartbeat",
@@ -258,12 +264,12 @@ async def run_smoke(tmp_path: Path) -> dict[str, object]:
 
 
 def main() -> int:
-    if os.name == "posix" and hasattr(os, "getuid") and os.getuid() != 10001:
+    if os.getuid() != 10001:
         print(
             json.dumps({"status": "skipped", "reason": "this smoke targets UID 10001 containers"})
         )
         return 0
-    tmp_path = Path(os.environ.get("BLUE_TEAM_SMOKE_TMP", ".smoke-ingest"))
+    tmp_path = Path(os.environ.get("AISOC_SMOKE_TMP", ".smoke-ingest"))
     tmp_path.mkdir(parents=True, exist_ok=True)
     try:
         summary = asyncio.run(run_smoke(tmp_path))

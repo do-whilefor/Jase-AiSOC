@@ -26,14 +26,14 @@ function dispatch(worker, request) {
   );
 }
 
-test("server-renders the Blue Team operator console", async () => {
+test("server-renders the AI-SOC operator console", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Blue Team Sentinel \| 安全运营控制台<\/title>/i);
-  assert.match(html, /Blue Team Sentinel/);
+  assert.match(html, /<title>AI-SOC \| 安全运营控制台<\/title>/i);
+  assert.match(html, /AI-SOC/);
   assert.match(html, /安全运营总览/);
   assert.match(html, /连接租户控制面/);
   assert.match(html, /事件研判/);
@@ -65,7 +65,7 @@ test("keeps operator credentials memory-only and constrains the control-plane pr
 
   assert.match(client, /useState\(""\)/);
   assert.match(client, /authorization: `Bearer \$\{credential\}`/);
-  assert.match(client, /x-blue-team-csrf/);
+  assert.match(client, /x-aisoc-csrf/);
   assert.match(client, /console-execute-\$\{crypto\.randomUUID\(\)\}/);
   assert.match(client, /console-rollback-\$\{crypto\.randomUUID\(\)\}/);
   assert.doesNotMatch(client, /localStorage|sessionStorage|document\.cookie/);
@@ -90,9 +90,9 @@ test("keeps operator credentials memory-only and constrains the control-plane pr
   assert.match(sharedProxy, /SAMPLE_ID_PATTERN = \/\^smp_/);
   assert.match(sharedProxy, /request\.headers\.get\("origin"\)/);
   assert.match(sharedProxy, /request\.headers\.get\("referer"\)/);
-  assert.match(sharedProxy, /x-blue-team-csrf/);
+  assert.match(sharedProxy, /x-aisoc-csrf/);
   assert.match(sharedProxy, /crypto\.subtle\.verify/);
-  assert.match(sharedProxy, /BLUE_TEAM_CONSOLE_CSRF_SECRET/);
+  assert.match(sharedProxy, /AISOC_CONSOLE_CSRF_SECRET/);
   assert.match(sharedProxy, /redirect: "manual"/);
   assert.match(sharedProxy, /MAX_REQUEST_BYTES/);
   assert.match(sharedProxy, /MAX_RESPONSE_BYTES/);
@@ -118,7 +118,7 @@ test("keeps operator credentials memory-only and constrains the control-plane pr
   assert.match(rollbackRoute, /\/rollback/);
   assert.match(page, /OperationsConsole/);
   assert.match(layout, /lang="zh-CN"/);
-  assert.match(packageJson, /"name": "blue-team-operator-console"/);
+  assert.match(packageJson, /"name": "aisoc-operator-console"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   assert.doesNotMatch(client, /dangerouslySetInnerHTML/);
   assert.match(client, /self_reported_heartbeat/);
@@ -133,9 +133,9 @@ test("keeps operator credentials memory-only and constrains the control-plane pr
 test("rejects malformed IDs and write requests without same-origin proof before proxying", async () => {
   const worker = await loadWorker("write-rejections");
   const originalFetch = globalThis.fetch;
-  const previousCsrfSecret = process.env.BLUE_TEAM_CONSOLE_CSRF_SECRET;
+  const previousCsrfSecret = process.env.AISOC_CONSOLE_CSRF_SECRET;
   let upstreamCalls = 0;
-  process.env.BLUE_TEAM_CONSOLE_CSRF_SECRET = "test-console-csrf-secret-with-at-least-32-bytes";
+  process.env.AISOC_CONSOLE_CSRF_SECRET = "test-console-csrf-secret-with-at-least-32-bytes";
   globalThis.fetch = async () => {
     upstreamCalls += 1;
     return Response.json({ unexpected: true });
@@ -188,19 +188,19 @@ test("rejects malformed IDs and write requests without same-origin proof before 
     assert.equal(upstreamCalls, 0);
   } finally {
     globalThis.fetch = originalFetch;
-    if (previousCsrfSecret === undefined) delete process.env.BLUE_TEAM_CONSOLE_CSRF_SECRET;
-    else process.env.BLUE_TEAM_CONSOLE_CSRF_SECRET = previousCsrfSecret;
+    if (previousCsrfSecret === undefined) delete process.env.AISOC_CONSOLE_CSRF_SECRET;
+    else process.env.AISOC_CONSOLE_CSRF_SECRET = previousCsrfSecret;
   }
 });
 
 test("forwards only fixed response operations with bounded JSON and no redirects", async () => {
   const worker = await loadWorker("fixed-response-operations");
   const originalFetch = globalThis.fetch;
-  const previousBaseUrl = process.env.BLUE_TEAM_API_BASE_URL;
-  const previousCsrfSecret = process.env.BLUE_TEAM_CONSOLE_CSRF_SECRET;
+  const previousBaseUrl = process.env.AISOC_API_BASE_URL;
+  const previousCsrfSecret = process.env.AISOC_CONSOLE_CSRF_SECRET;
   const observed = [];
-  process.env.BLUE_TEAM_API_BASE_URL = "https://control.example";
-  process.env.BLUE_TEAM_CONSOLE_CSRF_SECRET = "test-console-csrf-secret-with-at-least-32-bytes";
+  process.env.AISOC_API_BASE_URL = "https://control.example";
+  process.env.AISOC_CONSOLE_CSRF_SECRET = "test-console-csrf-secret-with-at-least-32-bytes";
   globalThis.fetch = async (input, init) => {
     observed.push({
       url: String(input),
@@ -235,19 +235,19 @@ test("forwards only fixed response operations with bounded JSON and no redirects
     assert.deepEqual(observed[2].body, { reason: "containment no longer required", idempotency_key: "console-rollback-safe-01" });
   } finally {
     globalThis.fetch = originalFetch;
-    if (previousBaseUrl === undefined) delete process.env.BLUE_TEAM_API_BASE_URL;
-    else process.env.BLUE_TEAM_API_BASE_URL = previousBaseUrl;
-    if (previousCsrfSecret === undefined) delete process.env.BLUE_TEAM_CONSOLE_CSRF_SECRET;
-    else process.env.BLUE_TEAM_CONSOLE_CSRF_SECRET = previousCsrfSecret;
+    if (previousBaseUrl === undefined) delete process.env.AISOC_API_BASE_URL;
+    else process.env.AISOC_API_BASE_URL = previousBaseUrl;
+    if (previousCsrfSecret === undefined) delete process.env.AISOC_CONSOLE_CSRF_SECRET;
+    else process.env.AISOC_CONSOLE_CSRF_SECRET = previousCsrfSecret;
   }
 });
 
 test("forwards only exact Incident, evidence-member, trace, malware, model, rule, and system operations paths", async () => {
   const worker = await loadWorker("fixed-incident-reads");
   const originalFetch = globalThis.fetch;
-  const previousBaseUrl = process.env.BLUE_TEAM_API_BASE_URL;
+  const previousBaseUrl = process.env.AISOC_API_BASE_URL;
   const observed = [];
-  process.env.BLUE_TEAM_API_BASE_URL = "https://control.example";
+  process.env.AISOC_API_BASE_URL = "https://control.example";
   globalThis.fetch = async (input, init) => {
     observed.push({ url: String(input), method: init?.method, redirect: init?.redirect });
     return Response.json({ bounded: true });
@@ -342,16 +342,16 @@ test("forwards only exact Incident, evidence-member, trace, malware, model, rule
     assert.equal(observed.length, 7);
   } finally {
     globalThis.fetch = originalFetch;
-    if (previousBaseUrl === undefined) delete process.env.BLUE_TEAM_API_BASE_URL;
-    else process.env.BLUE_TEAM_API_BASE_URL = previousBaseUrl;
+    if (previousBaseUrl === undefined) delete process.env.AISOC_API_BASE_URL;
+    else process.env.AISOC_API_BASE_URL = previousBaseUrl;
   }
 });
 
 test("fails closed on upstream redirects and oversized responses", async () => {
   const worker = await loadWorker("upstream-fail-closed");
   const originalFetch = globalThis.fetch;
-  const previousBaseUrl = process.env.BLUE_TEAM_API_BASE_URL;
-  process.env.BLUE_TEAM_API_BASE_URL = "https://control.example";
+  const previousBaseUrl = process.env.AISOC_API_BASE_URL;
+  process.env.AISOC_API_BASE_URL = "https://control.example";
   try {
     globalThis.fetch = async () => new Response(null, { status: 302, headers: { location: "https://elsewhere.example" } });
     const redirect = await dispatch(worker, detailRequest());
@@ -367,8 +367,8 @@ test("fails closed on upstream redirects and oversized responses", async () => {
     assert.equal((await oversized.json()).code, "control_plane_response_too_large");
   } finally {
     globalThis.fetch = originalFetch;
-    if (previousBaseUrl === undefined) delete process.env.BLUE_TEAM_API_BASE_URL;
-    else process.env.BLUE_TEAM_API_BASE_URL = previousBaseUrl;
+    if (previousBaseUrl === undefined) delete process.env.AISOC_API_BASE_URL;
+    else process.env.AISOC_API_BASE_URL = previousBaseUrl;
   }
 });
 
@@ -376,7 +376,7 @@ function mutationHeaders({ includeOrigin = true, nonce } = {}) {
   return {
     authorization: `Bearer ${"t".repeat(32)}`,
     "content-type": "application/json",
-    "x-blue-team-csrf": nonce,
+    "x-aisoc-csrf": nonce,
     ...(includeOrigin ? { origin: "https://console.example", referer: "https://console.example/response" } : {}),
   };
 }

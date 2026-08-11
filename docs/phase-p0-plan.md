@@ -1,7 +1,7 @@
 # P0：架构与需求冻结执行计划
 
-状态：进行中  
-阶段目标：冻结可进入 P1 的功能边界、信任边界、核心契约、部署基线和工程门禁。  
+状态：进行中
+阶段目标：冻结可进入 P1 的功能边界、信任边界、核心契约、部署基线和工程门禁。
 退出条件：关键接口与数据边界评审通过，且无未决阻塞性架构问题。
 
 ## 工作包与完成标准
@@ -50,9 +50,9 @@
 按用户决策，ADR 维持 `Proposed`、P0/P1 以实验实现推进，但工程治理门禁已在当前提交本地验证全绿：
 
 - `uv sync --locked --all-groups` 通过（cryptography 升至 50.0.0 修 CVE-2026-69247/69249，pip-audit 无已知漏洞）。
-- `ruff format --check .`（81 files）、`ruff check .`、`mypy src tests migrations`、`blue-team-export-schemas --check` 全过。
+- `ruff format --check .`（81 files）、`ruff check .`、`mypy src tests migrations`、`aisoc-export-schemas --check` 全过。
 - `alembic upgrade head` 至 `20260804_0004`，`alembic check` 无漂移。
-- `pytest --cov`：126 passed、8 skipped（skip 全为 POSIX/符号链接/Windows 进程语义，需 Linux CI；3 个 PostgreSQL 集成用例在 Docker Linux Engine 下已实跑），覆盖率 80%。
+- `pytest --cov`：126 passed、8 skipped（skip 为当时尚未具备的 POSIX/符号链接进程语义；3 个 PostgreSQL 集成用例已有 Linux 容器证据），覆盖率 80%。
 - CycloneDX SBOM 生成至 `reports/sbom.cdx.json`（CI 制品，未提交）。
 
 残余风险（评审前不得视作已 Accepted）：
@@ -65,8 +65,8 @@
 
 ## 2026-08-08 非 Docker 复审证据
 
-- 使用锁文件创建独立 Windows Python 3.12.11 环境；`ruff format --check`（141 files）、Ruff lint、mypy strict（139 source files）和 Schema drift check 全过。
-- `pytest`：235 passed、14 skipped；其中 5 个因未配置 PostgreSQL，9 个因 Windows 不具备 POSIX/直接可执行探针语义。跳过项未被当作通过。
+- 使用锁文件创建独立 Python 3.12.11 环境；`ruff format --check`（141 files）、Ruff lint、mypy strict（139 source files）和 Schema drift check 全过。
+- `pytest`：235 passed、14 skipped；其中 5 个因未配置 PostgreSQL，9 个因当时未具备 POSIX/直接可执行探针语义。跳过项未被当作通过。
 - `pip-audit --skip-editable`：无已知漏洞；Alembic 离线链只有一个 head `20260808_0007`。本轮未连接数据库，因此没有宣称 `alembic upgrade/check` 通过。
 - 复审修复 `.env` 污染单元测试、P3 watermark/迟到断链、P4 跨 host/entity 告警去重、Suricata SSH 未知结果误标 success，并补齐可哈希重建的四个 P4 replay。
 - P0-W7 人工评审、远端 CI、许可证/签名/密钥方案仍未关闭；P0 保持“进行中”。

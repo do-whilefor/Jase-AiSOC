@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import stat
 import threading
 import time
@@ -10,16 +11,16 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from blue_team import __version__
-from blue_team.agent_core import (
+from aisoc import __version__
+from aisoc.agent_core import (
     AgentProcessConfig,
     AgentProcessError,
     PrivateJsonlJournal,
     load_agent_process_config,
     run_agent_process,
 )
-from blue_team.agent_core.queue import LocalDiskQueue, QueueConfig
-from blue_team.platform import LinuxPlatformAdapter
+from aisoc.agent_core.queue import LocalDiskQueue, QueueConfig
+from aisoc.platform import LinuxPlatformAdapter
 from tests.unit.test_agent_contracts import AGENT_ID, BOOT_ID, HOST_ID, TENANT_ID
 
 
@@ -43,8 +44,7 @@ def config_value(state_directory: Path) -> dict[str, object]:
 
 def write_config(path: Path, state_directory: Path) -> None:
     path.write_text(json.dumps(config_value(state_directory)), encoding="utf-8")
-    if os.name != "nt":
-        path.chmod(0o600)
+    path.chmod(0o600)
 
 
 def jsonl(path: Path) -> list[dict[str, object]]:
@@ -107,12 +107,11 @@ def test_configured_agent_process_persists_heartbeat_and_lifecycle_on_stop(
     assert any(event["state"] == "running" for event in runtime_events)  # type: ignore[index]
     assert runtime_events[-1]["state"] == "stopped"  # type: ignore[index]
     assert config.queue_path.exists()
-    if os.name != "nt":
-        assert stat.S_IMODE(config.state_directory.stat().st_mode) == 0o700
-        assert stat.S_IMODE((config.state_directory / ".agent.lock").stat().st_mode) == 0o600
-        assert stat.S_IMODE(config.queue_path.stat().st_mode) == 0o600
-        assert stat.S_IMODE(config.heartbeat_journal_path.stat().st_mode) == 0o600
-        assert stat.S_IMODE(config.lifecycle_journal_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(config.state_directory.stat().st_mode) == 0o700
+    assert stat.S_IMODE((config.state_directory / ".agent.lock").stat().st_mode) == 0o600
+    assert stat.S_IMODE(config.queue_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(config.heartbeat_journal_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(config.lifecycle_journal_path.stat().st_mode) == 0o600
 
 
 def test_agent_process_config_is_bounded_private_and_absolute(tmp_path: Path) -> None:
@@ -121,8 +120,7 @@ def test_agent_process_config_is_bounded_private_and_absolute(tmp_path: Path) ->
     assert load_agent_process_config(config_path).tenant_id == TENANT_ID
 
     config_path.write_bytes(b"{" + b" " * (64 * 1024))
-    if os.name != "nt":
-        config_path.chmod(0o600)
+    config_path.chmod(0o600)
     with pytest.raises(AgentProcessError, match="byte limit"):
         load_agent_process_config(config_path)
 
@@ -187,7 +185,13 @@ def test_agent_process_registers_audit_collector_and_queues_event(tmp_path: Path
                     min_free_bytes=config.min_free_bytes,
                 )
             )
-            queued = probe.telemetry().queued_count
+            try:
+                queued = probe.telemetry().queued_count
+            except sqlite3.OperationalError as error:
+                if "no such table" not in str(error):
+                    raise
+                time.sleep(0.02)
+                continue
             if queued:
                 break
         time.sleep(0.02)
@@ -206,8 +210,6 @@ def test_agent_process_registers_audit_collector_and_queues_event(tmp_path: Path
 
 
 def test_agent_process_rejects_linked_or_shared_configuration(tmp_path: Path) -> None:
-    if os.name == "nt":
-        pytest.skip("POSIX symlink and mode checks require Linux")
     target = tmp_path / "target.json"
     write_config(target, tmp_path / "state")
     linked = tmp_path / "linked.json"
@@ -221,8 +223,6 @@ def test_agent_process_rejects_linked_or_shared_configuration(tmp_path: Path) ->
 
 
 def test_private_journal_rejects_link_substitution(tmp_path: Path) -> None:
-    if os.name == "nt":
-        pytest.skip("POSIX symlink semantics require Linux")
     state = tmp_path / "state"
     state.mkdir(mode=0o700)
     destination = tmp_path / "attacker-controlled"

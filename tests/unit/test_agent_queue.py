@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from blue_team.agent_core import (
+from aisoc.agent_core import (
     BatchAck,
     EventPriority,
     LocalDiskQueue,

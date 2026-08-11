@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from blue_team.ai_review import AiReviewGate, build_evidence_package
-from blue_team.domain import (
+from aisoc.ai_review import AiReviewGate, build_evidence_package
+from aisoc.domain import (
     AdjudicationReport,
     AdjudicationResolution,
     AiReviewPolicy,
@@ -43,7 +43,7 @@ from blue_team.domain import (
     VerifierRecommendation,
     VerifierReport,
 )
-from blue_team.storage.ai_review_repository import (
+from aisoc.storage.ai_review_repository import (
     AiReviewPersistenceError,
     _adjudication_records,
     _claim_records,
@@ -52,7 +52,7 @@ from blue_team.storage.ai_review_repository import (
     _verifier_records,
     persist_ai_review_outcome,
 )
-from blue_team.storage.models import (
+from aisoc.storage.models import (
     AiAdjudicationRecord,
     AiAdjudicationResolutionRecord,
     AiAnalyzerClaimEvidenceRecord,

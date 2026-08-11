@@ -8,22 +8,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from blue_team.config import Settings
-from blue_team.domain import (
+from aisoc.config import Settings
+from aisoc.domain import (
     FeedbackDisposition,
     IncidentFeedbackRequest,
     IncidentMergeRequest,
     IncidentSplitGroup,
     IncidentSplitRequest,
 )
-from blue_team.incident_engine.lifecycle import (
+from aisoc.incident_engine.lifecycle import (
     close_incident,
     merge_incidents,
     record_incident_feedback,
     split_incident,
 )
-from blue_team.storage.incident_repository import IncidentPersistenceResult
-from blue_team.storage.models import (
+from aisoc.storage.incident_repository import IncidentPersistenceResult
+from aisoc.storage.models import (
     AuditLogRecord,
     IncidentFeedbackRecord,
     IncidentLineageRecord,
@@ -36,7 +36,7 @@ NOW = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
 
 def _settings() -> Settings:
     return Settings(
-        database_url="postgresql+asyncpg://blue_team:blue_team_dev@127.0.0.1:55432/blue_team",
+        database_url="postgresql+asyncpg://aisoc:aisoc_dev@127.0.0.1:55432/aisoc",
         environment="test",
         bootstrap_admin_token=None,
         object_store_root=Path("var/evidence"),
@@ -81,11 +81,11 @@ async def test_close_resolves_member_detections_and_is_audited() -> None:
     session = _session()
     with (
         patch(
-            "blue_team.incident_engine.lifecycle._lock_incidents",
+            "aisoc.incident_engine.lifecycle._lock_incidents",
             new=AsyncMock(return_value=[record]),
         ),
         patch(
-            "blue_team.incident_engine.lifecycle._memberships",
+            "aisoc.incident_engine.lifecycle._memberships",
             new=AsyncMock(return_value={record.id: {"det_close"}}),
         ),
     ):
@@ -116,7 +116,7 @@ async def test_feedback_is_append_only_and_audited() -> None:
         comment="confirmed by host owner",
     )
     with patch(
-        "blue_team.incident_engine.lifecycle._lock_incidents",
+        "aisoc.incident_engine.lifecycle._lock_incidents",
         new=AsyncMock(return_value=[record]),
     ):
         result = await record_incident_feedback(
@@ -151,23 +151,23 @@ async def test_merge_closes_sources_and_revises_deterministic_target() -> None:
     session = _session()
     with (
         patch(
-            "blue_team.incident_engine.lifecycle._lock_incidents",
+            "aisoc.incident_engine.lifecycle._lock_incidents",
             new=AsyncMock(return_value=[target, source]),
         ),
         patch(
-            "blue_team.incident_engine.lifecycle._memberships",
+            "aisoc.incident_engine.lifecycle._memberships",
             new=AsyncMock(return_value={target.id: {"det_a"}, source.id: {"det_b"}}),
         ),
         patch(
-            "blue_team.incident_engine.lifecycle._detections",
+            "aisoc.incident_engine.lifecycle._detections",
             new=AsyncMock(return_value=[MagicMock(), MagicMock()]),
         ),
         patch(
-            "blue_team.incident_engine.lifecycle._candidates",
+            "aisoc.incident_engine.lifecycle._candidates",
             new=AsyncMock(return_value=(candidate,)),
         ),
         patch(
-            "blue_team.incident_engine.lifecycle.persist_incident_candidate",
+            "aisoc.incident_engine.lifecycle.persist_incident_candidate",
             new=AsyncMock(return_value=persisted),
         ),
     ):
@@ -218,23 +218,23 @@ async def test_split_requires_exact_components_and_records_lineage() -> None:
     session = _session()
     with (
         patch(
-            "blue_team.incident_engine.lifecycle._lock_incidents",
+            "aisoc.incident_engine.lifecycle._lock_incidents",
             new=AsyncMock(return_value=[source]),
         ),
         patch(
-            "blue_team.incident_engine.lifecycle._memberships",
+            "aisoc.incident_engine.lifecycle._memberships",
             new=AsyncMock(return_value={source.id: {"det_a", "det_b"}}),
         ),
         patch(
-            "blue_team.incident_engine.lifecycle._detections",
+            "aisoc.incident_engine.lifecycle._detections",
             new=AsyncMock(return_value=[MagicMock(), MagicMock()]),
         ),
         patch(
-            "blue_team.incident_engine.lifecycle._candidates",
+            "aisoc.incident_engine.lifecycle._candidates",
             new=AsyncMock(return_value=(first, second)),
         ),
         patch(
-            "blue_team.incident_engine.lifecycle.persist_incident_candidate",
+            "aisoc.incident_engine.lifecycle.persist_incident_candidate",
             new=AsyncMock(side_effect=persisted),
         ),
     ):

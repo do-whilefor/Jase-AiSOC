@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blue_team.agent_core import AuditdSerialAggregator
+from aisoc.agent_core import AuditdSerialAggregator
 
 BOOT = "0fdec470-09f9-4dd3-a63f-3b8cdfb11028"
 

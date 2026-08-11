@@ -6,10 +6,10 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blue_team.ai_review.orchestrator import AiReviewOrchestrator
-from blue_team.ai_review.providers import ModelProviderError, ResilientModelClient
-from blue_team.ai_review.tool_gateway import ReadOnlyToolDataSource, ToolGateway, ToolQueryScope
-from blue_team.domain import (
+from aisoc.ai_review.orchestrator import AiReviewOrchestrator
+from aisoc.ai_review.providers import ModelProviderError, ResilientModelClient
+from aisoc.ai_review.tool_gateway import ReadOnlyToolDataSource, ToolGateway, ToolQueryScope
+from aisoc.domain import (
     AiReviewPolicy,
     AnalyzerClaim,
     AnalyzerReport,

@@ -14,21 +14,21 @@ from pathlib import Path
 import pytest
 from sqlalchemy import func, select, text
 
-from blue_team.config import Settings
-from blue_team.detection_engine import DetectionEngine
-from blue_team.domain.detection import AttackState, DetectionCreate
-from blue_team.domain.resources import IncidentSeverity
-from blue_team.domain.security_event import SecurityEvent
-from blue_team.storage import Database
-from blue_team.storage.detection_repository import (
+from aisoc.config import Settings
+from aisoc.detection_engine import DetectionEngine
+from aisoc.domain.detection import AttackState, DetectionCreate
+from aisoc.domain.resources import IncidentSeverity
+from aisoc.domain.security_event import SecurityEvent
+from aisoc.storage import Database
+from aisoc.storage.detection_repository import (
     create_detection,
     get_detection,
     list_detections,
 )
-from blue_team.storage.models import AuditLogRecord, DetectionRecord
+from aisoc.storage.models import AuditLogRecord, DetectionRecord
 from tests.integration._helpers import truncate_all
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(DATABASE_URL is None, reason="PostgreSQL integration URL is not set"),

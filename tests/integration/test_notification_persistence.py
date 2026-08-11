@@ -1,7 +1,7 @@
 """P11 real-PostgreSQL notification lease, retry, attempt, and delivery gate.
 
-This remains skipped in the non-Docker Windows pass and is intended for the
-later Kali/PostgreSQL validation environment with migration 0014 applied.
+This remains skipped in the local run without PostgreSQL and is intended for the
+a Linux/PostgreSQL integration environment with migration 0014 applied.
 """
 
 from __future__ import annotations
@@ -12,19 +12,19 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import func, select, text
 
-from blue_team.storage import Database
-from blue_team.storage.models import (
+from aisoc.storage import Database
+from aisoc.storage.models import (
     NotificationDeliveryAttemptRecord,
     NotificationOutboxRecord,
     TenantRecord,
 )
-from blue_team.storage.notification_repository import (
+from aisoc.storage.notification_repository import (
     claim_next_notification,
     complete_notification_delivery,
     fail_notification_delivery,
 )
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(DATABASE_URL is None, reason="PostgreSQL integration URL is not set"),

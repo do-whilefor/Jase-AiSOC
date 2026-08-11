@@ -61,7 +61,7 @@
       "type": "object"
     },
     "AgentEnvelope": {
-      "$id": "https://schemas.blue-team-ai.local/agent-envelope/v0.1.0",
+      "$id": "https://schemas.aisoc.local/agent-envelope/v0.1.0",
       "additionalProperties": false,
       "description": "One immutable event plus the trusted Agent identity and source sequence.",
       "properties": {
@@ -465,7 +465,7 @@
       "type": "object"
     },
     "SecurityEvent": {
-      "$id": "https://schemas.blue-team-ai.local/security-event/v0.1.0",
+      "$id": "https://schemas.aisoc.local/security-event/v0.1.0",
       "additionalProperties": false,
       "description": "P1 canonical contract for an immutable, tenant-bound event.",
       "properties": {
@@ -707,7 +707,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.blue-team-ai.local/event-batch/v0.1.0",
+  "$id": "https://schemas.aisoc.local/event-batch/v0.1.0",
   "additionalProperties": false,
   "properties": {
     "schema_version": {

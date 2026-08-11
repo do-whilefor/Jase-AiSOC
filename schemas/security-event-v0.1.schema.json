@@ -428,7 +428,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.blue-team-ai.local/security-event/v0.1.0",
+  "$id": "https://schemas.aisoc.local/security-event/v0.1.0",
   "additionalProperties": false,
   "description": "P1 canonical contract for an immutable, tenant-bound event.",
   "properties": {

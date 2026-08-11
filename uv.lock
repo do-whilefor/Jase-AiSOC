@@ -232,7 +232,7 @@ wheels = [
 ]
 
 [[package]]
-name = "blue-team-ai-agent"
+name = "aisoc-security-platform"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [

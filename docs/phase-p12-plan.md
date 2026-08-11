@@ -25,7 +25,7 @@ P7–P12 安全审计已于 2026-08-09 完成（见 `docs/security-audit-p7-p12.
 - 完成 DEB/RPM/tar.gz 自包含制品构建脚本；Agent 制品包含离线 wheel、CA、systemd unit 和
   安装/卸载脚本。
 - 验证每个发行版的 journald/auditd/eBPF/Suricata/Falco 能力探测与降级路径。
-- CI 矩阵扩展到至少 Debian/Ubuntu/Kali/RHEL/Fedora 的 VM 级安装/升级/卸载/采集/降级测试。
+- CI 矩阵扩展到至少 Debian/Ubuntu/Rocky/RHEL/Fedora 的 VM 级安装/升级/卸载/采集/降级测试。
 
 ### 12.2 性能压测与容量
 
@@ -49,10 +49,11 @@ P7–P12 安全审计已于 2026-08-09 完成（见 `docs/security-audit-p7-p12.
   验证无未授权工具、nonexistent evidence=0、secret 不进入错误/日志。
 - 供应链：`uv lock --check` 无漂移、`pip-audit` 通过、CycloneDX SBOM 作为制品、
   Rust 依赖审计和 `cargo audit`（CI `rust-extension` job 已加 `cargo audit` 步，读
-  `rust/blue-team-rust/Cargo.lock`）。
-- `openat` 加固：将 quarantine 和 evidence 存储的 `_write_once` 改为 `openat(dirfd, ...)`
-  逐组件遍历，消除中间路径 TOCTOU 窗口（已完成：`storage/_safe_open.py` 提供共享
-  `open_exclusive_under_root`，`object_store` 与 `quarantine` 的 `_write_once` 已改用）。
+  `Cargo.lock`）。
+- `openat` 加固：quarantine 和 evidence 存储的写入与读取都通过 `openat(dirfd, ...)`
+  逐组件遍历；写入使用 `O_EXCL|O_NOFOLLOW`，读取使用 `O_NOFOLLOW|O_NONBLOCK` 并要求单链接普通文件。
+  静态实现和 Linux 符号链接回归用例已补齐；仍需在隔离 Linux 服务身份下执行 symlink/FIFO/
+  并发 rename 故障注入后关闭门禁。
 
 ### 12.4 升级/回滚与备份恢复
 
@@ -61,7 +62,7 @@ P7–P12 安全审计已于 2026-08-09 完成（见 `docs/security-audit-p7-p12.
 - Agent 升级：验证 Agent 制品版本升级、配置迁移、heartbeat 自报版本目录和旧版本退役。
 - 规则 lifecycle：验证签名 release/rollback、并发首发/重放、跨租户 Canary Host、
   shadow/detection FK 和 rule-version dedupe。
-- 响应回滚：在 Kali 单节点 profile 验证 nftables/firewalld TTL、文件隔离和账号禁用三类
+- 响应回滚：在 Linux 单节点 profile 验证 nftables/firewalld TTL、文件隔离和账号禁用三类
   真实可验证回滚；对 PID 复用、inode/path replacement、账号状态变化、nft set 缺失、
   进程崩溃、租约过期和重复请求做故障注入。
 - 备份恢复：PostgreSQL 逻辑/物理备份与恢复验证；对象存储备份与对账；

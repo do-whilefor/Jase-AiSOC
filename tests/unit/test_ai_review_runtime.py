@@ -6,18 +6,18 @@ from datetime import UTC, datetime
 
 from pydantic import SecretStr
 
-from blue_team.ai_review.providers import (
+from aisoc.ai_review.providers import (
     GlmProvider,
     KimiProvider,
     OpenAICompatibleProvider,
 )
-from blue_team.ai_review.runtime import (
+from aisoc.ai_review.runtime import (
     ai_review_policy_from_settings,
     build_ai_review_runtime,
     build_model_provider,
 )
-from blue_team.config import Settings
-from blue_team.domain import (
+from aisoc.config import Settings
+from aisoc.domain import (
     ModelCapabilities,
     ModelHealth,
     ModelHealthStatus,

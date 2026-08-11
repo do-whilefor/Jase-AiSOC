@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from blue_team.detection_engine import DetectionEngine, get_rule, get_rules, register_all
-from blue_team.detection_engine.base import Detection
-from blue_team.detection_engine.rules.ssh_bruteforce import SshBruteforceRule
-from blue_team.detection_engine.rules.web_recon_scan import WebReconScanRule
-from blue_team.domain.detection import AttackState
+from aisoc.detection_engine import DetectionEngine, get_rule, get_rules, register_all
+from aisoc.detection_engine.base import Detection
+from aisoc.detection_engine.rules.ssh_bruteforce import SshBruteforceRule
+from aisoc.detection_engine.rules.web_recon_scan import WebReconScanRule
+from aisoc.domain.detection import AttackState
 
 from ._helpers import http_event, ssh_event
 

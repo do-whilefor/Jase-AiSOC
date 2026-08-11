@@ -7,17 +7,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from blue_team.detection_engine.governance import get_rule_governance
-from blue_team.detection_engine.lifecycle import rule_catalog_sha256
-from blue_team.domain.rule_lifecycle import (
+from aisoc.detection_engine.governance import get_rule_governance
+from aisoc.detection_engine.lifecycle import rule_catalog_sha256
+from aisoc.domain.rule_lifecycle import (
     RuleLifecycleChangeKind,
     RuleLifecycleManifest,
     RuleLifecycleStage,
     RuleValidationEvidence,
 )
-from blue_team.errors import StateConflictError
-from blue_team.storage.models import RuleLifecycleStateRecord
-from blue_team.storage.rule_lifecycle_repository import (
+from aisoc.errors import StateConflictError
+from aisoc.storage.models import RuleLifecycleStateRecord
+from aisoc.storage.rule_lifecycle_repository import (
     RuleLifecycleStateCorruptionError,
     _require_transition,
     load_rule_runtime_policies,

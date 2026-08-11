@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from blue_team.api_server.routes.incidents import _review_lock_key
+from aisoc.api_server.routes.incidents import _review_lock_key
 
 
 def test_review_lock_key_is_deterministic() -> None:

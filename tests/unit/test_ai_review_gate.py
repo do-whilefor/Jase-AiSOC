@@ -7,8 +7,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from pydantic import ValidationError
 
-from blue_team.ai_review import AiReviewGate, EvidencePackageError, build_evidence_package
-from blue_team.domain import (
+from aisoc.ai_review import AiReviewGate, EvidencePackageError, build_evidence_package
+from aisoc.domain import (
     AiReviewPolicy,
     AnalyzerClaim,
     AttackState,

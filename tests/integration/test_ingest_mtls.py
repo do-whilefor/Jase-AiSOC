@@ -15,31 +15,31 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import func, select, text
 
-from blue_team.agent_core.contracts import (
+from aisoc.agent_core.contracts import (
     AgentEnvelope,
     AgentHeartbeat,
     EventPriority,
     QueueTelemetry,
     build_event_batch,
 )
-from blue_team.agent_core.identity import (
+from aisoc.agent_core.identity import (
     LocalCertificateAuthority,
     create_agent_csr,
 )
-from blue_team.config import Settings
-from blue_team.domain import HostCreate, SecurityEvent, TenantCreate
-from blue_team.ingest_gateway.server import IngestServer
-from blue_team.platform import (
+from aisoc.config import Settings
+from aisoc.domain import HostCreate, SecurityEvent, TenantCreate
+from aisoc.ingest_gateway.server import IngestServer
+from aisoc.platform import (
     CapabilityLevel,
     CapabilityReport,
     CollectorCapability,
     CollectorState,
     PlatformInfo,
 )
-from blue_team.storage import Database, LocalObjectStore, agent_identity, repositories
-from blue_team.storage.models import AgentEventRecord, AgentHeartbeatRecord, AgentSessionRecord
+from aisoc.storage import Database, LocalObjectStore, agent_identity, repositories
+from aisoc.storage.models import AgentEventRecord, AgentHeartbeatRecord, AgentSessionRecord
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(DATABASE_URL is None, reason="PostgreSQL integration URL is not set"),
@@ -106,7 +106,7 @@ def _client_ssl_context(
     context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
     context.load_cert_chain(certfile=str(cert_path), keyfile=str(key_path))
     context.load_verify_locations(cadata=ca_pem)
-    context.check_hostname = False
+    context.check_hostname = True
     context.verify_mode = ssl.CERT_REQUIRED
     return context
 
@@ -188,20 +188,41 @@ async def test_ingest_mtls_heartbeat_batch_and_clone_rejection(tmp_path: Path) -
         object_store_root=tmp_path / "evidence",
         agent_ca_certificate_path=ca_cert_path,
         agent_ca_private_key_path=ca_key_path,
-        ingest_host="127.0.0.1",
+        ingest_host="0.0.0.0",
+        ingest_server_name="127.0.0.1",
         ingest_port=0,
         ingest_session_lease_seconds=120,
     )
     object_store = LocalObjectStore(settings.resolved_object_store_root)
     server = IngestServer(settings, database, object_store, ca)
     await server.start()
+    assert server._ssl_context is not None
+    assert server._ssl_context.minimum_version is ssl.TLSVersion.TLSv1_2
     port = server.bound_port
     assert port is not None
     base_url = f"https://127.0.0.1:{port}"
     client_context = _client_ssl_context(client_cert_path, client_key_path, ca.ca_certificate_pem)
 
     try:
-        async with httpx.AsyncClient(verify=client_context, timeout=10.0) as client:
+        async with httpx.AsyncClient(
+            verify=client_context,
+            timeout=10.0,
+            trust_env=False,
+            follow_redirects=False,
+        ) as wrong_host_client:
+            with pytest.raises(httpx.ConnectError):
+                await wrong_host_client.post(
+                    f"https://127.0.0.2:{port}/v1/agent/heartbeat",
+                    content=b"{}",
+                    headers={"Content-Type": "application/json"},
+                )
+
+        async with httpx.AsyncClient(
+            verify=client_context,
+            timeout=10.0,
+            trust_env=False,
+            follow_redirects=False,
+        ) as client:
             heartbeat = _heartbeat(tenant.id, "agent_ingestmtls01", host.id)
             heartbeat_response = await client.post(
                 f"{base_url}/v1/agent/heartbeat",

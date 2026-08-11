@@ -8,8 +8,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blue_team.domain import AssuranceLevel, AttackState, Criticality
-from blue_team.domain.response import (
+from aisoc.domain import AssuranceLevel, AttackState, Criticality
+from aisoc.domain.response import (
     AccountResponseTarget,
     ExecutionResultStatus,
     FileResponseTarget,
@@ -23,7 +23,7 @@ from blue_team.domain.response import (
     RollbackResultStatus,
     TargetObservation,
 )
-from blue_team.response_engine import (
+from aisoc.response_engine import (
     LinuxCommandPlanner,
     ResponseAdapterError,
     ResponseAdapterStateUnknownError,

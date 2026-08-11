@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""One-shot Agent enrollment bootstrap for the native Kali install.
+"""One-shot Agent enrollment bootstrap for a generic Linux deployment.
 
 Creates the tenant, host, and registered agent identity in PostgreSQL and
 issues a real mTLS client certificate signed by the configured Agent CA, so the
-``blue-team-agent`` can authenticate to ``blue-team-ingest``. Run inside the
+``aisoc-agent`` can authenticate to ``aisoc-ingest``. Run inside the
 project virtual environment after migrations and CA generation.
 
 The tenant_id, host_id, and agent_id are taken from ``agent.json`` (the
@@ -15,10 +15,10 @@ agent_id), it reports and exits without re-issuing.
 Usage::
 
     python scripts/bootstrap_agent_enrollment.py \\
-        --config /etc/blue-team/agent.json \\
-        --database-url "postgresql+asyncpg://blue_team:blue_team_dev@127.0.0.1:5432/blue_team" \\
-        --ca-certificate /etc/blue-team/ca.crt \\
-        --ca-private-key /etc/blue-team/ca.key
+        --config /etc/aisoc/agent.json \\
+        --database-url "postgresql+asyncpg://aisoc:aisoc_dev@127.0.0.1:5432/aisoc" \\
+        --ca-certificate /etc/aisoc/ca.crt \\
+        --ca-private-key /etc/aisoc/ca.key
 """
 
 from __future__ import annotations
@@ -32,9 +32,9 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import select
 
-from blue_team.agent_core.identity import LocalCertificateAuthority, create_agent_csr
-from blue_team.storage import Database, agent_identity
-from blue_team.storage.models import AgentIdentityRecord, HostRecord, TenantRecord
+from aisoc.agent_core.identity import LocalCertificateAuthority, create_agent_csr
+from aisoc.storage import Database, agent_identity
+from aisoc.storage.models import AgentIdentityRecord, HostRecord, TenantRecord
 
 
 def _load_agent_config(path: Path) -> dict[str, str]:
@@ -62,7 +62,7 @@ async def _ensure_tenant_and_host(
 
     async with database.session() as session, session.begin():
         if await session.scalar(select(TenantRecord).where(TenantRecord.id == tenant_id)) is None:
-            session.add(TenantRecord(id=tenant_id, name=f"kali-tenant-{tenant_id}"))
+            session.add(TenantRecord(id=tenant_id, name=f"aisoc-tenant-{tenant_id}"))
         if await session.scalar(select(HostRecord).where(HostRecord.id == host_id)) is None:
             session.add(
                 HostRecord(
@@ -70,7 +70,7 @@ async def _ensure_tenant_and_host(
                     tenant_id=tenant_id,
                     hostname=host_id,
                     agent_id=agent_id,
-                    distro="kali",
+                    distro="unknown",
                     kernel="unknown",
                     capabilities={},
                     criticality="medium",

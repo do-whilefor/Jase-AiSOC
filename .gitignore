@@ -19,8 +19,6 @@ var/
 !.env.example
 .idea/
 .vscode/
-.DS_Store
-Thumbs.db
 
 # Generated plan document renders (source docx is kept)
 state/plan_render/
@@ -29,9 +27,9 @@ state/plan_render/
 state/*.log
 state/*.err.log
 
-# Rust extension build artifacts (source committed; target/ regenerated)
-rust/**/target/
-rust/**/*.so
+# Rust build artifacts (source committed; workspace target/ regenerated)
+/target/
+*.so
 
 # Console frontend build artifacts (source committed; node_modules regenerated)
 console/node_modules/
@@ -44,3 +42,7 @@ console/dist/
 console/coverage/
 console/outputs/
 console/work/
+
+# Generated PyO3 release wheels (directory retained for Docker build context)
+dist-rust/*
+!dist-rust/.gitkeep

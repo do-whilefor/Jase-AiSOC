@@ -1087,7 +1087,7 @@ export function OperationsConsole() {
         <div className="brand">
           <div className="brand-mark" aria-hidden="true">BT</div>
           <div className="brand-copy">
-            <strong>Blue Team Sentinel</strong>
+            <strong>AI-SOC</strong>
             <span>Evidence Operations</span>
           </div>
         </div>
@@ -2774,7 +2774,7 @@ function ResponseWorkspace({
         headers: {
           authorization: `Bearer ${token.trim()}`,
           "content-type": "application/json",
-          "x-blue-team-csrf": csrfNonce,
+          "x-aisoc-csrf": csrfNonce,
         },
         body: JSON.stringify({ action_id: selectedActionId, ...body }),
         cache: "no-store",

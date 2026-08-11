@@ -162,10 +162,11 @@ Rust 依赖（pyo3 0.21、sha2 0.10、hex 0.4）无已知漏洞。
 
 ## 未关闭的防御纵深项（非漏洞）
 
-1. **quarantine 中间路径 TOCTOU**：`_write_once` 在 `is_relative_to` check 和 `os.open`
-   之间存在微秒级窗口。需要 `openat(dirfd, ...)` 逐组件遍历才能完全消除，
-   但要求 0700 root 本地写权限（已 game-over），当前 `O_NOFOLLOW` + `O_EXCL` + server 生成
-   uuid 路径使非 API 可利用。留作 P12 `openat` 加固项。
+1. **本地存储路径竞态的 Linux 动态门禁**：P12 静态复核发现写路径虽然已改为逐组件
+   `openat`，读取仍是 `resolve()` 后 `Path.read_bytes()`，在本地可写者模型下保留检查后替换窗口。
+   现已让 evidence/quarantine 的读写都从 root dirfd 逐组件打开，拒绝中间/最终 symlink、FIFO
+   和其他非普通文件，并新增 final-symlink 回归用例。按本轮未执行动态 Linux 文件系统故障注入的约束尚未验证；
+   需在隔离 Linux 服务身份下完成 symlink/FIFO/并发 rename 故障注入后才能动态关闭。
 2. **Webhook forbidden-address 未包含 private/CGNAT**：主控制是精确 host allowlist，
    private 地址只能在显式配置 allowlist 时到达。添加 `is_private` 会阻止合法内部 webhook，
    当前保持不变。

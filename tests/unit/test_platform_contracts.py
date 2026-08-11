@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from blue_team.platform import (
+from aisoc.platform import (
     CapabilityLevel,
     CapabilityReport,
     CollectorCapability,

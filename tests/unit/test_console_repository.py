@@ -10,12 +10,12 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy.dialects import postgresql
 
-from blue_team.config import Settings
-from blue_team.detection_engine.governance import get_rule_governance
-from blue_team.detection_engine.lifecycle import rule_catalog_sha256
-from blue_team.domain.console import ConsoleRuleTenantMetrics, FreshnessStatus
-from blue_team.domain.detection import AttackState
-from blue_team.domain.malware import (
+from aisoc.config import Settings
+from aisoc.detection_engine.governance import get_rule_governance
+from aisoc.detection_engine.lifecycle import rule_catalog_sha256
+from aisoc.domain.console import ConsoleRuleTenantMetrics, FreshnessStatus
+from aisoc.domain.detection import AttackState
+from aisoc.domain.malware import (
     DynamicAnalysisStatus,
     EngineKind,
     EngineResult,
@@ -26,14 +26,14 @@ from blue_team.domain.malware import (
     ThreatDisposition,
     ThreatSignal,
 )
-from blue_team.domain.resources import IncidentSeverity, IncidentStatus
-from blue_team.domain.rule_lifecycle import (
+from aisoc.domain.resources import IncidentSeverity, IncidentStatus
+from aisoc.domain.rule_lifecycle import (
     RuleEmissionScope,
     RuleLifecycleStage,
     RuleLifecycleStateRead,
 )
-from blue_team.domain.trace import AttackTraceReport
-from blue_team.storage.console_repository import (
+from aisoc.domain.trace import AttackTraceReport
+from aisoc.storage.console_repository import (
     _console_attack_trace_investigation,
     _console_intelligence_entry,
     _console_model_provider_configuration,
@@ -48,7 +48,7 @@ from blue_team.storage.console_repository import (
     get_console_snapshot,
     get_console_system_operations,
 )
-from blue_team.storage.models import (
+from aisoc.storage.models import (
     AiModelRunRecord,
     AttackTraceRecord,
     AttackTraceRevisionRecord,
@@ -66,8 +66,8 @@ from blue_team.storage.models import (
     TenantCredentialRecord,
     TenantRecord,
 )
-from blue_team.storage.trace_repository import TracePersistenceError, trace_snapshot_hash
-from blue_team.trace_engine import AttackTraceBuilder
+from aisoc.storage.trace_repository import TracePersistenceError, trace_snapshot_hash
+from aisoc.trace_engine import AttackTraceBuilder
 from tests.unit.test_trace_builder import _inputs
 
 TENANT = "ten_console_repo"

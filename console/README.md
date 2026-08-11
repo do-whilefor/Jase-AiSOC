@@ -1,4 +1,4 @@
-# Blue Team Operator Console
+# AI-SOC Operator Console
 
 P11 安全运营控制台。当前增量通过固定同源代理连接 Python 控制面，提供九个运营视图，展示
 Incident、资产、恶意文件、模型审核和响应状态，并提供：
@@ -43,7 +43,7 @@ deployment inventory、human user directory、签名制品/运行二进制验证
 ## 本地运行
 
 1. 复制 `.env.example` 为 `.env.local`，设置至少 32 bytes 的随机
-   `BLUE_TEAM_CONSOLE_CSRF_SECRET`，并按需修改控制面地址。
+   `AISOC_CONSOLE_CSRF_SECRET`，并按需修改控制面地址。
 2. 启动 Python API；非 loopback 控制面必须使用 HTTPS。
 3. 运行 `npm run dev`，在页面中输入具备 `responder`、`approver` 或 `auditor` 角色的令牌；系统运营页
    需要 `auditor` 或 `tenant_admin`。

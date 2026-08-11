@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy import Table
 
-from blue_team.domain import AssuranceLevel, AttackState, Criticality
-from blue_team.domain.response import (
+from aisoc.domain import AssuranceLevel, AttackState, Criticality
+from aisoc.domain.response import (
     AccountResponseTarget,
     ApprovalDecision,
     FirewallAdapter,
@@ -22,9 +22,9 @@ from blue_team.domain.response import (
     ResponsePlanCreate,
     ResponsePolicyContext,
 )
-from blue_team.errors import StateConflictError
-from blue_team.response_engine import build_response_plan
-from blue_team.storage.models import (
+from aisoc.errors import StateConflictError
+from aisoc.response_engine import build_response_plan
+from aisoc.storage.models import (
     AuditLogRecord,
     NotificationOutboxRecord,
     ResponseActionEventRecord,
@@ -34,7 +34,7 @@ from blue_team.storage.models import (
     ResponseExecutionRecord,
     ResponseRollbackRecord,
 )
-from blue_team.storage.response_repository import (
+from aisoc.storage.response_repository import (
     ResponseLease,
     _plan_from_record,
     _record_from_plan,

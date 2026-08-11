@@ -1,6 +1,6 @@
 # 数据库迁移
 
-迁移使用 Alembic，并通过 `BLUE_TEAM_DATABASE_URL` 读取 PostgreSQL asyncpg DSN。
+迁移使用 Alembic，并通过 `AISOC_DATABASE_URL` 读取 PostgreSQL asyncpg DSN。
 
 ```bash
 uv run alembic upgrade head

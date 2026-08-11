@@ -150,6 +150,19 @@
       "title": "InitSystem",
       "type": "string"
     },
+    "PackageManager": {
+      "enum": [
+        "apt",
+        "dnf",
+        "yum",
+        "zypper",
+        "pacman",
+        "apk",
+        "unknown"
+      ],
+      "title": "PackageManager",
+      "type": "string"
+    },
     "PlatformInfo": {
       "additionalProperties": false,
       "description": "Facts observed from the operating system, without a support claim.",
@@ -194,6 +207,10 @@
         },
         "init_system": {
           "$ref": "#/$defs/InitSystem",
+          "default": "unknown"
+        },
+        "package_manager": {
+          "$ref": "#/$defs/PackageManager",
           "default": "unknown"
         },
         "btf_available": {
@@ -303,7 +320,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.blue-team-ai.local/agent-heartbeat/v0.1.0",
+  "$id": "https://schemas.aisoc.local/agent-heartbeat/v0.1.0",
   "additionalProperties": false,
   "properties": {
     "schema_version": {

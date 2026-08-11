@@ -41,7 +41,7 @@ P6 将 P4/P5 Detection 聚合为稳定、可修订的 Incident，同时保持每
 
 ### Worker、API 与生命周期
 
-- API lifespan 和 `blue-team-process` 已接入 IncidentWorker；worker 查询完整有界 lookback，关联
+- API lifespan 和 `aisoc-process` 已接入 IncidentWorker；worker 查询完整有界 lookback，关联
   raw integrity hash，遇到坏 payload 或 max+1 溢出即整轮失败。
 - `GET /api/v1/incidents/{id}/{evidence,timeline,claims,graph}` 返回当前 revision 的租户作用域结构。
 - close 会关闭 Incident 并 resolve 当前 member detections，避免 worker 用同一事实重新打开。
@@ -52,14 +52,14 @@ P6 将 P4/P5 Detection 聚合为稳定、可修订的 Incident，同时保持每
 ## 当前验证
 
 - P6 聚合、repository、worker、生命周期和 API 契约已有单元/Mock 测试。
-- 当前完整 Windows 非 Docker 门禁：Ruff、mypy、Schema、lock、offline migration、dependency audit
+- 当前完整非 Docker 门禁：Ruff、mypy、Schema、lock、offline migration、dependency audit
   全绿，pytest 为 283 passed / 16 个 PostgreSQL、Linux 或符号链接能力相关 skip，9/9 replay 通过。
 - 10k 聚合、顺序无关、重放幂等、跨主体/主机隔离、缺失/冲突 evidence、迟到/时钟退化、
   detection/evidence 溢出均有动态内存级结果。
 - `tests/integration/test_incident_persistence.py` 已提供真实 PostgreSQL gate，但本轮按要求未启动
   Docker/PostgreSQL，因此保持 skip。
 
-## Kali/真实 PostgreSQL 待办与退出门禁
+## Linux VM/真实 PostgreSQL 待办与退出门禁
 
 1. 在迁移到 `20260809_0008` 的 PostgreSQL 上运行 P6 integration test，验证实际复合外键、
    savepoint 竞争、相同 snapshot 重放和 revision 追加。

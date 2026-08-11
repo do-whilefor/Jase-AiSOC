@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from blue_team.domain.response import (
+from aisoc.domain.response import (
     AccountResponseTarget,
     FileResponseTarget,
     FirewallAdapter,
@@ -17,7 +17,7 @@ from blue_team.domain.response import (
     ResponseActionStatus,
     ResponsePlanCreate,
 )
-from blue_team.response_engine import (
+from aisoc.response_engine import (
     FixedCommand,
     LinuxCommandPlanner,
     ResponseAdapterError,
@@ -25,7 +25,7 @@ from blue_team.response_engine import (
     execute_response_action,
     rollback_response_action,
 )
-from blue_team.response_engine.native import (
+from aisoc.response_engine.native import (
     AsyncCommandRunner,
     CommandResult,
     FileSnapshot,
@@ -270,7 +270,7 @@ async def test_local_file_adapter_preserves_exact_checkpoint_and_rollback() -> N
     adapter = LocalFileResponseAdapter(
         BOUNDARY,
         operations,
-        quarantine_root="/var/lib/blue-team/response-quarantine",
+        quarantine_root="/var/lib/aisoc/response-quarantine",
         allowed_file_roots=("/tmp",),
         max_file_bytes=8192,
     )

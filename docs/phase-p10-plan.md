@@ -8,7 +8,7 @@ P10 已完成非 Docker 初版，但阶段门禁未关闭。当前实现从认�
 路径、受影响 Host、精确基础设施聚类和 ATT&CK 技术映射。迁移 `20260809_0012` 将每个结论
 通过复合外键绑定到精确 Incident revision/evidence。
 
-本地证据来自合成两主机链、Mock 仓储、ASGI 和离线迁移，不是 Kali 原生 Collector、真实
+本地证据来自合成两主机链、Mock 仓储、ASGI 和离线迁移，不是 Linux 原生 Collector、真实
 PostgreSQL 双租户/并发或真实攻击回放。因此 P10 相关安全假设仍为 `technical_hit / unrated`，
 不能宣称已经达到阶段退出条件。
 
@@ -116,7 +116,7 @@ identity attribution = not_attributed / assertion_count=0
 
 ## 未关闭门禁
 
-1. 在 Kali/PostgreSQL 运行迁移 0012、完整 P4/P5→P6→P10 攻击回放、两个真实租户 HTTP ID
+1. 在 Linux VM/PostgreSQL 运行迁移 0012、完整 P4/P5→P6→P10 攻击回放、两个真实租户 HTTP ID
    substitution、FK 负向、并发 build/export 和 late revision 测试。
 2. 加入版本化真实攻击数据集，覆盖 Web/SSH initial access、成功/失败横向、one-sided telemetry、
    NAT/proxy/jump host、相同公共基础设施反例、时钟偏差、乱序、重复和迟到证据。

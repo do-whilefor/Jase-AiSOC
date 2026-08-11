@@ -8,11 +8,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blue_team.ai_review import AiReviewGate, AiReviewOrchestrator, build_evidence_package
-from blue_team.ai_review.evidence_verifier import blind_claims, verify_claim_evidence
-from blue_team.ai_review.providers import ResilientModelClient
-from blue_team.ai_review.tool_gateway import ReadOnlyToolDataSource, ToolGateway, ToolQueryScope
-from blue_team.domain import (
+from aisoc.ai_review import AiReviewGate, AiReviewOrchestrator, build_evidence_package
+from aisoc.ai_review.evidence_verifier import blind_claims, verify_claim_evidence
+from aisoc.ai_review.providers import ResilientModelClient
+from aisoc.ai_review.tool_gateway import ReadOnlyToolDataSource, ToolGateway, ToolQueryScope
+from aisoc.domain import (
     AdjudicationReport,
     AdjudicationResolution,
     AdjudicatorModelInput,

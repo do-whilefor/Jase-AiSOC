@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from blue_team.detection_engine.rules.web_request_anomalies import (
+from aisoc.detection_engine.rules.web_request_anomalies import (
     WebAbnormalMethodRule,
     WebInjectionRule,
 )
-from blue_team.domain.detection import AttackState
+from aisoc.domain.detection import AttackState
 
 from ._helpers import http_event, rule_context
 

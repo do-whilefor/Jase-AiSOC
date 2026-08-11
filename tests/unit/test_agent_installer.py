@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from blue_team.agent_core import (
+from aisoc.agent_core import (
     ActiveRelease,
     AgentProcessSupervisor,
     AgentProcessSupervisorConfig,
@@ -72,7 +72,7 @@ def agent_payload(version: str = "1.0.0") -> bytes:
     config_directory.mode = 0o755
     return tar_payload(
         (
-            ("bin/blue-team-agent", f"agent-{version}".encode(), 0o755),
+            ("bin/aisoc-agent", f"agent-{version}".encode(), 0o755),
             ("config/default.json", b'{"profile":"base"}', 0o644),
         ),
         extra_members=(bin_directory, config_directory),
@@ -174,7 +174,7 @@ def test_verified_bundle_is_health_checked_activated_and_upgraded(tmp_path: Path
             installed_file_path(
                 release_installer,
                 installed.deployment_dir,
-                "bin/blue-team-agent",
+                "bin/aisoc-agent",
             ).read_bytes()
         )
         return True
@@ -218,7 +218,7 @@ def test_verified_bundle_is_health_checked_activated_and_upgraded(tmp_path: Path
         installed_file_path(
             release_installer,
             first_deployment,
-            "bin/blue-team-agent",
+            "bin/aisoc-agent",
         ).read_bytes()
         == b"agent-1.0.0"
     )
@@ -397,7 +397,7 @@ def test_content_changed_during_health_check_is_rejected(tmp_path: Path) -> None
         target = installed_file_path(
             release_installer,
             installed.deployment_dir,
-            "bin/blue-team-agent",
+            "bin/aisoc-agent",
         )
         target.chmod(0o600)
         target.write_bytes(b"tampered")
@@ -454,8 +454,7 @@ def test_recovery_removes_orphaned_staging_and_metadata_temp_files(tmp_path: Pat
     (staging / "partial").write_bytes(b"partial")
     temporary = artifact_root / f".active.json-{'b' * 32}.tmp"
     temporary.write_bytes(b"partial")
-    if os.name != "nt":
-        temporary.chmod(0o600)
+    temporary.chmod(0o600)
 
     assert release_installer.recover() == ()
     assert not staging.exists()
@@ -541,23 +540,19 @@ def test_unexpected_file_after_install_is_detected(tmp_path: Path) -> None:
     content_root = installed_file_path(
         release_installer,
         result.installed.deployment_dir,
-        "bin/blue-team-agent",
+        "bin/aisoc-agent",
     ).parents[1]
-    if os.name != "nt":
-        content_root.chmod(0o700)
+    content_root.chmod(0o700)
     unexpected = content_root / "unexpected"
     unexpected.write_bytes(b"tampered")
-    if os.name != "nt":
-        unexpected.chmod(0o400)
-        content_root.chmod(0o500)
+    unexpected.chmod(0o400)
+    content_root.chmod(0o500)
 
     with pytest.raises(ReleaseInstallationError, match="unexpected file"):
         release_installer.active_release(ARTIFACT_ID)
 
 
 def test_installed_file_hardlink_substitution_is_detected(tmp_path: Path) -> None:
-    if os.name == "nt":
-        pytest.skip("POSIX hardlink semantics require Linux")
     payload = agent_payload()
     private_key = Ed25519PrivateKey.generate()
     verifier = release_verifier(private_key)
@@ -573,7 +568,7 @@ def test_installed_file_hardlink_substitution_is_detected(tmp_path: Path) -> Non
     executable = installed_file_path(
         release_installer,
         result.installed.deployment_dir,
-        "bin/blue-team-agent",
+        "bin/aisoc-agent",
     )
     os.link(executable, tmp_path / "second-name")
 
@@ -615,8 +610,6 @@ def test_install_lock_rejects_reentrant_competing_installer(tmp_path: Path) -> N
 
 
 def test_installed_tree_is_private_and_read_only_on_posix(tmp_path: Path) -> None:
-    if os.name == "nt":
-        pytest.skip("POSIX mode semantics require Linux")
     payload = agent_payload()
     private_key = Ed25519PrivateKey.generate()
     verifier = release_verifier(private_key)
@@ -633,7 +626,7 @@ def test_installed_tree_is_private_and_read_only_on_posix(tmp_path: Path) -> Non
     executable = installed_file_path(
         release_installer,
         result.installed.deployment_dir,
-        "bin/blue-team-agent",
+        "bin/aisoc-agent",
     )
     config = installed_file_path(
         release_installer,
@@ -647,20 +640,18 @@ def test_installed_tree_is_private_and_read_only_on_posix(tmp_path: Path) -> Non
 def test_real_candidate_process_health_gate_commits_only_manageable_release(
     tmp_path: Path,
 ) -> None:
-    if os.name == "nt":
-        pytest.skip("direct executable candidate probes require Linux")
     healthy_script = b"""#!/bin/sh
 stopping=0
 trap 'stopping=1' TERM INT
-printf 'BLUE_TEAM_AGENT_HEALTH_V1 STARTED\n'
-printf 'BLUE_TEAM_AGENT_HEALTH_V1 HEALTHY\n'
+printf 'AISOC_AGENT_HEALTH_V1 STARTED\n'
+printf 'AISOC_AGENT_HEALTH_V1 HEALTHY\n'
 while [ "$stopping" -eq 0 ]; do sleep 0.05; done
 """
     bin_directory = tarfile.TarInfo("bin/")
     bin_directory.type = tarfile.DIRTYPE
     bin_directory.mode = 0o755
     healthy_payload = tar_payload(
-        (("bin/blue-team-agent", healthy_script, 0o755),),
+        (("bin/aisoc-agent", healthy_script, 0o755),),
         extra_members=(bin_directory,),
     )
     private_key = Ed25519PrivateKey.generate()
@@ -697,11 +688,11 @@ while [ "$stopping" -eq 0 ]; do sleep 0.05; done
     assert release_installer.active_release(ARTIFACT_ID) == first.active
 
     unhealthy_script = b"""#!/bin/sh
-printf 'BLUE_TEAM_AGENT_HEALTH_V1 STARTED\n'
+printf 'AISOC_AGENT_HEALTH_V1 STARTED\n'
 sleep 30
 """
     unhealthy_payload = tar_payload(
-        (("bin/blue-team-agent", unhealthy_script, 0o755),),
+        (("bin/aisoc-agent", unhealthy_script, 0o755),),
         extra_members=(bin_directory,),
     )
     queue_sentinel = tmp_path / "queue.sqlite3"

@@ -5,7 +5,7 @@
 P9 已完成非 Docker 基础实现，但阶段门禁未关闭。当前实现覆盖独立加密隔离区、受限静态
 检查、多信号结论、文件上下文关联、租户作用域 API、租约式独立 worker、签名沙箱报告导入
 契约及迁移 `20260809_0011`。**YARA-X 已接入真实 `yara-x` Python 包**（`malware_engine/yara_x_scanner.py` 的 `YaraXAdapter`：从配置的规则文件/目录编译、线程内扫描、匹配输出为 `SUSPICIOUS` 单点信号并提取 `family`/`malware_type` 元数据；`__main__` 在 `malware_yara_x_rules_path` 配置时构造该 adapter，未配置时仍回退为 `builtin-yara-x=not_configured`，由 `tests/unit/test_yara_x_scanner.py` 在真实 yara-x 上验证）。ClamAV、真实信誉源、动态沙箱、PostgreSQL 并发、
-双租户 HTTP、Linux 不可执行挂载与 Kali 逃逸/外联门禁尚未动态验证。
+双租户 HTTP、Linux 不可执行挂载与 隔离环境逃逸/外联门禁尚未动态验证。
 
 因此当前 P9 状态仍是 `technical_hit / unrated`，不能把本地单元测试、fake scanner 或离线 DDL
 编译解释为恶意程序识别能力已经验收。
@@ -33,7 +33,7 @@ separate VM/isolation cluster -- signed structured report --> verifier/import AP
 
 - API server 只接收有界原始 body，计算隔离存储所需 hash 并加密写入；不执行静态解释，不启动
   malware worker，也不提供样本下载/导出路由。
-- `blue-team-malware-worker` 是独立进程角色。它在短事务中 claim lease，提交后才解密/检查，
+- `aisoc-malware-worker` 是独立进程角色。它在短事务中 claim lease，提交后才解密/检查，
   最后用新事务保存结果；扫描期间不持有数据库锁。
 - Endpoint Agent 不读取、不解释、不执行样本。
 - 动态执行不属于静态 worker。当前仓库没有样本执行代码、通用 Shell、任意文件/HTTP 工具，
@@ -51,8 +51,8 @@ separate VM/isolation cluster -- signed structured report --> verifier/import AP
 - 文件独占创建，目录/文件尝试设置为 `0700/0600`，拒绝符号链接根和越界路径。
 - 协议只有 `put` 与内部 `read_for_scan`，没有 `get`、download 或 export 方法。
 
-Windows 单元测试只能证明密文、AAD、路径和接口边界，不能证明 Linux mount 的 `noexec/nodev/nosuid`
-或服务账号 ACL；这些留待 Kali/部署门禁。
+本地单元测试只能证明密文、AAD、路径和接口边界，不能证明 Linux mount 的 `noexec/nodev/nosuid`
+或服务账号 ACL；这些留待 Linux VM/部署门禁。
 
 ### 静态检查
 
@@ -99,11 +99,11 @@ Windows 单元测试只能证明密文、AAD、路径和接口边界，不能证
 默认关闭：
 
 ```bash
-export BLUE_TEAM_MALWARE_ANALYSIS_ENABLED=true
-export BLUE_TEAM_MALWARE_QUARANTINE_ROOT=/var/lib/blue-team/quarantine
-export BLUE_TEAM_MALWARE_QUARANTINE_KEY='<32-byte base64url secret>'
-export BLUE_TEAM_MALWARE_WORKER_ENABLED=true
-uv run blue-team-malware-worker
+export AISOC_MALWARE_ANALYSIS_ENABLED=true
+export AISOC_MALWARE_QUARANTINE_ROOT=/var/lib/aisoc/quarantine
+export AISOC_MALWARE_QUARANTINE_KEY='<32-byte base64url secret>'
+export AISOC_MALWARE_WORKER_ENABLED=true
+uv run aisoc-malware-worker
 ```
 
 不要在 API 进程中运行 worker。生产部署还必须把 API、静态 worker、quarantine 和动态沙箱拆成
@@ -122,11 +122,11 @@ uv run blue-team-malware-worker
 - migration：single head `20260809_0011`；base→head 和 0011→base offline SQL 成功；五张 P9 表
   PostgreSQL DDL compile 成功。
 - `tests/integration/test_malware_persistence.py` 已提交，但没有
-  `BLUE_TEAM_TEST_DATABASE_URL` 时按设计跳过。
+  `AISOC_TEST_DATABASE_URL` 时按设计跳过。
 
 ## 未关闭门禁
 
-1. 在 Kali/PostgreSQL 执行迁移、lease reclaim、两个 worker 并发 claim、失败重试及跨租户 FK/API。
+1. 在 Linux VM/PostgreSQL 执行迁移、lease reclaim、两个 worker 并发 claim、失败重试及跨租户 FK/API。
 2. 接入明确版本的 YARA-X/ClamAV adapter 和规则/签名更新链；用许可的 known samples 与 safe
    simulations 评估目标，同时证明单一命中不能确认 family/type。
 3. 将 quarantine 部署到独立加密、`noexec,nodev,nosuid` mount，使用独立服务账号和 secret manager；

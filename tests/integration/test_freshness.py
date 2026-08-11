@@ -9,23 +9,23 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 
-from blue_team.api_server import create_app
-from blue_team.config import Settings
-from blue_team.domain.console import FreshnessStatus
-from blue_team.domain.resources import TenantCreate
-from blue_team.observability.freshness import FreshnessMonitor
-from blue_team.storage import Database
-from blue_team.storage.models import (
+from aisoc.api_server import create_app
+from aisoc.config import Settings
+from aisoc.domain.console import FreshnessStatus
+from aisoc.domain.resources import TenantCreate
+from aisoc.observability.freshness import FreshnessMonitor
+from aisoc.storage import Database
+from aisoc.storage.models import (
     AgentEventRecord,
     EventFreshnessRecord,
     HostRecord,
     NormalizedEventRecord,
     TenantRecord,
 )
-from blue_team.storage.repositories import create_tenant
+from aisoc.storage.repositories import create_tenant
 from tests.integration._helpers import truncate_all
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(DATABASE_URL is None, reason="PostgreSQL integration URL is not set"),

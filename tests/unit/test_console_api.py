@@ -10,11 +10,11 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from blue_team.api_server import create_app
-from blue_team.api_server.auth import RequestPrincipal, require_tenant_principal
-from blue_team.api_server.dependencies import get_session
-from blue_team.config import Settings
-from blue_team.domain.console import (
+from aisoc.api_server import create_app
+from aisoc.api_server.auth import RequestPrincipal, require_tenant_principal
+from aisoc.api_server.dependencies import get_session
+from aisoc.config import Settings
+from aisoc.domain.console import (
     ConsoleAttackTraceInvestigation,
     ConsoleIncidentEvidenceDetail,
     ConsoleIncidentInvestigation,
@@ -43,16 +43,16 @@ from blue_team.domain.console import (
     ConsoleTraceEvidenceRef,
     ConsoleTraceSectionCounts,
 )
-from blue_team.domain.detection import AttackState
-from blue_team.domain.incident import IncidentEvidenceRef
-from blue_team.domain.resources import (
+from aisoc.domain.detection import AttackState
+from aisoc.domain.incident import IncidentEvidenceRef
+from aisoc.domain.resources import (
     IncidentSeverity,
     IncidentStatus,
     NormalizedEventRead,
 )
-from blue_team.domain.response import OperatorRole
-from blue_team.domain.trace import TraceEntityType, TraceRevisionReason, TraceSourceIncident
-from blue_team.storage.console_repository import _console_model_provider_configuration
+from aisoc.domain.response import OperatorRole
+from aisoc.domain.trace import TraceEntityType, TraceRevisionReason, TraceSourceIncident
+from aisoc.storage.console_repository import _console_model_provider_configuration
 
 TENANT = "ten_console_api"
 NOW = datetime(2026, 8, 9, 19, 0, tzinfo=UTC)
@@ -429,29 +429,29 @@ async def test_console_snapshot_uses_authenticated_tenant_and_enforces_roles(
 
     app.dependency_overrides[require_tenant_principal] = principal
     app.dependency_overrides[get_session] = session
-    monkeypatch.setattr("blue_team.api_server.routes.console.get_console_snapshot", snapshot)
+    monkeypatch.setattr("aisoc.api_server.routes.console.get_console_snapshot", snapshot)
     monkeypatch.setattr(
-        "blue_team.api_server.routes.console.get_console_incident_investigation",
+        "aisoc.api_server.routes.console.get_console_incident_investigation",
         investigation,
     )
     monkeypatch.setattr(
-        "blue_team.api_server.routes.console.get_console_incident_evidence_detail",
+        "aisoc.api_server.routes.console.get_console_incident_evidence_detail",
         evidence,
     )
     monkeypatch.setattr(
-        "blue_team.api_server.routes.console.get_console_attack_trace_investigation",
+        "aisoc.api_server.routes.console.get_console_attack_trace_investigation",
         trace,
     )
     monkeypatch.setattr(
-        "blue_team.api_server.routes.console.get_console_malware_investigation",
+        "aisoc.api_server.routes.console.get_console_malware_investigation",
         malware,
     )
     monkeypatch.setattr(
-        "blue_team.api_server.routes.console.get_console_rule_intelligence_operations",
+        "aisoc.api_server.routes.console.get_console_rule_intelligence_operations",
         rules,
     )
     monkeypatch.setattr(
-        "blue_team.api_server.routes.console.get_console_model_operations",
+        "aisoc.api_server.routes.console.get_console_model_operations",
         models,
     )
 
@@ -568,7 +568,7 @@ async def test_console_system_operations_requires_auditor_or_tenant_admin(
     app.dependency_overrides[require_tenant_principal] = principal
     app.dependency_overrides[get_session] = session
     monkeypatch.setattr(
-        "blue_team.api_server.routes.console.get_console_system_operations",
+        "aisoc.api_server.routes.console.get_console_system_operations",
         system_operations,
     )
 

@@ -9,8 +9,8 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from pydantic import SecretStr, ValidationError
 
-from blue_team.ai_review.prompting import build_model_request
-from blue_team.ai_review.providers import (
+from aisoc.ai_review.prompting import build_model_request
+from aisoc.ai_review.providers import (
     PROVIDER_PRESETS,
     CircuitOpenError,
     DeepSeekProvider,
@@ -23,11 +23,11 @@ from blue_team.ai_review.providers import (
     ProviderCallFailed,
     ResilientModelClient,
 )
-from blue_team.ai_review.providers.openai_compatible import (
+from aisoc.ai_review.providers.openai_compatible import (
     AioHttpJsonTransport,
     JsonHttpTransport,
 )
-from blue_team.domain import (
+from aisoc.domain import (
     AiReviewPolicy,
     AnalyzerReport,
     EvidencePackage,

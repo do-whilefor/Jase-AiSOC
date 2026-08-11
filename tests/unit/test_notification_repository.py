@@ -7,11 +7,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from blue_team.storage.models import (
+from aisoc.storage.models import (
     NotificationDeliveryAttemptRecord,
     NotificationOutboxRecord,
 )
-from blue_team.storage.notification_repository import (
+from aisoc.storage.notification_repository import (
     NotificationLease,
     claim_next_notification,
     complete_notification_delivery,

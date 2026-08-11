@@ -7,7 +7,7 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel
 
-from blue_team.domain.schema_export import (
+from aisoc.domain.schema_export import (
     SCHEMA_MODELS,
     export_all_schemas,
     render_model_schema,

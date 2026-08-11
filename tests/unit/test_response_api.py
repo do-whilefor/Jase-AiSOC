@@ -9,11 +9,11 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from blue_team.api_server import create_app
-from blue_team.api_server.auth import RequestPrincipal, require_tenant_principal
-from blue_team.api_server.dependencies import get_session
-from blue_team.config import Settings
-from blue_team.domain.response import (
+from aisoc.api_server import create_app
+from aisoc.api_server.auth import RequestPrincipal, require_tenant_principal
+from aisoc.api_server.dependencies import get_session
+from aisoc.config import Settings
+from aisoc.domain.response import (
     OperatorRole,
     ResponseActionDetail,
     ResponseActionEvent,
@@ -73,7 +73,7 @@ async def test_response_api_uses_authenticated_tenant_and_runner_is_fail_closed(
 
     app.dependency_overrides[require_tenant_principal] = principal
     app.dependency_overrides[get_session] = session
-    monkeypatch.setattr("blue_team.api_server.routes.responses.create_response_plan", create)
+    monkeypatch.setattr("aisoc.api_server.routes.responses.create_response_plan", create)
     payload = {
         "incident_revision": 1,
         "action": "temporary_block_ip",
@@ -230,9 +230,9 @@ async def test_response_api_forwards_bounded_mutations_with_tenant_actor(
 
     app.dependency_overrides[require_tenant_principal] = authenticated
     app.dependency_overrides[get_session] = session
-    monkeypatch.setattr("blue_team.api_server.routes.responses.decide_response_approval", approve)
-    monkeypatch.setattr("blue_team.api_server.routes.responses.queue_response_action", queue)
-    monkeypatch.setattr("blue_team.api_server.routes.responses.request_response_rollback", rollback)
+    monkeypatch.setattr("aisoc.api_server.routes.responses.decide_response_approval", approve)
+    monkeypatch.setattr("aisoc.api_server.routes.responses.queue_response_action", queue)
+    monkeypatch.setattr("aisoc.api_server.routes.responses.request_response_rollback", rollback)
     action_id = "rsa_22222222222222222222222222222222"
 
     async with (

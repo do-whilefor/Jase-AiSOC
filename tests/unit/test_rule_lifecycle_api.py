@@ -10,16 +10,16 @@ from typing import Any, cast
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from blue_team.api_server import create_app
-from blue_team.api_server.auth import RequestPrincipal, require_tenant_principal
-from blue_team.api_server.dependencies import get_session
-from blue_team.config import Settings
-from blue_team.detection_engine.lifecycle import (
+from aisoc.api_server import create_app
+from aisoc.api_server.auth import RequestPrincipal, require_tenant_principal
+from aisoc.api_server.dependencies import get_session
+from aisoc.config import Settings
+from aisoc.detection_engine.lifecycle import (
     RuleLifecycleTrustKey,
     RuleLifecycleVerificationError,
 )
-from blue_team.domain.response import OperatorRole
-from blue_team.domain.rule_lifecycle import (
+from aisoc.domain.response import OperatorRole
+from aisoc.domain.rule_lifecycle import (
     RuleEmissionScope,
     RuleLifecycleImportResult,
     RuleLifecycleStage,
@@ -160,8 +160,8 @@ async def test_rule_lifecycle_api_forwards_authenticated_tenant_and_roles(
 
     app.dependency_overrides[require_tenant_principal] = principal
     app.dependency_overrides[get_session] = session
-    monkeypatch.setattr("blue_team.api_server.routes.rules.import_rule_lifecycle_manifest", apply)
-    monkeypatch.setattr("blue_team.api_server.routes.rules.list_rule_lifecycle_states", states)
+    monkeypatch.setattr("aisoc.api_server.routes.rules.import_rule_lifecycle_manifest", apply)
+    monkeypatch.setattr("aisoc.api_server.routes.rules.list_rule_lifecycle_states", states)
     async with (
         app.router.lifespan_context(app),
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
@@ -219,7 +219,7 @@ async def test_rule_lifecycle_verification_error_is_a_bounded_client_error(
 
     app.dependency_overrides[require_tenant_principal] = principal
     app.dependency_overrides[get_session] = session
-    monkeypatch.setattr("blue_team.api_server.routes.rules.import_rule_lifecycle_manifest", reject)
+    monkeypatch.setattr("aisoc.api_server.routes.rules.import_rule_lifecycle_manifest", reject)
     async with (
         app.router.lifespan_context(app),
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,

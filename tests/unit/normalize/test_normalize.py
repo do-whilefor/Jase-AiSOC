@@ -8,19 +8,19 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from blue_team.agent_core.contracts import AgentEnvelope, EventPriority
-from blue_team.domain import SecurityEvent
-from blue_team.domain.security_event import SourceKind
-from blue_team.enrich import Enricher
-from blue_team.normalize import (
+from aisoc.agent_core.contracts import AgentEnvelope, EventPriority
+from aisoc.domain import SecurityEvent
+from aisoc.domain.security_event import SourceKind
+from aisoc.enrich import Enricher
+from aisoc.normalize import (
     NormalizeResult,
     RawInput,
     advance,
     dedupe_key,
     get_normalizer,
 )
-from blue_team.normalize.watermark import WatermarkSnapshot
-from blue_team.storage.event_repository import insert_normalized_event
+from aisoc.normalize.watermark import WatermarkSnapshot
+from aisoc.storage.event_repository import insert_normalized_event
 
 TENANT = "ten_01JTESTTENANT"
 HOST = "host_01JTESTHOST"
@@ -80,7 +80,7 @@ def _raw_agent(envelope: AgentEnvelope, canonical: bytes) -> RawInput:
 
 
 def test_normalizer_registry_returns_agent_adapter() -> None:
-    from blue_team.domain.security_event import SourceKind
+    from aisoc.domain.security_event import SourceKind
 
     normalizer = get_normalizer(SourceKind.AGENT)
     assert normalizer is not None
@@ -89,7 +89,7 @@ def test_normalizer_registry_returns_agent_adapter() -> None:
 
 
 def test_normalizer_registry_unknown_kind_returns_none() -> None:
-    from blue_team.domain.security_event import SourceKind
+    from aisoc.domain.security_event import SourceKind
 
     # Concrete P3/P4/P5 adapters coexist with explicit stubs for later source kinds.
     assert get_normalizer(SourceKind.AGENT) is not None
@@ -101,8 +101,8 @@ def test_normalizer_registry_unknown_kind_returns_none() -> None:
 
 
 def test_agent_normalizer_passes_through_with_clock_offset() -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     envelope = _envelope(1)
     canonical = b'{"canonical":"bytes"}'
@@ -116,8 +116,8 @@ def test_agent_normalizer_passes_through_with_clock_offset() -> None:
 
 
 def test_agent_normalizer_marks_large_clock_offset_as_skewed() -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     envelope = _envelope(1)
     skewed_event = envelope.event.model_copy(
@@ -134,8 +134,8 @@ def test_agent_normalizer_marks_large_clock_offset_as_skewed() -> None:
 
 
 def test_suricata_normalizer_maps_eve_alert() -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     eve = (
         b'{"event_type":"alert","timestamp":"2026-08-04T08:00:00Z",'
@@ -161,13 +161,14 @@ def test_suricata_normalizer_maps_eve_alert() -> None:
 
 
 def test_suricata_normalizer_maps_eve_http_extensions() -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     eve = (
         b'{"event_type":"http","timestamp":"2026-08-04T08:00:00Z",'
         b'"src_ip":"203.0.113.9","src_port":51000,"dest_ip":"10.0.0.2","dest_port":80,'
-        b'"proto":"tcp","http":{"http_method":"GET","url":"/admin/.env","status":404}}'
+        b'"proto":"tcp","http":{"hostname":"bad.example","http_method":"GET",'
+        b'"url":"/admin/.env","status":404}}'
     )
     raw = RawInput(
         source_kind=SourceKind.SURICATA,
@@ -185,11 +186,39 @@ def test_suricata_normalizer_maps_eve_http_extensions() -> None:
     assert result.event.extensions.get("http.method") == "GET"
     assert result.event.extensions.get("http.url") == "/admin/.env"
     assert result.event.extensions.get("http.status") == 404
+    assert result.event.extensions.get("network.domain") == "bad.example"
+
+
+def test_suricata_normalizer_maps_dns_query_domain() -> None:
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
+
+    eve = (
+        b'{"event_type":"dns","timestamp":"2026-08-04T08:00:00Z",'
+        b'"src_ip":"203.0.113.9","dest_ip":"10.0.0.53","proto":"udp",'
+        b'"dns":{"queries":[{"rrname":"bad.example","rrtype":"A"}]}}'
+    )
+    raw = RawInput(
+        source_kind=SourceKind.SURICATA,
+        raw_payload=eve,
+        raw_ref="evidence://ten/raw/suri_dns",
+        tenant_id=TENANT,
+        host_id=HOST,
+        agent_id=None,
+        boot_id=None,
+        received_at=datetime(2026, 8, 4, 8, 1, 0, tzinfo=UTC),
+    )
+
+    result = get_normalizer(SourceKind.SURICATA).normalize(raw)  # type: ignore[union-attr]
+
+    assert result.event is not None
+    assert result.event.event_type == "network.dns"
+    assert result.event.extensions.get("network.domain") == "bad.example"
 
 
 def test_suricata_normalizer_maps_eve_ssh_failure_extension() -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     eve = (
         b'{"event_type":"ssh","timestamp":"2026-08-04T08:00:00Z",'
@@ -214,8 +243,8 @@ def test_suricata_normalizer_maps_eve_ssh_failure_extension() -> None:
 
 
 def test_suricata_ssh_without_explicit_failure_remains_unknown() -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     eve = (
         b'{"event_type":"ssh","timestamp":"2026-08-04T08:00:00Z",'
@@ -240,8 +269,8 @@ def test_suricata_ssh_without_explicit_failure_remains_unknown() -> None:
 
 
 def test_journald_normalizer_maps_export_record() -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     record = (
         b'{"__REALTIME_TIMESTAMP":"1722758400000000","_SYSTEMD_UNIT":"ssh.service",'
@@ -287,8 +316,8 @@ def test_journald_sshd_maps_explicit_authentication_outcome(
     expected_auth: str,
     username: str,
 ) -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     record = json.dumps(
         {
@@ -322,8 +351,8 @@ def test_journald_sshd_maps_explicit_authentication_outcome(
 
 
 def test_journald_non_sshd_cannot_forge_authentication_event() -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     record = json.dumps(
         {
@@ -353,8 +382,8 @@ def test_journald_non_sshd_cannot_forge_authentication_event() -> None:
 
 
 def test_service_log_normalizer_maps_nginx_apache_combined_format() -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     line = (
         b"203.0.113.9 - alice [04/Aug/2026:08:00:00 +0000] "
@@ -388,8 +417,8 @@ def test_service_log_normalizer_maps_nginx_apache_combined_format() -> None:
 
 
 def test_service_log_normalizer_rejects_unsupported_format_to_dlq() -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     raw = RawInput(
         source_kind=SourceKind.SERVICE_LOG,
@@ -559,8 +588,8 @@ async def test_duplicate_late_event_remains_idempotent_replay() -> None:
 
 
 def test_dlq_on_invalid_suricata_payload() -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     raw = RawInput(
         source_kind=SourceKind.SURICATA,
@@ -580,8 +609,8 @@ def test_dlq_on_invalid_suricata_payload() -> None:
 
 
 def test_dlq_for_unimplemented_source_kind() -> None:
-    from blue_team.domain.security_event import SourceKind
-    from blue_team.normalize import get_normalizer
+    from aisoc.domain.security_event import SourceKind
+    from aisoc.normalize import get_normalizer
 
     raw = RawInput(
         source_kind=SourceKind.FILE_SCAN,
@@ -597,6 +626,33 @@ def test_dlq_for_unimplemented_source_kind() -> None:
     assert result.event is None
     assert result.dlq is not None
     assert result.dlq.reason == "no_normalizer"
+
+
+@pytest.mark.asyncio
+async def test_enrichment_uses_normalized_domain_extension() -> None:
+    event = _security_event(1).model_copy(
+        update={"extensions": {"network.domain": "Bad.Example."}}
+    )
+
+    class DomainExternal:
+        async def enrich_ip(self, ip: str) -> dict[str, object] | None:
+            return None
+
+        async def enrich_sha256(self, sha256: str) -> dict[str, object] | None:
+            return None
+
+        async def enrich_domain(self, domain: str) -> dict[str, object] | None:
+            assert domain == "Bad.Example."
+            return {"provider": "local_pinned_ioc", "indicator_type": "domain"}
+
+    result = await Enricher(external=DomainExternal())._external_enrichment(event)
+
+    assert result == {
+        "domain.Bad.Example.": {
+            "provider": "local_pinned_ioc",
+            "indicator_type": "domain",
+        }
+    }
 
 
 @pytest.mark.asyncio

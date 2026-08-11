@@ -1,0 +1,13 @@
+[package]
+name = "aisoc-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Linux-native deterministic core for AI-SOC"
+publish = false
+
+[dependencies]
+hex = "0.4"
+libc = "0.2"
+sha2 = "0.10"

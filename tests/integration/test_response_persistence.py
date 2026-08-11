@@ -1,7 +1,7 @@
 """P11 real-PostgreSQL approval, lease, execution, rollback, and tenant gate.
 
-This remains skipped in the non-Docker Windows pass and is intended for the
-later Kali/PostgreSQL validation environment with migration 0013 applied.
+This remains skipped in the local run without PostgreSQL and is intended for the
+a Linux/PostgreSQL integration environment with migration 0013 applied.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import func, select
 
-from blue_team.domain.response import (
+from aisoc.domain.response import (
     ApprovalDecision,
     FirewallAdapter,
     IpResponseTarget,
@@ -24,10 +24,10 @@ from blue_team.domain.response import (
     ResponseQueueRequest,
     ResponseRollbackRequest,
 )
-from blue_team.errors import NotFoundError, StateConflictError
-from blue_team.response_engine import execute_response_action, rollback_response_action
-from blue_team.storage import Database
-from blue_team.storage.models import (
+from aisoc.errors import NotFoundError, StateConflictError
+from aisoc.response_engine import execute_response_action, rollback_response_action
+from aisoc.storage import Database
+from aisoc.storage.models import (
     AgentEventRecord,
     HostRecord,
     IncidentEvidenceRecord,
@@ -40,7 +40,7 @@ from blue_team.storage.models import (
     ResponseRollbackRecord,
     TenantRecord,
 )
-from blue_team.storage.response_repository import (
+from aisoc.storage.response_repository import (
     claim_next_response_action,
     complete_response_execution,
     complete_response_rollback,
@@ -53,7 +53,7 @@ from blue_team.storage.response_repository import (
 from tests.integration._helpers import truncate_all
 from tests.unit.test_response_adapters import FakeAdapter
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(DATABASE_URL is None, reason="PostgreSQL integration URL is not set"),
@@ -221,7 +221,7 @@ async def test_p11_persists_two_person_approval_execution_and_verified_rollback(
                 data=request,
                 actor="tenant-credential:cred_requester",
                 firewall_adapter=FirewallAdapter.NFTABLES,
-                file_quarantine_root="/var/lib/blue-team/response-quarantine",
+                file_quarantine_root="/var/lib/aisoc/response-quarantine",
                 allowed_file_roots=("/opt", "/srv", "/tmp", "/var/tmp"),
                 max_active_actions_per_incident=8,
                 max_active_targets_per_incident=4,

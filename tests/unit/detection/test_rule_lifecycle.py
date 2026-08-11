@@ -10,8 +10,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import ValidationError
 
-from blue_team.detection_engine.governance import RuleGovernance, get_rule_governance
-from blue_team.detection_engine.lifecycle import (
+from aisoc.detection_engine.governance import RuleGovernance, get_rule_governance
+from aisoc.detection_engine.lifecycle import (
     RuleLifecycleTrustKey,
     RuleLifecycleVerificationError,
     RuleRuntimePolicy,
@@ -19,7 +19,7 @@ from blue_team.detection_engine.lifecycle import (
     rule_catalog_sha256,
     verify_signed_rule_lifecycle_manifest,
 )
-from blue_team.domain.rule_lifecycle import (
+from aisoc.domain.rule_lifecycle import (
     RuleLifecycleChangeKind,
     RuleLifecycleManifest,
     RuleLifecycleStage,

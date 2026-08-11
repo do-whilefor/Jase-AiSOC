@@ -3,13 +3,13 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "blue-team-ai-agent"
+name = "aisoc-security-platform"
 version = "0.0.1"
 description = "Evidence-first Linux security analysis and response platform"
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
 authors = [
-  { name = "Blue Team AI Agent Contributors" },
+  { name = "AI-SOC Contributors" },
 ]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
@@ -35,15 +35,15 @@ dependencies = [
 ]
 
 [project.scripts]
-blue-team-agent = "blue_team.agent_core.__main__:main"
-blue-team-api = "blue_team.api_server.__main__:main"
-blue-team-ingest = "blue_team.ingest_gateway.__main__:main"
-blue-team-export-schemas = "blue_team.domain.schema_export:main"
-blue-team-probe-platform = "blue_team.platform.__main__:main"
-blue-team-process = "blue_team.process.__main__:main"
-blue-team-malware-worker = "blue_team.malware_engine.__main__:main"
-blue-team-notification-worker = "blue_team.notification_engine.__main__:main"
-blue-team-response-worker = "blue_team.response_engine.__main__:main"
+aisoc-agent = "aisoc.agent_core.__main__:main"
+aisoc-api = "aisoc.api_server.__main__:main"
+aisoc-ingest = "aisoc.ingest_gateway.__main__:main"
+aisoc-export-schemas = "aisoc.domain.schema_export:main"
+aisoc-probe-platform = "aisoc.platform.__main__:main"
+aisoc-process = "aisoc.process.__main__:main"
+aisoc-malware-worker = "aisoc.malware_engine.__main__:main"
+aisoc-notification-worker = "aisoc.notification_engine.__main__:main"
+aisoc-response-worker = "aisoc.response_engine.__main__:main"
 
 [dependency-groups]
 dev = [
@@ -60,7 +60,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/blue_team"]
+packages = ["src/aisoc"]
 
 [tool.ruff]
 target-version = "py312"
@@ -90,7 +90,7 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-source = ["blue_team"]
+source = ["aisoc"]
 
 [tool.coverage.report]
 show_missing = true

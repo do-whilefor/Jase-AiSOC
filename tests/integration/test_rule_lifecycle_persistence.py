@@ -13,13 +13,13 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from sqlalchemy import func, select
 
-from blue_team.detection_engine.governance import get_rule_governance
-from blue_team.detection_engine.lifecycle import (
+from aisoc.detection_engine.governance import get_rule_governance
+from aisoc.detection_engine.lifecycle import (
     RuleLifecycleTrustKey,
     canonical_rule_lifecycle_manifest,
     rule_catalog_sha256,
 )
-from blue_team.domain.rule_lifecycle import (
+from aisoc.domain.rule_lifecycle import (
     RuleLifecycleChangeKind,
     RuleLifecycleImportResult,
     RuleLifecycleManifest,
@@ -27,18 +27,18 @@ from blue_team.domain.rule_lifecycle import (
     RuleValidationEvidence,
     SignedRuleLifecycleManifest,
 )
-from blue_team.errors import StateConflictError
-from blue_team.storage import Database
-from blue_team.storage.models import (
+from aisoc.errors import StateConflictError
+from aisoc.storage import Database
+from aisoc.storage.models import (
     HostRecord,
     RuleLifecycleEventRecord,
     RuleLifecycleStateRecord,
     TenantRecord,
 )
-from blue_team.storage.rule_lifecycle_repository import import_rule_lifecycle_manifest
+from aisoc.storage.rule_lifecycle_repository import import_rule_lifecycle_manifest
 from tests.integration._helpers import truncate_all
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(DATABASE_URL is None, reason="PostgreSQL integration URL is not set"),

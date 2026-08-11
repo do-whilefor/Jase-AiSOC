@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from blue_team.domain import AssuranceLevel, AttackState, Criticality
-from blue_team.domain.response import (
+from aisoc.domain import AssuranceLevel, AttackState, Criticality
+from aisoc.domain.response import (
     AccountResponseTarget,
     EvidenceCollectionKind,
     EvidenceCollectionTarget,
@@ -23,7 +23,7 @@ from blue_team.domain.response import (
     ResponsePlanCreate,
     ResponsePolicyContext,
 )
-from blue_team.response_engine import build_response_plan, target_identity_sha256
+from aisoc.response_engine import build_response_plan, target_identity_sha256
 
 TENANT = "ten_response01"
 HOST = "host_response01"

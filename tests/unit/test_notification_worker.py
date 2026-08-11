@@ -7,13 +7,13 @@ from typing import cast
 
 import pytest
 
-from blue_team.notification_engine.webhook import (
+from aisoc.notification_engine.webhook import (
     NotificationWebhookClient,
     WebhookDeliveryOutcome,
 )
-from blue_team.notification_engine.worker import NotificationWorker
-from blue_team.storage import Database
-from blue_team.storage.notification_repository import (
+from aisoc.notification_engine.worker import NotificationWorker
+from aisoc.storage import Database
+from aisoc.storage.notification_repository import (
     NotificationFinalization,
     NotificationLease,
 )
@@ -94,9 +94,9 @@ async def test_notification_worker_does_not_hold_transaction_during_http(
         completed.append(cast(int, kwargs["http_status"]))
         return NotificationFinalization(status="delivered", attempt=1)
 
-    monkeypatch.setattr("blue_team.notification_engine.worker.claim_next_notification", claim)
+    monkeypatch.setattr("aisoc.notification_engine.worker.claim_next_notification", claim)
     monkeypatch.setattr(
-        "blue_team.notification_engine.worker.complete_notification_delivery",
+        "aisoc.notification_engine.worker.complete_notification_delivery",
         complete,
     )
     worker = NotificationWorker(
@@ -138,8 +138,8 @@ async def test_notification_worker_persists_sanitized_failure_code(
         failures.append(cast(str, kwargs["error_code"]))
         return NotificationFinalization(status="retry_scheduled", attempt=1, next_attempt_at=NOW)
 
-    monkeypatch.setattr("blue_team.notification_engine.worker.claim_next_notification", claim)
-    monkeypatch.setattr("blue_team.notification_engine.worker.fail_notification_delivery", fail)
+    monkeypatch.setattr("aisoc.notification_engine.worker.claim_next_notification", claim)
+    monkeypatch.setattr("aisoc.notification_engine.worker.fail_notification_delivery", fail)
     worker = NotificationWorker(
         cast(Database, database),
         cast(

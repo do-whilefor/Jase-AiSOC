@@ -1,7 +1,7 @@
 # 项目可行性分析
 
-状态：P0 基线草案  
-评估日期：2026-08-03  
+状态：P0 基线草案
+评估日期：2026-08-03
 依据：项目计划书 V3.3 与当前仓库/本地工具链盘点
 
 ## 结论
@@ -37,7 +37,7 @@
 | Python | 本机为 3.14.6 | 项目目标为 3.12/3.13 主验证；CI 必须覆盖受支持版本，3.14 仅作前向观察。 |
 | uv/质量工具 | 本机未预装 | 使用临时 bootstrap 生成锁文件，CI 固定 uv 版本并执行锁定安装。 |
 | Docker | Docker Desktop 4.83.0、Linux Engine 29.6.2、Compose v5.3.1 已验证 | `hello-world` 拉取和运行通过，可用于 P1 PostgreSQL 及后续 NATS/MinIO 容器集成。 |
-| Linux/eBPF 环境 | 当前工作区运行在 Windows，Docker 使用 WSL2 Linux Engine | 容器可验证服务集成，但不能替代宿主级 systemd、auditd、journald、eBPF、DEB/RPM；P2 前必须提供 Linux VM/CI 矩阵。 |
+| Linux/eBPF 环境 | 当前工作区不具备真实 Linux VM/宿主级内核能力 | 容器可验证服务集成，但不能替代宿主级 systemd、auditd、journald、eBPF、DEB/RPM；P2 前必须提供 Linux VM/CI 矩阵。 |
 | 测试数据集 | 未建立 | P4 前必须有版本化正常/失败攻击/成功攻击/缺失/乱序/重复数据集。 |
 | 模型与情报凭据 | 未提供且 P0 不需要 | P7 采用 Mock Provider 先验收降级和结构化输出，再接真实 Provider。 |
 

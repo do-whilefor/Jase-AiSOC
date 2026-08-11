@@ -21,7 +21,7 @@ uv sync --locked --all-groups
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src tests migrations
-uv run blue-team-export-schemas --check
+uv run aisoc-export-schemas --check
 uv run pytest --cov
 uv run pip-audit --skip-editable
 uv run cyclonedx-py environment --output-format JSON --output-file reports/sbom.json

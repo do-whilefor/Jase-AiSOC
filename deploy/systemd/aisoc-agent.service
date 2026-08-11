@@ -1,0 +1,35 @@
+[Unit]
+Description=AI-SOC endpoint collector Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aisoc
+Group=aisoc
+RuntimeDirectory=aisoc-agent
+RuntimeDirectoryMode=0750
+StateDirectory=aisoc-agent
+StateDirectoryMode=0750
+EnvironmentFile=-/etc/aisoc/agent.env
+ExecStart=/opt/aisoc/.venv/bin/aisoc-agent run --config /etc/aisoc/agent.json
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aisoc-agent
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

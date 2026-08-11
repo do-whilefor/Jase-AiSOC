@@ -9,17 +9,17 @@ from typing import Any, cast
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from blue_team.api_server import create_app
-from blue_team.api_server.auth import RequestPrincipal, require_tenant_principal
-from blue_team.api_server.dependencies import get_session
-from blue_team.config import Settings
-from blue_team.domain.trace import (
+from aisoc.api_server import create_app
+from aisoc.api_server.auth import RequestPrincipal, require_tenant_principal
+from aisoc.api_server.dependencies import get_session
+from aisoc.config import Settings
+from aisoc.domain.trace import (
     AttackTraceReport,
     InvestigationExportPackage,
     TraceIncidentInput,
 )
-from blue_team.storage.trace_repository import TracePersistenceResult, trace_snapshot_hash
-from blue_team.trace_engine import AttackTraceBuilder, build_investigation_export
+from aisoc.storage.trace_repository import TracePersistenceResult, trace_snapshot_hash
+from aisoc.trace_engine import AttackTraceBuilder, build_investigation_export
 from tests.unit.test_trace_builder import TENANT, _inputs
 
 
@@ -68,10 +68,10 @@ async def test_trace_http_build_query_and_export_keep_authenticated_tenant(
 
     app.dependency_overrides[require_tenant_principal] = principal
     app.dependency_overrides[get_session] = session
-    monkeypatch.setattr("blue_team.api_server.routes.traces.load_trace_incident_inputs", load)
-    monkeypatch.setattr("blue_team.api_server.routes.traces.persist_attack_trace", persist)
-    monkeypatch.setattr("blue_team.api_server.routes.traces.get_attack_trace", read)
-    monkeypatch.setattr("blue_team.api_server.routes.traces.create_trace_export", export)
+    monkeypatch.setattr("aisoc.api_server.routes.traces.load_trace_incident_inputs", load)
+    monkeypatch.setattr("aisoc.api_server.routes.traces.persist_attack_trace", persist)
+    monkeypatch.setattr("aisoc.api_server.routes.traces.get_attack_trace", read)
+    monkeypatch.setattr("aisoc.api_server.routes.traces.create_trace_export", export)
     root = next(
         item.entity_id
         for item in report.graph.entities

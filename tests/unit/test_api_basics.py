@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from blue_team.agent_core import LocalCertificateAuthority
-from blue_team.api_server import create_app
-from blue_team.config import Settings
+from aisoc.agent_core import LocalCertificateAuthority
+from aisoc.api_server import create_app
+from aisoc.config import Settings
 
 
 @pytest.mark.asyncio

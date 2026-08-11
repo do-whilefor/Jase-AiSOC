@@ -22,10 +22,10 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from blue_team.config import Settings
-from blue_team.detection_engine import Detection, DetectionEngine
-from blue_team.domain.security_event import SecurityEvent, SourceKind
-from blue_team.normalize import RawInput, get_normalizer
+from aisoc.config import Settings
+from aisoc.detection_engine import Detection, DetectionEngine
+from aisoc.domain.security_event import SecurityEvent, SourceKind
+from aisoc.normalize import RawInput, get_normalizer
 
 TENANT = "ten_replay_dataset"
 HOST = "host_replay_dataset"

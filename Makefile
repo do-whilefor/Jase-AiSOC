@@ -1,5 +1,4 @@
-# Blue Team AI Agent - common developer operations.
-# Targets are Linux-native; on Windows use WSL or Kali.
+# AI-SOC developer operations. Linux is the supported runtime platform.
 
 PYTHON ?= python3
 VENV ?= .venv
@@ -7,22 +6,20 @@ PIP := $(VENV)/bin/pip
 PY := $(VENV)/bin/python
 ALEMBIC := $(VENV)/bin/alembic
 
-.PHONY: venv install dev-install migrate run-api run-ingest run-agent probe test lint typecheck rust-extension clean help
+.PHONY: venv install dev-install migrate run-api run-ingest run-agent probe test lint typecheck rust-check rust-test rust-extension rust-wheel container clean help
 
 help:
-	@echo "Blue Team AI Agent - common targets:"
-	@echo "  make venv          - create the Python virtual environment"
-	@echo "  make install       - install the package into the venv"
-	@echo "  make dev-install   - install with dev/test dependencies"
-	@echo "  make migrate       - run Alembic migrations (needs BLUE_TEAM_DATABASE_URL)"
-	@echo "  make run-api       - run the API server"
-	@echo "  make run-ingest    - run the Ingest gateway"
-	@echo "  make run-agent     - run the endpoint Agent (needs --config)"
-	@echo "  make probe         - print the local Linux capability report"
-	@echo "  make test          - run the unit test suite"
-	@echo "  make lint          - run ruff"
-	@echo "  make typecheck     - run mypy"
-	@echo "  make rust-extension - build+install the optional Rust accelerator (.venv)"
+	@echo "AI-SOC targets:"
+	@echo "  make dev-install    - install editable Python dependencies"
+	@echo "  make migrate        - apply Alembic migrations (AISOC_DATABASE_URL)"
+	@echo "  make run-api        - run the API server"
+	@echo "  make run-ingest     - run the mTLS ingest gateway"
+	@echo "  make run-agent CONFIG=/etc/aisoc/agent.json"
+	@echo "  make rust-check     - fmt/check/clippy the Cargo workspace"
+	@echo "  make rust-test      - run Rust workspace tests"
+	@echo "  make rust-extension - build/install the PyO3 bridge into .venv"
+	@echo "  make rust-wheel     - build the release PyO3 wheel for packaging"
+	@echo "  make container      - build a runtime image that requires the Rust wheel"
 
 venv:
 	$(PYTHON) -m venv $(VENV)
@@ -32,23 +29,24 @@ install: venv
 	$(PIP) install .
 
 dev-install: venv
-	$(PIP) install -e ".[dev]" || $(PIP) install -e . && $(PIP) install pytest pytest-asyncio pytest-cov mypy ruff jsonschema
+	$(PIP) install -e .
+	$(PIP) install pytest pytest-asyncio pytest-cov mypy ruff jsonschema
 
 migrate:
 	$(ALEMBIC) upgrade head
 
 run-api:
-	$(VENV)/bin/blue-team-api
+	$(VENV)/bin/aisoc-api
 
 run-ingest:
-	$(VENV)/bin/blue-team-ingest
+	$(VENV)/bin/aisoc-ingest
 
 run-agent:
-	@test -n "$(CONFIG)" || (echo "usage: make run-agent CONFIG=/etc/blue-team/agent.json" && exit 1)
-	$(VENV)/bin/blue-team-agent run --config $(CONFIG)
+	@test -n "$(CONFIG)" || (echo "usage: make run-agent CONFIG=/etc/aisoc/agent.json" && exit 1)
+	$(VENV)/bin/aisoc-agent run --config $(CONFIG)
 
 probe:
-	$(VENV)/bin/blue-team-probe-platform --pretty
+	$(VENV)/bin/aisoc-probe-platform --pretty
 
 test:
 	$(PY) -m pytest
@@ -59,12 +57,25 @@ lint:
 typecheck:
 	$(VENV)/bin/mypy
 
-# Optional Rust accelerator (PyO3/maturin). Not required: the Python package
-# falls back to hashlib/hmac when this extension is absent.
+rust-check:
+	cargo fmt --check --all
+	cargo check --workspace
+	cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+rust-test:
+	cargo test --workspace
+
 rust-extension:
-	@command -v maturin >/dev/null 2>&1 || { \
-		echo "install maturin: uv tool install maturin"; exit 1; }
-	VIRTUAL_ENV="$$(pwd)/$(VENV)" maturin develop --manifest-path rust/blue-team-rust/Cargo.toml
+	@command -v maturin >/dev/null 2>&1 || { echo "maturin is required"; exit 1; }
+	VIRTUAL_ENV="$$(pwd)/$(VENV)" maturin develop --manifest-path crates/aisoc-python/Cargo.toml
+
+rust-wheel:
+	@command -v maturin >/dev/null 2>&1 || { echo "maturin is required"; exit 1; }
+	mkdir -p dist-rust
+	maturin build --locked --release --manifest-path crates/aisoc-python/Cargo.toml --out dist-rust
+
+container: rust-wheel
+	docker build --file deploy/Dockerfile --tag aisoc-security-platform:local .
 
 clean:
 	rm -rf $(VENV) .mypy_cache .pytest_cache .ruff_cache build dist *.egg-info

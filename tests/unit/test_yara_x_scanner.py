@@ -11,13 +11,13 @@ from pathlib import Path
 
 import pytest
 
-from blue_team.domain.malware import EngineKind, EngineStatus, StaticFileProfile, ThreatSignal
-from blue_team.malware_engine.orchestrator import MalwareOrchestrator
+from aisoc.domain.malware import EngineKind, EngineStatus, StaticFileProfile, ThreatSignal
+from aisoc.malware_engine.orchestrator import MalwareOrchestrator
 
 yara_x = pytest.importorskip("yara_x")
 
-from blue_team.malware_engine.static import StaticAnalyzer  # noqa: E402
-from blue_team.malware_engine.yara_x_scanner import YaraXAdapter, compile_rules  # noqa: E402
+from aisoc.malware_engine.static import StaticAnalyzer  # noqa: E402
+from aisoc.malware_engine.yara_x_scanner import YaraXAdapter, compile_rules  # noqa: E402
 
 TENANT_ID = "ten_yara_test"
 SAMPLE_ID = "smp_yara_test"

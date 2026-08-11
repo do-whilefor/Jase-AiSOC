@@ -9,7 +9,7 @@ from typing import cast
 
 import pytest
 
-from blue_team.ai_review.tool_gateway import (
+from aisoc.ai_review.tool_gateway import (
     DatabaseReadOnlyToolDataSource,
     ReadOnlyToolDataSource,
     ToolAuthorizationError,
@@ -17,13 +17,13 @@ from blue_team.ai_review.tool_gateway import (
     ToolInputError,
     ToolQueryScope,
 )
-from blue_team.domain import (
+from aisoc.domain import (
     AiReviewPolicy,
     EvidencePackage,
     IncidentEvidenceRef,
     ModelToolCall,
 )
-from blue_team.storage import Database
+from aisoc.storage import Database
 
 TENANT = "ten_01JP7TOOLS0000"
 HOST = "host_01JP7TOOLS000"

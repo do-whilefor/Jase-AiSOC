@@ -7,9 +7,9 @@ from typing import cast
 
 import pytest
 
-from blue_team.detection_engine import get_rules, register_all
-from blue_team.detection_engine.base import Rule
-from blue_team.detection_engine.governance import (
+from aisoc.detection_engine import get_rules, register_all
+from aisoc.detection_engine.base import Rule
+from aisoc.detection_engine.governance import (
     RuleLifecycleStage,
     validate_rule_governance,
 )
@@ -20,7 +20,7 @@ def test_governance_catalog_covers_runtime_registry_without_claiming_release() -
     rules = get_rules()
     governance = validate_rule_governance(rules)
 
-    assert len(rules) == len(governance) == 9
+    assert len(rules) == len(governance) == 10
     assert {item.rule_id for item in governance} == {item.rule_id for item in rules}
     for item in governance:
         assert item.lifecycle_stage is RuleLifecycleStage.DRAFT

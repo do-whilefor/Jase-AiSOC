@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from blue_team.domain.security_event import SecurityEvent
+from aisoc.domain.security_event import SecurityEvent
 
 
 def event_payload() -> dict[str, object]:

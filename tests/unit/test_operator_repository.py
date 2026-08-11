@@ -8,14 +8,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from blue_team.domain.response import (
+from aisoc.domain.response import (
     OperatorCredentialCreate,
     OperatorCredentialRevoke,
     OperatorRole,
 )
-from blue_team.errors import StateConflictError
-from blue_team.storage.models import AuditLogRecord, TenantCredentialRecord
-from blue_team.storage.operator_repository import (
+from aisoc.errors import StateConflictError
+from aisoc.storage.models import AuditLogRecord, TenantCredentialRecord
+from aisoc.storage.operator_repository import (
     create_operator_credential,
     revoke_operator_credential,
 )

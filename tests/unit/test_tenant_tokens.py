@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from blue_team.api_server.tenant_tokens import (
+from aisoc.api_server.tenant_tokens import (
     credential_id_from_token,
     issue_tenant_token,
     token_matches,

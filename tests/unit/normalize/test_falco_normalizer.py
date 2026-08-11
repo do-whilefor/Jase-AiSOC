@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from blue_team.domain.security_event import SourceKind
-from blue_team.normalize import RawInput, get_normalizer
+from aisoc.domain.security_event import SourceKind
+from aisoc.normalize import RawInput, get_normalizer
 
 TENANT = "ten_01JFALCOTENANT"
 HOST = "host_01JFALCOHOST"

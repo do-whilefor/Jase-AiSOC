@@ -73,11 +73,11 @@ AI review 默认关闭。启用时必须配置 provider、model 和 secret；关
 - Orchestrator 测试证明普通日志零模型调用、Provider 失败保持确定性结果、Tool loop 闭环、未知 evidence
   拒绝，以及 token/cost/tool/rate budget fail closed。
 - `tests/integration/test_ai_review_persistence.py` 已提交，覆盖真实 PostgreSQL 任务重放、复合 FK、Claim
-  evidence、Tool query 和跨租户读取；当前没有设置 `BLUE_TEAM_TEST_DATABASE_URL`，因此留待 Kali。
+  evidence、Tool query 和跨租户读取；当前没有设置 `AISOC_TEST_DATABASE_URL`，因此留待 Linux VM。
 
 ## 未关闭门禁
 
-- Kali PostgreSQL 上执行 `base -> 20260809_0009 -> base` 在线迁移与上述 P7 集成测试；
+- Linux VM PostgreSQL 上执行 `base -> 20260809_0009 -> base` 在线迁移与上述 P7 集成测试；
 - 两个真实 tenant credential 通过 HTTP 对同一/不同 Incident、review task、query ref 做读写对照；
 - 并发 review 请求证明同一 revision/policy 只产生一个 task，且不会重复计费；
 - Kimi、GLM 和用户指定 OpenAI-compatible 服务的真实响应兼容、限流、超时和熔断故障注入；

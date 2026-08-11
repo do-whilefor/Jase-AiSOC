@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from blue_team.config import Settings
-from blue_team.detection_engine import RuleContext
-from blue_team.domain.security_event import SecurityEvent
+from aisoc.config import Settings
+from aisoc.detection_engine import RuleContext
+from aisoc.domain.security_event import SecurityEvent
 
 TENANT = "ten_01JTESTTENANT"
 HOST = "host_01JTESTHOST"
@@ -25,7 +25,7 @@ def _settings(**overrides: object) -> Settings:
     is isolated from the local ``.env`` while still using realistic defaults.
     """
     kwargs: dict[str, object] = {
-        "database_url": "postgresql+asyncpg://blue_team:blue_team_dev@127.0.0.1:55432/blue_team",
+        "database_url": "postgresql+asyncpg://aisoc:aisoc_dev@127.0.0.1:55432/aisoc",
         "environment": "test",
         "bootstrap_admin_token": None,
         "object_store_root": "var/evidence",

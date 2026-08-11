@@ -9,18 +9,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from blue_team.config import Settings
-from blue_team.detection_engine.lifecycle import RuleRuntimePolicy
-from blue_team.detection_engine.worker import DetectionWorker, DetectionWorkerBatchOverflow
-from blue_team.domain import SecurityEvent
-from blue_team.domain.rule_lifecycle import RuleLifecycleStage
+from aisoc.config import Settings
+from aisoc.detection_engine.lifecycle import RuleRuntimePolicy
+from aisoc.detection_engine.worker import DetectionWorker, DetectionWorkerBatchOverflow
+from aisoc.domain import SecurityEvent
+from aisoc.domain.rule_lifecycle import RuleLifecycleStage
 
 MANIFEST_SHA256 = "a" * 64
 
 
 def _settings() -> Settings:
     return Settings(
-        database_url="postgresql+asyncpg://blue_team:blue_team_dev@127.0.0.1:55432/blue_team",
+        database_url="postgresql+asyncpg://aisoc:aisoc_dev@127.0.0.1:55432/aisoc",
         environment="test",
         bootstrap_admin_token=None,
         object_store_root=Path("var/evidence"),
@@ -143,9 +143,9 @@ async def test_detection_worker_emits_detection_for_scan() -> None:
     worker = DetectionWorker(database, settings=_settings())
     create = AsyncMock()
     with (
-        patch("blue_team.detection_engine.worker.create_detection", new=create),
+        patch("aisoc.detection_engine.worker.create_detection", new=create),
         patch(
-            "blue_team.detection_engine.worker.load_rule_runtime_policies",
+            "aisoc.detection_engine.worker.load_rule_runtime_policies",
             new=AsyncMock(return_value=_policy()),
         ),
     ):
@@ -177,9 +177,9 @@ async def test_detection_worker_skips_corrupt_payload() -> None:
 
     worker = DetectionWorker(database, settings=_settings())
     with (
-        patch("blue_team.detection_engine.worker.create_detection", new=AsyncMock()),
+        patch("aisoc.detection_engine.worker.create_detection", new=AsyncMock()),
         patch(
-            "blue_team.detection_engine.worker.load_rule_runtime_policies",
+            "aisoc.detection_engine.worker.load_rule_runtime_policies",
             new=AsyncMock(return_value={}),
         ),
     ):
@@ -199,9 +199,9 @@ async def test_detection_worker_idempotent_replay() -> None:
     worker = DetectionWorker(database, settings=_settings())
     mock_create = AsyncMock()
     with (
-        patch("blue_team.detection_engine.worker.create_detection", new=mock_create),
+        patch("aisoc.detection_engine.worker.create_detection", new=mock_create),
         patch(
-            "blue_team.detection_engine.worker.load_rule_runtime_policies",
+            "aisoc.detection_engine.worker.load_rule_runtime_policies",
             new=AsyncMock(return_value=_policy()),
         ),
     ):
@@ -257,9 +257,9 @@ async def test_detection_worker_reconstructs_host_chain_after_worker_restart() -
     second = DetectionWorker(_database_with_session(_session_returning(rows)), settings=_settings())
     create = AsyncMock()
     with (
-        patch("blue_team.detection_engine.worker.create_detection", new=create),
+        patch("aisoc.detection_engine.worker.create_detection", new=create),
         patch(
-            "blue_team.detection_engine.worker.load_rule_runtime_policies",
+            "aisoc.detection_engine.worker.load_rule_runtime_policies",
             new=AsyncMock(
                 return_value=_policy(
                     tenant_id="ten_01JTESTTENANT",
@@ -299,10 +299,10 @@ async def test_detection_worker_fails_closed_without_active_policy(
     create = AsyncMock()
     shadow = AsyncMock()
     with (
-        patch("blue_team.detection_engine.worker.create_detection", new=create),
-        patch("blue_team.detection_engine.worker.create_shadow_observation", new=shadow),
+        patch("aisoc.detection_engine.worker.create_detection", new=create),
+        patch("aisoc.detection_engine.worker.create_shadow_observation", new=shadow),
         patch(
-            "blue_team.detection_engine.worker.load_rule_runtime_policies",
+            "aisoc.detection_engine.worker.load_rule_runtime_policies",
             new=AsyncMock(return_value=policies),
         ),
     ):
@@ -347,10 +347,10 @@ async def test_detection_worker_enforces_shadow_and_canary_scope(
     create = AsyncMock()
     shadow = AsyncMock()
     with (
-        patch("blue_team.detection_engine.worker.create_detection", new=create),
-        patch("blue_team.detection_engine.worker.create_shadow_observation", new=shadow),
+        patch("aisoc.detection_engine.worker.create_detection", new=create),
+        patch("aisoc.detection_engine.worker.create_shadow_observation", new=shadow),
         patch(
-            "blue_team.detection_engine.worker.load_rule_runtime_policies",
+            "aisoc.detection_engine.worker.load_rule_runtime_policies",
             new=AsyncMock(return_value=_policy(stage=stage, canary_host_ids=canary_hosts)),
         ),
     ):

@@ -9,21 +9,21 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from pydantic import ValidationError
 
-from blue_team.domain import (
+from aisoc.domain import (
     AttackState,
     DetectionRead,
     DetectionStatus,
     IncidentSeverity,
     SecurityEvent,
 )
-from blue_team.domain.trace import (
+from aisoc.domain.trace import (
     IdentityAttribution,
     TraceEvidenceInput,
     TraceGraphQuery,
     TraceIncidentInput,
     TraceRelationship,
 )
-from blue_team.trace_engine import (
+from aisoc.trace_engine import (
     AttackTraceBuilder,
     TraceBuildError,
     TraceBuildOverflow,

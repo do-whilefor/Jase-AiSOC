@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blue_team.domain import (
+from aisoc.domain import (
     AttackState,
     DetectionRead,
     DetectionStatus,
@@ -14,7 +14,7 @@ from blue_team.domain import (
     IncidentSeverity,
     SecurityEvent,
 )
-from blue_team.incident_engine import (
+from aisoc.incident_engine import (
     IncidentCorrelationError,
     IncidentCorrelationOverflow,
     IncidentCorrelator,

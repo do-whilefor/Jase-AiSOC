@@ -8,12 +8,12 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
 from sqlalchemy import func, select, text
 
-from blue_team.api_server import create_app
-from blue_team.config import Settings
-from blue_team.storage import Database
-from blue_team.storage.models import AuditLogRecord, TenantCredentialRecord
+from aisoc.api_server import create_app
+from aisoc.config import Settings
+from aisoc.storage import Database
+from aisoc.storage.models import AuditLogRecord, TenantCredentialRecord
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(DATABASE_URL is None, reason="PostgreSQL integration URL is not set"),

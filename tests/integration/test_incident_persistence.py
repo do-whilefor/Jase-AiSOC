@@ -1,7 +1,7 @@
 """P6 real-PostgreSQL revision, idempotence, evidence, and graph gate.
 
 The test remains skipped in the non-Docker development pass and is intended for
-the later Kali/PostgreSQL validation environment.
+a Linux/PostgreSQL integration environment.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import func, select
 
-from blue_team.domain import (
+from aisoc.domain import (
     AttackState,
     DetectionRead,
     DetectionStatus,
@@ -20,14 +20,14 @@ from blue_team.domain import (
     IncidentSeverity,
     SecurityEvent,
 )
-from blue_team.incident_engine import IncidentCorrelator
-from blue_team.storage import Database
-from blue_team.storage.incident_repository import (
+from aisoc.incident_engine import IncidentCorrelator
+from aisoc.storage import Database
+from aisoc.storage.incident_repository import (
     get_incident_evidence_bundle,
     get_incident_graph_bundle,
     persist_incident_candidate,
 )
-from blue_team.storage.models import (
+from aisoc.storage.models import (
     AgentEventRecord,
     DetectionRecord,
     HostRecord,
@@ -37,7 +37,7 @@ from blue_team.storage.models import (
 )
 from tests.integration._helpers import truncate_all
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(DATABASE_URL is None, reason="PostgreSQL integration URL is not set"),

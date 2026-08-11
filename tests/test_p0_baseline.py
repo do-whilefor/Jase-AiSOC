@@ -8,8 +8,8 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError
 
-import blue_team
-from blue_team.domain.schema_export import render_security_event_schema
+import aisoc
+from aisoc.domain.schema_export import render_security_event_schema
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schemas" / "security-event-v0.1.schema.json"
@@ -57,7 +57,7 @@ def validator() -> Draft202012Validator:
 
 
 def test_package_exposes_pre_alpha_version() -> None:
-    assert blue_team.__version__ == "0.0.1"
+    assert aisoc.__version__ == "0.0.1"
 
 
 def test_schema_is_a_valid_draft_2020_12_contract() -> None:

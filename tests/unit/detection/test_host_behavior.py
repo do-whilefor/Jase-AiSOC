@@ -6,17 +6,17 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blue_team.detection_engine.rules.host_behavior import (
+from aisoc.detection_engine.rules.host_behavior import (
     DownloadExecuteRule,
     LateralScanRule,
     PersistenceChangeRule,
     WebProcessShellRule,
     WebShellOutboundRule,
 )
-from blue_team.domain import SecurityEvent
-from blue_team.domain.detection import AttackState
-from blue_team.domain.security_event import SourceKind
-from blue_team.normalize import get_normalizer
+from aisoc.domain import SecurityEvent
+from aisoc.domain.detection import AttackState
+from aisoc.domain.security_event import SourceKind
+from aisoc.normalize import get_normalizer
 
 from ..normalize.test_falco_normalizer import falco_raw
 from ._helpers import rule_context

@@ -8,9 +8,9 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from blue_team.agent_core import AuditdRecord, AuditdSerialGroup
-from blue_team.domain.security_event import SourceKind
-from blue_team.normalize import RawInput, get_normalizer
+from aisoc.agent_core import AuditdRecord, AuditdSerialGroup
+from aisoc.domain.security_event import SourceKind
+from aisoc.normalize import RawInput, get_normalizer
 
 TENANT = "ten_01JAUDITTENANT"
 HOST = "host_01JAUDITHOST"

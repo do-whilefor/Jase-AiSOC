@@ -6,7 +6,7 @@
 
 MVP 必须覆盖：基础 Agent、进程执行/出站连接、Suricata、Web/SSH、统一事件、确定性检测、Incident、证据引用、单 Analyzer、静态恶意文件和人工/短时可回滚响应。
 
-MVP 非前置依赖：全量 PCAP、完整 LSM 文件追踪、ClickHouse、OpenSearch、图数据库、多 Verifier、动态沙箱、Kubernetes、Windows、HA 和高风险自动响应。
+MVP 非前置依赖：全量 PCAP、完整 LSM 文件追踪、ClickHouse、OpenSearch、图数据库、多 Verifier、动态沙箱、Kubernetes、HA 和高风险自动响应。
 
 ## 逻辑数据流
 

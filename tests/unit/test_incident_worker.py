@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from blue_team.config import Settings
-from blue_team.incident_engine import (
+from aisoc.config import Settings
+from aisoc.incident_engine import (
     IncidentWorker,
     IncidentWorkerBatchOverflow,
     IncidentWorkerError,
@@ -21,7 +21,7 @@ HOST = "host_01JP6WORKER0"
 
 def _settings() -> Settings:
     return Settings(
-        database_url="postgresql+asyncpg://blue_team:blue_team_dev@127.0.0.1:55432/blue_team",
+        database_url="postgresql+asyncpg://aisoc:aisoc_dev@127.0.0.1:55432/aisoc",
         environment="test",
         bootstrap_admin_token=None,
         object_store_root=Path("var/evidence"),
@@ -119,7 +119,7 @@ async def test_worker_correlates_complete_window_and_marks_late_revision() -> No
 
     worker = IncidentWorker(_database(session), settings=_settings())
     with patch(
-        "blue_team.incident_engine.worker.persist_incident_candidate",
+        "aisoc.incident_engine.worker.persist_incident_candidate",
         new=persist,
     ):
         count = await worker.run_once()

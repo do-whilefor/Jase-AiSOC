@@ -1,4 +1,4 @@
-name: blue-team-ai-p2
+name: aisoc-p2
 
 # P2 容器级端到端编排：PostgreSQL + 迁移 + API + Ingest 网关。
 #
@@ -18,13 +18,13 @@ services:
   postgres:
     image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
     environment:
-      POSTGRES_DB: blue_team
-      POSTGRES_USER: blue_team
-      POSTGRES_PASSWORD: blue_team_dev
+      POSTGRES_DB: aisoc
+      POSTGRES_USER: aisoc
+      POSTGRES_PASSWORD: aisoc_dev
     ports:
       - "127.0.0.1:55432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U blue_team -d blue_team"]
+      test: ["CMD-SHELL", "pg_isready -U aisoc -d aisoc"]
       interval: 2s
       timeout: 3s
       retries: 20
@@ -37,8 +37,8 @@ services:
       dockerfile: deploy/Dockerfile
     command: ["alembic", "upgrade", "head"]
     environment:
-      BLUE_TEAM_DATABASE_URL: postgresql+asyncpg://blue_team:blue_team_dev@postgres:5432/blue_team
-      BLUE_TEAM_OBJECT_STORE_ROOT: /var/lib/blue-team/evidence
+      AISOC_DATABASE_URL: postgresql+asyncpg://aisoc:aisoc_dev@postgres:5432/aisoc
+      AISOC_OBJECT_STORE_ROOT: /var/lib/aisoc/evidence
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,13 +49,13 @@ services:
       context: ../..
       dockerfile: deploy/Dockerfile
     environment:
-      BLUE_TEAM_ENVIRONMENT: development
-      BLUE_TEAM_API_HOST: 0.0.0.0
-      BLUE_TEAM_API_PORT: 8000
-      BLUE_TEAM_LOG_FORMAT: json
-      BLUE_TEAM_DATABASE_URL: postgresql+asyncpg://blue_team:blue_team_dev@postgres:5432/blue_team
-      BLUE_TEAM_OBJECT_STORE_ROOT: /var/lib/blue-team/evidence
-      BLUE_TEAM_BOOTSTRAP_ADMIN_TOKEN: p2-local-admin-token-change-me
+      AISOC_ENVIRONMENT: development
+      AISOC_API_HOST: 0.0.0.0
+      AISOC_API_PORT: 8000
+      AISOC_LOG_FORMAT: json
+      AISOC_DATABASE_URL: postgresql+asyncpg://aisoc:aisoc_dev@postgres:5432/aisoc
+      AISOC_OBJECT_STORE_ROOT: /var/lib/aisoc/evidence
+      AISOC_BOOTSTRAP_ADMIN_TOKEN: p2-local-admin-token-change-me
     ports:
       - "127.0.0.1:58000:8000"
     depends_on:
@@ -64,22 +64,22 @@ services:
       migrate:
         condition: service_completed_successfully
     volumes:
-      - p2-evidence-data:/var/lib/blue-team/evidence
+      - p2-evidence-data:/var/lib/aisoc/evidence
 
   ingest:
     build:
       context: ../..
       dockerfile: deploy/Dockerfile
-    command: ["blue-team-ingest"]
+    command: ["aisoc-ingest"]
     environment:
-      BLUE_TEAM_ENVIRONMENT: development
-      BLUE_TEAM_INGEST_HOST: 0.0.0.0
-      BLUE_TEAM_INGEST_PORT: 8081
-      BLUE_TEAM_LOG_FORMAT: json
-      BLUE_TEAM_DATABASE_URL: postgresql+asyncpg://blue_team:blue_team_dev@postgres:5432/blue_team
-      BLUE_TEAM_OBJECT_STORE_ROOT: /var/lib/blue-team/evidence
-      BLUE_TEAM_AGENT_CA_CERTIFICATE_PATH: /run/secrets/agent-ca/ca.crt
-      BLUE_TEAM_AGENT_CA_PRIVATE_KEY_PATH: /run/secrets/agent-ca/ca.key
+      AISOC_ENVIRONMENT: development
+      AISOC_INGEST_HOST: 0.0.0.0
+      AISOC_INGEST_PORT: 8081
+      AISOC_LOG_FORMAT: json
+      AISOC_DATABASE_URL: postgresql+asyncpg://aisoc:aisoc_dev@postgres:5432/aisoc
+      AISOC_OBJECT_STORE_ROOT: /var/lib/aisoc/evidence
+      AISOC_AGENT_CA_CERTIFICATE_PATH: /run/secrets/agent-ca/ca.crt
+      AISOC_AGENT_CA_PRIVATE_KEY_PATH: /run/secrets/agent-ca/ca.key
     ports:
       - "127.0.0.1:58001:8081"
     depends_on:
@@ -88,7 +88,7 @@ services:
       migrate:
         condition: service_completed_successfully
     volumes:
-      - p2-evidence-data:/var/lib/blue-team/evidence
+      - p2-evidence-data:/var/lib/aisoc/evidence
       - p2-agent-ca:/run/secrets/agent-ca:ro
     # ingest 监听 8081 且强制 mTLS 客户端证书，复用的 deploy/Dockerfile HEALTHCHECK
     # 探测的是 API 的 8000/health/live，在本容器恒为 connection refused，会把 ingest

@@ -7,8 +7,8 @@ from alembic import context
 from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from blue_team.config import Settings
-from blue_team.storage.models import Base
+from aisoc.config import Settings
+from aisoc.storage.models import Base
 
 config = context.config
 if config.config_file_name is not None:

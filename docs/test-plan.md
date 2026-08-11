@@ -55,7 +55,7 @@
 | 真实进程入口 | 私有配置、两进程竞争、SIGTERM、journal 重启读取 | 同一状态目录仅一个进程；首次 Heartbeat 与所有 lifecycle 转换持久化；有界停止 |
 | 候选进程门禁 | 启动/健康超时、崩溃、拒绝退出、输出洪泛、argv/env 变化 | 固定 argv、无 shell/父环境/多余 FD；输出有界；TERM 超时后 KILL 并拒绝激活 |
 | Linux 可运行性 | UID 10001、只读镜像、锁定依赖运行 runtime/process/supervisor/installer tests | 43 tests passed + 独立 smoke；不要求 root；不修改源码或宿主虚拟环境 |
-| audit.log polling | 临时普通文件、partial line、truncation、坏行、超时和重启 | 完整 serial P2；gap P1；cursor+pending serial 原子恢复；sequence 跨重启不复用；真机语义待 Kali |
+| audit.log polling | 临时普通文件、partial line、truncation、坏行、超时和重启 | 完整 serial P2；gap P1；cursor+pending serial 原子恢复；sequence 跨重启不复用；真机语义待 Linux VM |
 
 ## P2 签名制品追踪矩阵
 
@@ -90,7 +90,7 @@
 | 窗口隔离 | `test_web_scan_window_boundary_excludes_old_events`、`test_ssh_bruteforce_window_boundary_excludes_old_failures` | 60s 外事件不进窗口 |
 | 跨源不聚合 | `test_web_scan_groups_by_source_ip_separately`、`test_ssh_bruteforce_groups_by_source_ip` | 每个 src_ip 独立判定 |
 | 尝试/成功不混淆 | `test_attack_state_is_attempt_not_success_without_host_evidence` | `attack_state=attack_attempt`；`suspected_success` 需 P5，`next_steps` 标记 |
-| 幂等落库 | `tests/integration/test_detection_persistence.py`（真实 PG，待 Kali 重验） | 同 subject/rule/window 重放不重复；相同时间窗的另一 host/entity 不被吞并 |
+| 幂等落库 | `tests/integration/test_detection_persistence.py`（真实 PG，待 Linux VM 重验） | 同 subject/rule/window 重放不重复；相同时间窗的另一 host/entity 不被吞并 |
 | 回放可重放 | `build_datasets.py` + `replay_detection.py` × 9 数据集 | 生成后 SHA-256 一致；DLQ、状态、最小/最大命中和意外类别均受检 |
 | 证据可追溯 | `Detection.evidence_event_ids` 引用 `event_id` | 每个检测携带 ≤50 evidence_id（§7.4） |
 
@@ -108,7 +108,7 @@
 | events 查询 API | `tests/unit/test_api_basics.py::test_openapi_*` + e2e 步骤 4 | `GET /api/v1/events` 返回 tenant-scoped 列表 |
 | detections 查询 API | e2e 步骤 4 | `GET /api/v1/detections` 返回命中检测 |
 | workers 开关 | `test_workers_disabled_does_not_start_background_tasks` | `workers_enabled=false` 不启后台任务 |
-| 离线推进 | `blue-team-process --help` + CLI 可用 | 不启动 web 即可推进管道 |
+| 离线推进 | `aisoc-process --help` + CLI 可用 | 不启动 web 即可推进管道 |
 
 ## P5 离线增量追踪矩阵
 
@@ -129,7 +129,7 @@
 | 序列回放 | `host_{normal_baseline,failed_attacks,success_chains,missing_source,clock_skew}` | 成功集含乱序+重复并恰好产生 5 个预期检测；正常/失败/缺源/超窗口各 0 |
 | worker 回看契约 | `test_config.py` + `test_detection_worker.py` | lookback 覆盖 2× burst 与 host-chain window；新 worker 从完整 DB 窗口重建链；超过 max-events 显式失败，禁止静默截断 |
 | 不过度结论 | P5 全部正例 | 序列事实不输出 `confirmed_compromise`，next_steps 要求请求/文件内容/外联结果佐证 |
-| 真机门禁 | 尚无 | auditd/eBPF/Falco 宿主接入、L1/L2 和三发行版验证必须留到 Kali/VM，当前不得宣称通过 |
+| 真机门禁 | 尚无 | auditd/eBPF/Falco 宿主接入、L1/L2 和三发行版验证必须留到 Linux VM，当前不得宣称通过 |
 
 ## P6 Incident 与证据追踪矩阵
 
@@ -141,10 +141,10 @@
 | 迟到与时钟质量 | late + skew_detected 对照 | 新迟到事实产生 `late_evidence_recompute`；timeline assurance 降级；旧 revision 保留 |
 | 10k 缩减 | 10,000 条重复 `network.http` | 恰好 1 Incident；20 主样本；9,980 dropped；`full_query_ref` 和 query 范围保留 |
 | 禁止静默截断 | detection max+1、evidence max+1 | worker/correlator 显式抛出 overflow；不 commit 部分 Incident |
-| 持久化与并发 | `test_incident_persistence.py`（真实 PG，待 Kali） | tenant-scoped FK 生效；savepoint 重放/竞争只产生一个 Incident/revision |
+| 持久化与并发 | `test_incident_persistence.py`（真实 PG，待 Linux VM） | tenant-scoped FK 生效；savepoint 重放/竞争只产生一个 Incident/revision |
 | Evidence API | OpenAPI + repository bundle tests | evidence/raw_ref/integrity/query/reduction、timeline、claims、graph 均由认证 tenant 查询 |
 | 生命周期 | `test_incident_lifecycle.py` | close resolve member detections；merge=单 component；split=精确 component partition；lineage/feedback/audit 追加写 |
-| 真机门禁 | 尚无 | Kali PostgreSQL + 真实 P4/P5 链、双租户、跨 poll/restart/迟到、10k 与并发验证全部通过后才关闭 P6 |
+| 真机门禁 | 尚无 | Linux VM PostgreSQL + 真实 P4/P5 链、双租户、跨 poll/restart/迟到、10k 与并发验证全部通过后才关闭 P6 |
 
 ## P7 AI Review 与 Tool Gateway 追踪矩阵
 
@@ -159,8 +159,8 @@
 | Claim 闭环 | package evidence、Tool evidence、未知/跨 Incident evidence 对照 | supported Claim 必须引用允许 event ID；无证据仅 insufficient/unsupported+unknowns；错误输出整体无效 |
 | 预算 | context/output/tool/model-run/rate/cost 对照 | 默认 20/16k/8/3/30；任一耗尽返回 budget_exceeded，不产生报告 |
 | 追加写审计 | `test_ai_review_repository.py` | task、run、tool、Claim、evidence link、audit 一起写；伪造 task/revision 在 DB 前拒绝 |
-| PostgreSQL/租户 | `tests/integration/test_ai_review_persistence.py`（待 Kali） | exact FK、task replay=1、Claim link、stored-query Tool read；另一 tenant 读/Tool query 均失败 |
-| 真实 Provider/Kali | 尚无 | 真实 Kimi/GLM/custom、并发 review、30/min、双租户 HTTP、Linux P4/P5→P6→P7 全链通过后关闭 P7 |
+| PostgreSQL/租户 | `tests/integration/test_ai_review_persistence.py`（待 Linux VM） | exact FK、task replay=1、Claim link、stored-query Tool read；另一 tenant 读/Tool query 均失败 |
+| 真实 Provider/Linux VM | 尚无 | 真实 Kimi/GLM/custom、并发 review、30/min、双租户 HTTP、Linux P4/P5→P6→P7 全链通过后关闭 P7 |
 
 ## P8 盲审、程序校验与冲突追踪矩阵
 
@@ -177,8 +177,8 @@
 | 注入与工具 | malicious Claim/full-log/tool call 对照 | 恶意文本只在 untrusted input；未知写工具在数据源前拒绝；普通整日志触发文本保持零 Provider/Tool 调用 |
 | 模型历史 | 两个 Verifier 不同 routing score | tenant-scoped history 只改变候选顺序；高 score 不提高事实权限或同模型 assurance 上限 |
 | 追加写记录 | `test_ai_review_repository.py` | program、slot/report/review、conflict、adjudication/resolution 精确绑定同 tenant/task/revision/Claim |
-| PostgreSQL/租户 | `tests/integration/test_ai_review_persistence.py`（待 Kali） | 迁移 0010、三角色 runs、全部 P8 行、终态 replay=1、跨租户读取/Tool 拒绝 |
-| 真实 Provider/Kali | 尚无 | Kimi/GLM/custom adversarial input、双租户 HTTP、并发计费/预算和金标 assurance 校准完成后关闭 P8 |
+| PostgreSQL/租户 | `tests/integration/test_ai_review_persistence.py`（待 Linux VM） | 迁移 0010、三角色 runs、全部 P8 行、终态 replay=1、跨租户读取/Tool 拒绝 |
+| 真实 Provider/Linux VM | 尚无 | Kimi/GLM/custom adversarial input、双租户 HTTP、并发计费/预算和金标 assurance 校准完成后关闭 P8 |
 
 ## P9 恶意文件、隔离区与沙箱报告追踪矩阵
 
@@ -191,9 +191,9 @@
 | 多信号结论 | scanner/scanner 与 scanner/context 对照 | malicious 至少两个 positive source 且一个 malicious；具体 type/family corroborated 至少两个 source；context 不能命名 family/type |
 | 上下文关联 | 同 hash 的 creator/executor/parent/source/destination/persistence/Host | 查询同 tenant+hash 的完整有界 context；跨 Host/path/domain 可见；跨 tenant/sample domain validation 拒绝 |
 | worker 隔离 | `test_malware_worker.py` transaction-depth 对照 | API 不启动 worker；独立进程 claim 后提交；解密/解析时 transaction depth=0；稳定 error code，不记录样本/错误原文 |
-| lease/持久化 | 迁移 0011 + `test_malware_persistence.py`（待 Kali） | SKIP LOCKED、lease token/expiry/retry、report scope/hash/size、normalized engine rows、审计及跨租户 FK 全部通过 |
+| lease/持久化 | 迁移 0011 + `test_malware_persistence.py`（待 Linux VM） | SKIP LOCKED、lease token/expiry/retry、report scope/hash/size、normalized engine rows、审计及跨租户 FK 全部通过 |
 | sandbox import | `test_malware_sandbox.py` signature/sample/destroyed 对照 | 仅受信 Ed25519 key；tenant/sample/hash 精确绑定；环境销毁为 true；Schema/size/artifact 引用受限；文本仍 untrusted |
-| 动态隔离/Kali | 尚无 | 独立虚拟化集群、默认 no egress、按任务 controlled/simulated network、凭据隔离、逃逸/资源耗尽、任务销毁和报告重放门禁完成后关闭 P9 |
+| 动态隔离/Linux VM | 尚无 | 独立虚拟化集群、默认 no egress、按任务 controlled/simulated network、凭据隔离、逃逸/资源耗尽、任务销毁和报告重放门禁完成后关闭 P9 |
 
 ## P10 跨主机图谱、技术溯源与导出追踪矩阵
 
@@ -210,8 +210,8 @@
 | 图查询 | root/depth/node/relationship allowlist | root 必须存在；depth≤8、nodes≤1000；max nodes 显式 `truncated`；无任意 SQL/URL/file 参数 |
 | 调查导出 | canonical hash + ASGI export | tenant/trace/revision/evidence count 一致；SHA-256 可复算；raw_content/sample_content=false；写 export+audit |
 | 版本/持久化 | `test_trace_repository.py` + migration 0012 | exact replay no-op；late/source change append；source Incident/evidence、edge/technique refs 全部 composite FK；audit 不复制 evidence index |
-| PostgreSQL/租户 | `tests/integration/test_trace_persistence.py`（待 Kali） | 两 Host chain 落库、replay=1 revision、export=1；另一 tenant 无行；直接伪造 FK/并发 build/export 失败或幂等 |
-| 真实攻击/Kali | 尚无 | Web/SSH entry、成功/失败横向、one-sided、NAT/proxy/jump host、公共基础设施反例、迟到/乱序/重复和大图门禁完成后关闭 P10 |
+| PostgreSQL/租户 | `tests/integration/test_trace_persistence.py`（待 Linux VM） | 两 Host chain 落库、replay=1 revision、export=1；另一 tenant 无行；直接伪造 FK/并发 build/export 失败或幂等 |
+| 真实攻击/Linux VM | 尚无 | Web/SSH entry、成功/失败横向、one-sided、NAT/proxy/jump host、公共基础设施反例、迟到/乱序/重复和大图门禁完成后关闭 P10 |
 
 ## P11 响应、审批与控制台增量矩阵
 
@@ -224,7 +224,7 @@
 | 本机原生边界 | `test_response_native.py` local/remote binding、三类 stateful fake backend、argv/output bound | 只接受私有 Agent config 对应 tenant/host/agent；远端目标在命令前拒绝；root/非 allowlist/低 UID 账号拒绝；无 shell、命令输出/超时有界 |
 | 未知状态分类 | `test_response_adapters.py`、`test_response_worker.py` execute/verify/commit fault injection | 写入后超时或 post-check 失败为 verification_failed；result commit 失败不伪造成已知 action failure，租约留待保守恢复 |
 | API 租户边界 | `test_response_api.py`、`test_console_api.py` authenticated tenant/role 对照 | caller header/body 不能覆盖 tenant；auditor 不能写；执行默认禁用时 fail closed |
-| Schema/持久化 | migrations 0013-0016 + `test_response_persistence.py`、`test_notification_persistence.py`、`test_rule_lifecycle_persistence.py`、`test_ingest_mtls.py`（待 Kali） | action 绑定精确 Incident/evidence/Host；审批、执行、回滚、事件、审计/outbox/attempt 租户一致且并发幂等；heartbeat version 列可空且身份绑定；rule state/event/shadow FK、sequence、并发、重放与 dedupe version 约束闭合 |
+| Schema/持久化 | migrations 0013-0016 + `test_response_persistence.py`、`test_notification_persistence.py`、`test_rule_lifecycle_persistence.py`、`test_ingest_mtls.py`（待 Linux VM） | action 绑定精确 Incident/evidence/Host；审批、执行、回滚、事件、审计/outbox/attempt 租户一致且并发幂等；heartbeat version 列可空且身份绑定；rule state/event/shadow FK、sequence、并发、重放与 dedupe version 约束闭合 |
 | 通知租约/重试 | `test_notification_repository.py`、`test_notification_worker.py` | claim 使用 digest-only lease 和 SKIP LOCKED；HTTP 期间 transaction depth=0；过期 lease 先恢复、指数退避有上限、耗尽或永久失败进入 DLQ |
 | Webhook 边界 | `test_notification_webhook.py` + `test_config.py` | URL 只来自配置且 host 精确 allowlist；非 loopback HTTPS；无 userinfo/query/fragment/redirect；响应大小/超时有界；HMAC、幂等 ID、字段最小化可复算 |
 | 控制台代理 | `console/tests/rendered-html.test.mjs` + production build | 不保留 token/nonce；固定 Snapshot/Incident/evidence/attack-trace/malware/rule/model/system/response operation path；ID 精确；非 loopback HTTPS；无 redirect；请求/响应/超时/content-type 有界 |
@@ -233,16 +233,16 @@
 | 恶意文件调查 | `test_console_repository.py` + `test_console_api.py` + console production worker requests | sample read lock；tenant+sample/hash/task/engine 绑定；50/8/8 固定 DB 上限和字段级缩减记账；无 quarantine_ref/sample bytes；source_url 仅作文本 |
 | 规则治理目录 | `test_rule_governance.py` + `test_rule_lifecycle.py` + `test_console_repository.py` | 九条 runtime rule 与 catalog 的 ID/version/applicable source 必须完全一致；owner/source/dataset/误报预期/ATT&CK/suppression/rollback 非空；签名 current state/effective scope/manifest/key/catalog/Canary/validation 与 governed/legacy/shadow 指标如实显示；质量字段不伪造 |
 | 规则/情报只读 API | `test_console_repository.py` + `test_console_api.py` + Schema/OpenAPI + production worker requests | responder/approver/auditor 且必须有 tenant；hit/history/feedback SQL 均 tenant-scoped，feedback 只经当前 Incident revision membership；历史≤64、cache≤50、field names≤16；无 payload value；fixed exact path 且拒绝 query/path substitution |
-| 签名规则生命周期 | `test_rule_lifecycle.py`、`test_rule_lifecycle_repository.py`、`test_detection_worker.py`、`test_rule_lifecycle_api.py`、`test_rule_lifecycle_persistence.py`（PostgreSQL 待 Kali） | Ed25519 key/tenant/rule/version/catalog/dataset/time 绑定；sequence+previous hash 防重放；Draft→Shadow→Canary→Released、逐级 rollback/deprecate/upgrade；Canary Host 租户隔离；Shadow 不入 detection/Incident；缺失/过期/漂移 fail closed；无 unsigned mutation |
+| 签名规则生命周期 | `test_rule_lifecycle.py`、`test_rule_lifecycle_repository.py`、`test_detection_worker.py`、`test_rule_lifecycle_api.py`、`test_rule_lifecycle_persistence.py`（PostgreSQL 待 Linux VM） | Ed25519 key/tenant/rule/version/catalog/dataset/time 绑定；sequence+previous hash 防重放；Draft→Shadow→Canary→Released、逐级 rollback/deprecate/upgrade；Canary Host 租户隔离；Shadow 不入 detection/Incident；缺失/过期/漂移 fail closed；无 unsigned mutation |
 | IOC 负向门禁 | contract/UI source assertions | `managed_ioc_lifecycle_available=false`；cache visibility 不能描述成受管 IOC；实现跨租户 IOC ownership/expiry/disable/audit 前不得关闭 |
 | 模型运营只读 API | `test_console_repository.py` + `test_console_api.py` + Schema/OpenAPI + production worker requests | responder/approver/auditor 且必须有 tenant；review task/run/group SQL tenant-scoped；aggregate≤100、recent≤50 并保留总数/截断；key/base URL 仅给出配置状态，不返回值、Prompt、request/response/evidence package；fixed exact path 且拒绝 query/path substitution |
-| 模型健康/质量负向门禁 | contract/UI source assertions | credential validity=`not_tested`、Provider health=`not_probed`；三个 availability flag 固定 false；无金标 linkage 时 precision/recall/agreement/FPR 为 null，不能用成功率、人审数量或 assurance 冒充质量；Kali 上另验真实 Provider timeout/circuit/recovery、credential probe 与 audited labeled feedback |
+| 模型健康/质量负向门禁 | contract/UI source assertions | credential validity=`not_tested`、Provider health=`not_probed`；三个 availability flag 固定 false；无金标 linkage 时 precision/recall/agreement/FPR 为 null，不能用成功率、人审数量或 assurance 冒充质量；Linux VM 上另验真实 Provider timeout/circuit/recovery、credential probe 与 audited labeled feedback |
 | 系统运营只读 API | `test_console_repository.py` + `test_console_api.py` + Schema/OpenAPI + production worker requests | 仅 auditor/tenant_admin 且必须有 tenant；credential≤100、latest heartbeat Host≤1000 并保留总数/截断；normalize/malware/response/notification 状态计数闭合；tenant SQL、fixed exact path、拒绝 query substitution；无 token/digest/error detail |
 | Agent 版本 heartbeat/目录 | `test_agent_runtime.py`、`test_agent_process.py`、`test_transport.py`、`test_ingest_mtls.py`、`test_console_repository.py` + contract/UI assertions | 新 runtime 报告有界 semver，旧 heartbeat 可省略、畸形值拒绝；接入持久化复验 mTLS tenant/Agent/Host；目录只取当前 Host-Agent 绑定，排除被替换身份，版本组≤50 且计数闭合；来源为 self-reported，binary integrity=false |
 | 系统遥测/升级负向门禁 | contract/UI source assertions | persisted record count 不冒充容量，Agent heartbeat queue 不冒充 broker depth/backlog age，自报版本不冒充运行二进制或签名制品证明；database/object capacity、dependency probe、deployment inventory、human user directory、signed artifact/upgrade/rollback/backup evidence 固定 unavailable；migration 只报告 observed version，compatibility=`not_evaluated` |
 | 控制台写入 | production worker request tests + `test_response_api.py` | Origin/Referer fail closed；nonce HMAC 绑定 origin+Bearer 且有 TTL；字段白名单；queue/rollback 幂等；后端 tenant/RBAC/自审批/状态机/执行开关权威 |
 | 依赖安全 | `npm audit --omit=dev` | production dependency 漏洞为 0；无修复的 build-time 公告记录输入边界与重开条件 |
-| 原生回滚/Kali | 尚无 | 至少三类动作在真实 Linux 通过重验证、执行后验证、重复请求、故障注入和可观测回滚 |
+| 原生回滚/Linux VM | 尚无 | 至少三类动作在真实 Linux 通过重验证、执行后验证、重复请求、故障注入和可观测回滚 |
 
 ## 数据集要求
 

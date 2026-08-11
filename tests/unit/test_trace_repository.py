@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from blue_team.domain.trace import AttackTraceReport, TraceRevisionReason
-from blue_team.storage.models import (
+from aisoc.domain.trace import AttackTraceReport, TraceRevisionReason
+from aisoc.storage.models import (
     AttackTraceEdgeEvidenceRecord,
     AttackTraceEdgeRecord,
     AttackTraceEntityRecord,
@@ -21,13 +21,13 @@ from blue_team.storage.models import (
     AttackTraceTechniqueRecord,
     AuditLogRecord,
 )
-from blue_team.storage.trace_repository import (
+from aisoc.storage.trace_repository import (
     _trace_records,
     get_attack_trace,
     persist_attack_trace,
     trace_snapshot_hash,
 )
-from blue_team.trace_engine import AttackTraceBuilder
+from aisoc.trace_engine import AttackTraceBuilder
 from tests.unit.test_trace_builder import _inputs
 
 

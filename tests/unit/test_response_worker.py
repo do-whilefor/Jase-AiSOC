@@ -9,17 +9,17 @@ from typing import cast
 
 import pytest
 
-from blue_team.domain.response import (
+from aisoc.domain.response import (
     AdapterExecutionResult,
     IpResponseTarget,
     ResponseActionPlan,
     ResponseActionStatus,
     TargetObservation,
 )
-from blue_team.response_engine import ResponseAdapterRegistry
-from blue_team.response_engine.worker import ResponseWorker
-from blue_team.storage import Database
-from blue_team.storage.response_repository import ResponseLease
+from aisoc.response_engine import ResponseAdapterRegistry
+from aisoc.response_engine.worker import ResponseWorker
+from aisoc.storage import Database
+from aisoc.storage.response_repository import ResponseLease
 from tests.unit.test_response_adapters import FakeAdapter, _block_plan
 
 NOW = datetime(2026, 8, 9, 16, 5, tzinfo=UTC)
@@ -111,8 +111,8 @@ async def test_response_worker_holds_no_transaction_during_adapter_calls(
         assert database.transaction_depth == 1
         completed.append(cast(AdapterExecutionResult, kwargs["result"]))
 
-    monkeypatch.setattr("blue_team.response_engine.worker.claim_next_response_action", claim)
-    monkeypatch.setattr("blue_team.response_engine.worker.complete_response_execution", complete)
+    monkeypatch.setattr("aisoc.response_engine.worker.claim_next_response_action", claim)
+    monkeypatch.setattr("aisoc.response_engine.worker.complete_response_execution", complete)
     worker = ResponseWorker(
         cast(Database, database),
         ResponseAdapterRegistry((adapter,)),
@@ -144,8 +144,8 @@ async def test_response_worker_fails_closed_on_changed_target_identity(
         assert database.transaction_depth == 1
         failures.append(cast(str, kwargs["error_code"]))
 
-    monkeypatch.setattr("blue_team.response_engine.worker.claim_next_response_action", claim)
-    monkeypatch.setattr("blue_team.response_engine.worker.fail_response_lease", fail)
+    monkeypatch.setattr("aisoc.response_engine.worker.claim_next_response_action", claim)
+    monkeypatch.setattr("aisoc.response_engine.worker.fail_response_lease", fail)
     worker = ResponseWorker(
         cast(Database, database),
         ResponseAdapterRegistry((adapter,)),
@@ -174,9 +174,9 @@ async def test_response_worker_does_not_reclassify_result_persistence_failure(
     async def fail(*_args: object, **_kwargs: object) -> None:
         failure_calls.append("incorrectly-reclassified")
 
-    monkeypatch.setattr("blue_team.response_engine.worker.claim_next_response_action", claim)
-    monkeypatch.setattr("blue_team.response_engine.worker.complete_response_execution", complete)
-    monkeypatch.setattr("blue_team.response_engine.worker.fail_response_lease", fail)
+    monkeypatch.setattr("aisoc.response_engine.worker.claim_next_response_action", claim)
+    monkeypatch.setattr("aisoc.response_engine.worker.complete_response_execution", complete)
+    monkeypatch.setattr("aisoc.response_engine.worker.fail_response_lease", fail)
     worker = ResponseWorker(
         cast(Database, database),
         ResponseAdapterRegistry((adapter,)),
@@ -204,8 +204,8 @@ async def test_response_worker_passes_boundary_to_claim(
     async def complete(*_args: object, **_kwargs: object) -> None:
         pass
 
-    monkeypatch.setattr("blue_team.response_engine.worker.claim_next_response_action", claim)
-    monkeypatch.setattr("blue_team.response_engine.worker.complete_response_execution", complete)
+    monkeypatch.setattr("aisoc.response_engine.worker.claim_next_response_action", claim)
+    monkeypatch.setattr("aisoc.response_engine.worker.complete_response_execution", complete)
     worker = ResponseWorker(
         cast(Database, database),
         ResponseAdapterRegistry((adapter,)),
@@ -235,8 +235,8 @@ async def test_response_worker_omits_boundary_when_not_configured(
     async def complete(*_args: object, **_kwargs: object) -> None:
         pass
 
-    monkeypatch.setattr("blue_team.response_engine.worker.claim_next_response_action", claim)
-    monkeypatch.setattr("blue_team.response_engine.worker.complete_response_execution", complete)
+    monkeypatch.setattr("aisoc.response_engine.worker.claim_next_response_action", claim)
+    monkeypatch.setattr("aisoc.response_engine.worker.complete_response_execution", complete)
     worker = ResponseWorker(
         cast(Database, database),
         ResponseAdapterRegistry((adapter,)),

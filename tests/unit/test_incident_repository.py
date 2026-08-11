@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from blue_team.domain import (
+from aisoc.domain import (
     AttackState,
     DetectionRead,
     DetectionStatus,
@@ -19,8 +19,8 @@ from blue_team.domain import (
     IncidentSeverity,
     SecurityEvent,
 )
-from blue_team.incident_engine import IncidentCorrelator
-from blue_team.storage.incident_repository import (
+from aisoc.incident_engine import IncidentCorrelator
+from aisoc.storage.incident_repository import (
     IncidentMergeRequired,
     IncidentSplitRequired,
     _edge_evidence_records,
@@ -33,7 +33,7 @@ from blue_team.storage.incident_repository import (
     get_incident_timeline_bundle,
     persist_incident_candidate,
 )
-from blue_team.storage.models import (
+from aisoc.storage.models import (
     IncidentClaimEvidenceRecord,
     IncidentClaimRecord,
     IncidentDataReductionRecord,

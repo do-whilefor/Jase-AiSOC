@@ -9,13 +9,13 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from blue_team.notification_engine.webhook import (
+from aisoc.notification_engine.webhook import (
     HttpxWebhookTransport,
     NotificationWebhookClient,
     WebhookResponseTooLarge,
     validate_webhook_destination,
 )
-from blue_team.storage.notification_repository import NotificationLease
+from aisoc.storage.notification_repository import NotificationLease
 
 NOW = datetime(2026, 8, 9, 20, 0, tzinfo=UTC)
 
@@ -113,7 +113,7 @@ async def test_webhook_envelope_is_minimized_canonical_and_hmac_signed() -> None
         timestamp.encode() + b"." + body,
         hashlib.sha256,
     ).hexdigest()
-    assert headers["X-Blue-Team-Webhook-Signature"] == f"v1={expected}"
+    assert headers["X-AISOC-Webhook-Signature"] == f"v1={expected}"
     assert headers["Idempotency-Key"] == "ntf_webhook_test"
     assert call["url"] == "http://127.0.0.1:9000/events"
     assert call["timeout_seconds"] == 7.5

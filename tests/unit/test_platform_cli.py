@@ -4,7 +4,7 @@ import json
 
 from pytest import CaptureFixture
 
-from blue_team.platform.__main__ import main
+from aisoc.platform.__main__ import main
 
 
 def test_platform_probe_cli_emits_versioned_json(capsys: CaptureFixture[str]) -> None:

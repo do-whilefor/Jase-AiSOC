@@ -84,7 +84,7 @@ export async function requireWriteBoundary(request: Request): Promise<Response |
   if (referer && !hasOrigin(referer, expectedOrigin)) {
     return jsonError(403, "写请求引用来源不匹配。", "console_referer_mismatch");
   }
-  const csrfNonce = request.headers.get("x-blue-team-csrf");
+  const csrfNonce = request.headers.get("x-aisoc-csrf");
   const match = csrfNonce?.match(CSRF_NONCE_PATTERN);
   if (!csrfNonce || !match) {
     return jsonError(403, "写请求缺少有效的控制台 nonce。", "console_csrf_invalid");
@@ -178,7 +178,7 @@ export async function proxyControlPlane({ request, method, path, body }: ProxyRe
   let baseUrl: URL;
   try {
     baseUrl = validatedControlPlaneUrl(
-      process.env.BLUE_TEAM_API_BASE_URL ?? DEFAULT_CONTROL_PLANE,
+      process.env.AISOC_API_BASE_URL ?? DEFAULT_CONTROL_PLANE,
     );
   } catch {
     return jsonError(503, "控制面地址配置无效。", "control_plane_configuration_invalid");
@@ -269,7 +269,7 @@ function isJsonObject(value: unknown): value is JsonObject {
 }
 
 async function writeSessionKey(): Promise<CryptoKey | Response> {
-  const secret = process.env.BLUE_TEAM_CONSOLE_CSRF_SECRET;
+  const secret = process.env.AISOC_CONSOLE_CSRF_SECRET;
   if (!secret || secret.length < 32 || secret.length > 256 || !/^[\x21-\x7e]+$/.test(secret)) {
     return jsonError(503, "控制台写入会话未配置。", "console_write_session_unavailable");
   }

@@ -19,7 +19,7 @@ export async function GET(request: Request): Promise<Response> {
   let baseUrl: URL;
   try {
     baseUrl = validatedControlPlaneUrl(
-      process.env.BLUE_TEAM_API_BASE_URL ?? DEFAULT_CONTROL_PLANE,
+      process.env.AISOC_API_BASE_URL ?? DEFAULT_CONTROL_PLANE,
     );
   } catch {
     return jsonError(503, "控制面地址配置无效。", "control_plane_configuration_invalid");

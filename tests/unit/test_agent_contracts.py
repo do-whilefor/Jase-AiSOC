@@ -5,14 +5,14 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from blue_team.agent_core import (
+from aisoc.agent_core import (
     AgentEnvelope,
     EventPriority,
     PriorityCounts,
     QueueTelemetry,
     build_event_batch,
 )
-from blue_team.domain import SecurityEvent
+from aisoc.domain import SecurityEvent
 
 TENANT_ID = "ten_01JTESTTENANT"
 AGENT_ID = "agent_01JTESTAGENT"

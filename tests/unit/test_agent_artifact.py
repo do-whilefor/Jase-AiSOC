@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import hashlib
-import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from blue_team.agent_core.artifact_builder import (
+from aisoc.agent_core.artifact_builder import (
     build_payload_tar,
     build_signed_artifact,
     default_validity,
 )
-from blue_team.agent_core.releases import (
+from aisoc.agent_core.releases import (
     ArtifactKind,
     ReleaseDecisionStatus,
     ReleaseState,
@@ -28,8 +27,8 @@ from blue_team.agent_core.releases import (
 def _make_source(tmp_path: Path) -> Path:
     root = tmp_path / "agent-root"
     (root / "bin").mkdir(parents=True)
-    (root / "bin" / "blue-team-agent").write_text(
-        "#!/bin/sh\nexec python -m blue_team.agent_core\n"
+    (root / "bin" / "aisoc-agent").write_text(
+        "#!/bin/sh\nexec python -m aisoc.agent_core\n"
     )
     (root / "lib").mkdir(parents=True)
     (root / "lib" / "marker.txt").write_text("offline runtime marker\n")
@@ -37,11 +36,10 @@ def _make_source(tmp_path: Path) -> Path:
     return root
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Windows cannot create symlinks without privilege")
 def test_build_payload_tar_rejects_symlinks(tmp_path: Path) -> None:
     source = _make_source(tmp_path)
     link = source / "lib" / "alias"
-    link.symlink_to("../bin/blue-team-agent")
+    link.symlink_to("../bin/aisoc-agent")
     with pytest.raises(ValueError, match="symlinks"):
         build_payload_tar(source)
 

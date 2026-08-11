@@ -1,6 +1,6 @@
 # ADR-0001：MVP 部署剖面
 
-状态：Proposed  
+状态：Proposed
 日期：2026-08-03
 
 ## 背景

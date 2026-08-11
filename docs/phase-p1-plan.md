@@ -1,7 +1,7 @@
 # P1：Python 核心平台与工程底座
 
-状态：进行中（本地工程门禁已验证，正式退出仍依赖 P0 Accepted 和远端 CI）  
-阶段目标：形成可启动、可迁移、可观察、租户边界可信的 Base Profile 核心平台。  
+状态：进行中（本地工程门禁已验证，正式退出仍依赖 P0 Accepted 和远端 CI）
+阶段目标：形成可启动、可迁移、可观察、租户边界可信的 Base Profile 核心平台。
 计划来源：项目计划书第 18 章“P1 Python 核心平台与工程底座”。
 
 ## 工作包状态
@@ -39,11 +39,11 @@
 
 P0 未 Accepted 前，P2 代码仅作为实验实现推进。Linux `os-release`/内核/init/BTF/
 cgroup/LSM 探测和 Collector 降级报告已经建立；下一批工作进入 Agent 本地缓存、背压/
-丢弃审计与 mTLS 身份契约。不得把 Windows 本地结果或单一容器探测作为 Linux Agent
+丢弃审计与 mTLS 身份契约。不得把本地单元结果或单一容器探测作为 Linux Agent
 兼容门禁证据。
 
 ## 2026-08-08 复审补充
 
-- 直接 `Settings(...)` 不再隐式读取工作目录 `.env`；只有应用入口 `get_settings()` 加载 `.env`。这消除了本机 Kali CA 路径对 API/配置单元测试的污染，同时保留正常应用启动行为。
-- 当前非 Docker 门禁为 Ruff/mypy/Schema 全绿、235 passed/14 skipped、依赖审计无已知漏洞；跳过的 PostgreSQL/POSIX 用例仍须在 Kali 重验。
+- 直接 `Settings(...)` 不再隐式读取工作目录 `.env`；只有应用入口 `get_settings()` 加载 `.env`。这消除了本机 CA 路径对 API/配置单元测试的污染，同时保留正常应用启动行为。
+- 当前非 Docker 门禁为 Ruff/mypy/Schema 全绿、235 passed/14 skipped、依赖审计无已知漏洞；跳过的 PostgreSQL/POSIX 用例仍须在 Linux VM 重验。
 - 新迁移 `20260808_0007` 的离线链为单一 head；因本轮禁止 Docker，未执行真实 PostgreSQL upgrade/downgrade/alembic check，P1 正式退出状态不变。

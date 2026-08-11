@@ -30,7 +30,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.blue-team-ai.local/batch-ack/v0.1.0",
+  "$id": "https://schemas.aisoc.local/batch-ack/v0.1.0",
   "additionalProperties": false,
   "properties": {
     "schema_version": {

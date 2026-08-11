@@ -14,14 +14,14 @@ from tempfile import NamedTemporaryFile
 
 import pytest
 
-from blue_team.domain.malware import (
+from aisoc.domain.malware import (
     EngineKind,
     EngineStatus,
     FileKind,
     StaticFileProfile,
     ThreatSignal,
 )
-from blue_team.malware_engine.clamav_scanner import ClamAvAdapter
+from aisoc.malware_engine.clamav_scanner import ClamAvAdapter
 
 
 def _make_profile() -> StaticFileProfile:

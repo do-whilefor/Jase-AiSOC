@@ -18,7 +18,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from blue_team.agent_core import (
+from aisoc.agent_core import (
     AgentProcessSupervisor,
     AgentProcessSupervisorConfig,
     AgentProcessSupervisorError,
@@ -39,15 +39,15 @@ from blue_team.agent_core import (
     sign_release,
 )
 
-STARTED = "BLUE_TEAM_AGENT_HEALTH_V1 STARTED"
-HEALTHY = "BLUE_TEAM_AGENT_HEALTH_V1 HEALTHY"
+STARTED = "AISOC_AGENT_HEALTH_V1 STARTED"
+HEALTHY = "AISOC_AGENT_HEALTH_V1 HEALTHY"
 NOW = datetime(2026, 8, 4, 8, tzinfo=UTC)
 
 
 def main() -> int:
-    assert os.name == "posix"
+    assert sys.platform.startswith("linux")
     assert _getuid() == 10001
-    agent_executable = Path("/app/.venv/bin/blue-team-agent")
+    agent_executable = Path("/app/.venv/bin/aisoc-agent")
     python_executable = Path(sys.executable).resolve()
     bounded = AgentProcessSupervisor(
         AgentProcessSupervisorConfig(
@@ -127,12 +127,12 @@ def main() -> int:
     )
     assert ignored.result is not None and ignored.result.killed
 
-    os.environ["BLUE_TEAM_SMOKE_SECRET"] = "must-not-be-inherited"
-    literal_argument = "; touch /tmp/blue-team-supervisor-injected"
+    os.environ["AISOC_SMOKE_SECRET"] = "must-not-be-inherited"
+    literal_argument = "; touch /tmp/aisoc-supervisor-injected"
     literal_source = "\n".join(
         (
             "import os,signal,sys,time",
-            "assert 'BLUE_TEAM_SMOKE_SECRET' not in os.environ",
+            "assert 'AISOC_SMOKE_SECRET' not in os.environ",
             "assert sys.argv[1].startswith('; touch')",
             "stopping=False",
             "def stop(*_args):\n global stopping; stopping=True",
@@ -149,9 +149,9 @@ def main() -> int:
         )
     )
     assert literal.healthy
-    assert not Path("/tmp/blue-team-supervisor-injected").exists()
+    assert not Path("/tmp/aisoc-supervisor-injected").exists()
 
-    with tempfile.TemporaryDirectory(prefix="blue-team-process-smoke-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="aisoc-process-smoke-") as temporary:
         root = Path(temporary)
         _configured_process_smoke(agent_executable, root)
         _installer_process_gate_smoke(agent_executable, root)
@@ -302,7 +302,7 @@ def _installer_process_gate_smoke(agent_executable: Path, root: Path) -> None:
         / first.installed.deployment_dir
         / "content"
         / "bin"
-        / "blue-team-agent"
+        / "aisoc-agent"
     )
     assert stat.S_IMODE(executable.stat().st_mode) == 0o500
     assert first.state.revision == 1
@@ -343,7 +343,7 @@ def _tar_payload(executable: bytes) -> bytes:
         directory.mode = 0o755
         directory.mtime = 0
         archive.addfile(directory)
-        member = tarfile.TarInfo("bin/blue-team-agent")
+        member = tarfile.TarInfo("bin/aisoc-agent")
         member.size = len(executable)
         member.mode = 0o755
         member.mtime = 0

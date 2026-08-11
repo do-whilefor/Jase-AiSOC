@@ -77,11 +77,11 @@ P7 Gate + EvidencePackage
 - `test_ai_review_repository.py` 覆盖 program/slot/review/conflict/adjudication/resolution 的精确
   task/Claim 映射；持久化入口再次校验 evidence、Claim、slot 和 conflict 作用域。
 - `tests/integration/test_ai_review_persistence.py` 已扩展为 P8 真实 PostgreSQL 门禁，覆盖三角色 run、
-  全部规范化 P8 记录、终态重放、stored query 和跨租户拒绝；当前未设置测试数据库，因此待 Kali。
+  全部规范化 P8 记录、终态重放、stored query 和跨租户拒绝；当前未设置测试数据库，因此待 Linux VM。
 
 ## 未关闭门禁
 
-- Kali PostgreSQL 在线执行 `base -> 20260809_0010 -> base`，运行 P6/P7/P8 集成测试并验证所有复合 FK；
+- Linux VM PostgreSQL 在线执行 `base -> 20260809_0010 -> base`，运行 P6/P7/P8 集成测试并验证所有复合 FK；
 - 用两个真实 tenant credential 通过 HTTP 对 review task、Verifier 结果、conflict 和 model history 做隔离对照；
 - 对 Kimi、GLM 和指定 OpenAI-compatible Provider 注入 malicious log/Claim/ToolResult，验证无未授权工具、
   nonexistent evidence=0、secret 不进入错误/日志；

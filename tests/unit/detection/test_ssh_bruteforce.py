@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from blue_team.detection_engine.rules.ssh_bruteforce import SshBruteforceRule
-from blue_team.domain.detection import AttackState
-from blue_team.domain.security_event import SecurityEvent
+from aisoc.detection_engine.rules.ssh_bruteforce import SshBruteforceRule
+from aisoc.domain.detection import AttackState
+from aisoc.domain.security_event import SecurityEvent
 
 from ._helpers import HOST, TENANT, rule_context, ssh_event
 

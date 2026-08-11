@@ -1,7 +1,7 @@
 """P10 real-PostgreSQL cross-host trace, replay, tenant, and export gate.
 
-This remains skipped in the non-Docker Windows pass and is intended for the
-later Kali/PostgreSQL validation environment.
+This remains skipped in the local run without PostgreSQL and is intended for the
+a Linux/PostgreSQL integration environment.
 """
 
 from __future__ import annotations
@@ -12,9 +12,9 @@ import os
 import pytest
 from sqlalchemy import func, select
 
-from blue_team.errors import NotFoundError
-from blue_team.storage import Database
-from blue_team.storage.models import (
+from aisoc.errors import NotFoundError
+from aisoc.storage import Database
+from aisoc.storage.models import (
     AgentEventRecord,
     AttackTraceExportRecord,
     AttackTraceRevisionRecord,
@@ -27,17 +27,17 @@ from blue_team.storage.models import (
     NormalizedEventRecord,
     TenantRecord,
 )
-from blue_team.storage.trace_repository import (
+from aisoc.storage.trace_repository import (
     create_trace_export,
     get_attack_trace,
     load_trace_incident_inputs,
     persist_attack_trace,
 )
-from blue_team.trace_engine import AttackTraceBuilder
+from aisoc.trace_engine import AttackTraceBuilder
 from tests.integration._helpers import truncate_all
 from tests.unit.test_trace_builder import TENANT, _inputs
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(DATABASE_URL is None, reason="PostgreSQL integration URL is not set"),

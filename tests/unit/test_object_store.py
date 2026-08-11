@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
-from blue_team.errors import AuthorizationError, EvidenceIntegrityError
-from blue_team.storage import LocalObjectStore
+from aisoc.errors import AuthorizationError, EvidenceIntegrityError
+from aisoc.storage import LocalObjectStore
 
 
 @pytest.mark.asyncio
@@ -59,7 +60,7 @@ async def test_local_object_store_rejects_intermediate_directory_symlink(
     traversal now fails instead of writing through a planted symlink. Verified
     directly against the shared helper with a deterministic relative path.
     """
-    from blue_team.storage._safe_open import open_exclusive_under_root
+    from aisoc.storage._safe_open import open_exclusive_under_root
 
     root = tmp_path / "store"
     root.mkdir()
@@ -91,3 +92,37 @@ async def test_local_object_store_write_creates_intermediate_directories(
     # The intermediate directory tree was created with the expected layout.
     stored = next((tmp_path / "evidence").rglob("*.evidence"))
     assert stored.parent.parent.name == tenant_id
+
+
+@pytest.mark.asyncio
+async def test_local_object_store_read_rejects_final_symlink(tmp_path: Path) -> None:
+    root = tmp_path / "evidence"
+    store = LocalObjectStore(root)
+    await store.initialize()
+    tenant_id = "ten_01JTESTTENANT"
+    metadata = await store.put(tenant_id, b"immutable evidence", media_type="text/plain")
+    stored = next(root.rglob("*.evidence"))
+    decoy = root / "decoy.evidence"
+    decoy.write_bytes(stored.read_bytes())
+    stored.unlink()
+    stored.symlink_to(decoy)
+
+    with pytest.raises(EvidenceIntegrityError):
+        await store.get(tenant_id, metadata.ref)
+
+
+@pytest.mark.asyncio
+async def test_local_object_store_read_rejects_replaced_hardlink(tmp_path: Path) -> None:
+    root = tmp_path / "evidence"
+    store = LocalObjectStore(root)
+    await store.initialize()
+    tenant_id = "ten_01JTESTTENANT"
+    metadata = await store.put(tenant_id, b"immutable evidence", media_type="text/plain")
+    stored = next(root.rglob("*.evidence"))
+    decoy = root / "decoy.evidence"
+    decoy.write_bytes(stored.read_bytes())
+    stored.unlink()
+    os.link(decoy, stored)
+
+    with pytest.raises(EvidenceIntegrityError):
+        await store.get(tenant_id, metadata.ref)

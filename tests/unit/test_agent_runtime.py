@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from blue_team import __version__
-from blue_team.agent_core import (
+from aisoc import __version__
+from aisoc.agent_core import (
     AgentHeartbeat,
     AgentRuntime,
     AgentRuntimeState,
@@ -21,7 +21,7 @@ from blue_team.agent_core import (
     RuntimeInitializationError,
     RuntimeStateError,
 )
-from blue_team.platform import (
+from aisoc.platform import (
     CapabilityLevel,
     CapabilityReport,
     CollectorCapability,

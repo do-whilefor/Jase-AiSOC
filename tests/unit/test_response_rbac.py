@@ -8,11 +8,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.security import HTTPAuthorizationCredentials
 
-from blue_team.api_server.auth import RequestPrincipal, require_tenant_principal
-from blue_team.api_server.tenant_tokens import issue_tenant_token
-from blue_team.domain.response import OperatorRole
-from blue_team.errors import AuthenticationError, AuthorizationError
-from blue_team.storage.models import TenantCredentialRecord
+from aisoc.api_server.auth import RequestPrincipal, require_tenant_principal
+from aisoc.api_server.tenant_tokens import issue_tenant_token
+from aisoc.domain.response import OperatorRole
+from aisoc.errors import AuthenticationError, AuthorizationError
+from aisoc.storage.models import TenantCredentialRecord
 
 TENANT = "ten_response_rbac"
 

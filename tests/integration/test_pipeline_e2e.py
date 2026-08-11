@@ -16,16 +16,16 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
-from blue_team.agent_core.contracts import AgentEnvelope, EventPriority
-from blue_team.api_server import create_app
-from blue_team.config import Settings
-from blue_team.detection_engine.worker import DetectionWorker
-from blue_team.normalize.worker import NormalizeWorker
-from blue_team.storage import Database, LocalObjectStore
-from blue_team.storage.models import HostRecord, TenantRecord
+from aisoc.agent_core.contracts import AgentEnvelope, EventPriority
+from aisoc.api_server import create_app
+from aisoc.config import Settings
+from aisoc.detection_engine.worker import DetectionWorker
+from aisoc.normalize.worker import NormalizeWorker
+from aisoc.storage import Database, LocalObjectStore
+from aisoc.storage.models import HostRecord, TenantRecord
 from tests.integration._helpers import seed_released_lifecycle, truncate_all
 
-DATABASE_URL = os.getenv("BLUE_TEAM_TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("AISOC_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(DATABASE_URL is None, reason="PostgreSQL integration URL is not set"),
@@ -44,7 +44,7 @@ def _envelope(
     *,
     base_time: datetime,
 ) -> AgentEnvelope:
-    from blue_team.domain.security_event import SecurityEvent
+    from aisoc.domain.security_event import SecurityEvent
 
     event_time = base_time + timedelta(seconds=offset)
     event = SecurityEvent.model_validate(
@@ -129,12 +129,12 @@ async def test_pipeline_normalize_detect_query_end_to_end(tmp_path: Path) -> Non
     )
 
     # 1. Insert 301 raw agent_events receipts with object-store envelopes.
-    from blue_team.agent_core.contracts import canonical_envelope_bytes
+    from aisoc.agent_core.contracts import canonical_envelope_bytes
 
     received_at = datetime.now(UTC)
     event_base_time = received_at - timedelta(seconds=45)
     async with database.session() as session, session.begin():
-        from blue_team.storage.models import AgentEventRecord
+        from aisoc.storage.models import AgentEventRecord
 
         for seq in range(301):
             env = _envelope(
@@ -173,7 +173,7 @@ async def test_pipeline_normalize_detect_query_end_to_end(tmp_path: Path) -> Non
     async with database.session() as session:
         from sqlalchemy import func, select
 
-        from blue_team.storage.models import NormalizedEventRecord
+        from aisoc.storage.models import NormalizedEventRecord
 
         ne_count = await session.scalar(
             select(func.count()).select_from(
@@ -210,8 +210,8 @@ async def test_pipeline_normalize_detect_query_end_to_end(tmp_path: Path) -> Non
         # The tenant already exists; issue a credential directly via the DB.
         from uuid import uuid4
 
-        from blue_team.api_server.tenant_tokens import issue_tenant_token
-        from blue_team.storage.models import TenantCredentialRecord
+        from aisoc.api_server.tenant_tokens import issue_tenant_token
+        from aisoc.storage.models import TenantCredentialRecord
 
         issued = issue_tenant_token(f"cred_{uuid4().hex}")
         async with database.session() as session, session.begin():
@@ -244,7 +244,7 @@ async def test_pipeline_normalize_detect_query_end_to_end(tmp_path: Path) -> Non
     async with database.session() as session:
         from sqlalchemy import func, select
 
-        from blue_team.storage.models import DetectionRecord, NormalizedEventRecord
+        from aisoc.storage.models import DetectionRecord, NormalizedEventRecord
 
         ne2 = await session.scalar(
             select(func.count()).select_from(

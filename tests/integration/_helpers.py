@@ -21,21 +21,21 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from sqlalchemy import text
 
-from blue_team.detection_engine.governance import get_rule_governance
-from blue_team.detection_engine.lifecycle import (
+from aisoc.detection_engine.governance import get_rule_governance
+from aisoc.detection_engine.lifecycle import (
     RuleLifecycleTrustKey,
     canonical_rule_lifecycle_manifest,
     rule_catalog_sha256,
 )
-from blue_team.domain.rule_lifecycle import (
+from aisoc.domain.rule_lifecycle import (
     RuleLifecycleChangeKind,
     RuleLifecycleManifest,
     RuleLifecycleStage,
     RuleValidationEvidence,
     SignedRuleLifecycleManifest,
 )
-from blue_team.storage import Database
-from blue_team.storage.rule_lifecycle_repository import import_rule_lifecycle_manifest
+from aisoc.storage import Database
+from aisoc.storage.rule_lifecycle_repository import import_rule_lifecycle_manifest
 
 # Every table except ``alembic_version``. Order is irrelevant: TRUNCATE with
 # CASCADE handles the foreign-key graph in one statement.

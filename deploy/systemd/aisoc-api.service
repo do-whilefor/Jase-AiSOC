@@ -1,0 +1,36 @@
+[Unit]
+Description=AI-SOC API server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aisoc
+Group=aisoc
+RuntimeDirectory=aisoc
+RuntimeDirectoryMode=0750
+StateDirectory=aisoc
+StateDirectoryMode=0750
+EnvironmentFile=-/etc/aisoc/aisoc.env
+ExecStart=/opt/aisoc/.venv/bin/aisoc-api
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aisoc
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

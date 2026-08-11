@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import ssl
 from datetime import UTC, datetime
 from typing import cast
 
@@ -11,21 +12,21 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from blue_team.agent_core.contracts import (
+from aisoc.agent_core.contracts import (
     AgentEnvelope,
     AgentHeartbeat,
     EventPriority,
     QueueTelemetry,
     build_event_batch,
 )
-from blue_team.agent_core.identity import (
+from aisoc.agent_core.identity import (
     AgentCertificateIdentity,
     LocalCertificateAuthority,
     create_agent_csr,
 )
-from blue_team.agent_core.transport import MtlsTransport, TransportError
-from blue_team.domain import SecurityEvent
-from blue_team.platform import (
+from aisoc.agent_core.transport import MtlsTransport, TransportError
+from aisoc.domain import SecurityEvent
+from aisoc.platform import (
     CapabilityLevel,
     CapabilityReport,
     PlatformInfo,
@@ -102,7 +103,7 @@ def _heartbeat() -> AgentHeartbeat:
     )
 
 
-def _build_transport() -> MtlsTransport:
+def _build_transport(ingest_url: str = "https://ingest.test.example") -> MtlsTransport:
     ca = LocalCertificateAuthority.generate()
     client_key = ec.generate_private_key(ec.SECP256R1())
     identity = AgentCertificateIdentity(
@@ -120,12 +121,31 @@ def _build_transport() -> MtlsTransport:
         serialization.NoEncryption(),
     )
     return MtlsTransport(
-        ingest_url="https://ingest.test.example",
+        ingest_url=ingest_url,
         client_certificate_pem=issued.certificate_pem,
         client_private_key_pem=client_key_pem,
         ca_certificate_pem=ca.ca_certificate_pem,
         timeout_seconds=5.0,
     )
+
+
+def test_transport_requires_https_origin_and_hostname_verification() -> None:
+    transport = _build_transport()
+    try:
+        assert transport._ssl_context.check_hostname is True
+        assert transport._ssl_context.verify_mode is ssl.CERT_REQUIRED
+        assert transport._ssl_context.minimum_version is ssl.TLSVersion.TLSv1_2
+    finally:
+        transport.close()
+
+    for invalid in (
+        "http://ingest.test.example",
+        "https://user:secret@ingest.test.example",
+        "https://ingest.test.example/untrusted",
+        "https://ingest.test.example?target=other",
+    ):
+        with pytest.raises(TransportError):
+            _build_transport(invalid)
 
 
 def test_post_heartbeat_delivers_session_value_and_lease_expiry(

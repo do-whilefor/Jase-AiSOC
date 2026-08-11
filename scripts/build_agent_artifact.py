@@ -27,14 +27,14 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from blue_team.agent_core.artifact_builder import (
+from aisoc.agent_core.artifact_builder import (
     ArtifactBuildError,
     build_signed_artifact,
     default_validity,
     load_signing_key,
     serialize_signed_release,
 )
-from blue_team.agent_core.releases import ReleaseTarget
+from aisoc.agent_core.releases import ReleaseTarget
 
 
 def _parser() -> argparse.ArgumentParser:

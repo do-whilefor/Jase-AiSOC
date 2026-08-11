@@ -6,6 +6,7 @@ import ssl
 import stat
 import threading
 from datetime import UTC, datetime, timedelta
+from ipaddress import ip_address
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from pydantic import ValidationError
 
-from blue_team.agent_core import (
+from aisoc.agent_core import (
     AgentCertificateIdentity,
     AgentIdentityError,
     AgentIdentityStore,
@@ -29,7 +30,7 @@ from blue_team.agent_core import (
     validate_agent_certificate,
     verify_rotation_proof,
 )
-from blue_team.domain import AgentEnrollmentCreate, AgentRegistrationTokenCreate
+from aisoc.domain import AgentEnrollmentCreate, AgentRegistrationTokenCreate
 
 NOW = datetime(2026, 8, 3, 12, tzinfo=UTC)
 HARDWARE_BINDING = "a" * 64
@@ -130,9 +131,8 @@ def test_local_identity_is_private_stable_and_detects_machine_clone(tmp_path: Pa
     assert loaded.installation_id == created.installation_id
     assert loaded.public_key_sha256 == created.public_key_sha256
     assert loaded.create_csr().startswith("-----BEGIN CERTIFICATE REQUEST-----")
-    if os.name != "nt":
-        assert stat.S_IMODE(store.key_path.stat().st_mode) == 0o600
-        assert stat.S_IMODE(store.metadata_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(store.key_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(store.metadata_path.stat().st_mode) == 0o600
     with pytest.raises(CloneDetectedError, match="machine binding changed"):
         store.load_or_create("b" * 64)
 
@@ -208,6 +208,22 @@ def test_ca_must_be_valid_for_the_complete_leaf_lifetime() -> None:
         )
 
 
+def test_ca_file_loader_rejects_hardlinked_private_key(tmp_path: Path) -> None:
+    ca = LocalCertificateAuthority.generate(now=NOW)
+    key_path = tmp_path / "ca.key"
+    certificate_path = tmp_path / "ca.crt"
+    key_path.write_bytes(ca.private_key_pem())
+    certificate_path.write_text(ca.ca_certificate_pem, encoding="ascii")
+    key_path.chmod(0o600)
+
+    loaded = LocalCertificateAuthority.from_files(key_path, certificate_path)
+    assert loaded.ca_certificate_pem == ca.ca_certificate_pem
+
+    os.link(key_path, tmp_path / "ca-key-copy")
+    with pytest.raises(AgentIdentityError, match="single-link"):
+        LocalCertificateAuthority.from_files(key_path, certificate_path)
+
+
 def test_real_tls_requires_a_ca_signed_client_certificate(tmp_path: Path) -> None:
     ca = LocalCertificateAuthority.generate(now=datetime.now(UTC))
     server_key, server_certificate = ca.issue_server_certificate("localhost")
@@ -244,13 +260,37 @@ def test_real_tls_requires_a_ca_signed_client_certificate(tmp_path: Path) -> Non
     unauthenticated_client = ssl.create_default_context(cafile=str(ca_path))
 
     assert _tls_exchange(server_context, authenticated_client) == (True, True)
+    wrong_host_client, wrong_host_server = _tls_exchange(
+        server_context,
+        authenticated_client,
+        server_hostname="wrong.localhost",
+    )
+    assert not (wrong_host_client and wrong_host_server)
     client_result, server_result = _tls_exchange(server_context, unauthenticated_client)
     assert not (client_result and server_result)
+
+
+def test_server_certificate_uses_ip_san_for_literal_address() -> None:
+    ca = LocalCertificateAuthority.generate(now=NOW)
+    _key, certificate_pem = ca.issue_server_certificate("127.0.0.1", now=NOW)
+    certificate = x509.load_pem_x509_certificate(certificate_pem)
+    san = certificate.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    assert san.get_values_for_type(x509.IPAddress) == [ip_address("127.0.0.1")]
+
+
+@pytest.mark.parametrize("hostname", ("0.0.0.0", "::", "bad_name", "host/name"))
+def test_server_certificate_rejects_ambiguous_or_unspecified_identity(hostname: str) -> None:
+    ca = LocalCertificateAuthority.generate(now=NOW)
+
+    with pytest.raises(AgentIdentityError, match="hostname"):
+        ca.issue_server_certificate(hostname, now=NOW)
 
 
 def _tls_exchange(
     server_context: ssl.SSLContext,
     client_context: ssl.SSLContext,
+    *,
+    server_hostname: str = "localhost",
 ) -> tuple[bool, bool]:
     listener = socket.socket()
     listener.settimeout(5)
@@ -277,7 +317,7 @@ def _tls_exchange(
     try:
         with (
             socket.create_connection(("127.0.0.1", port), timeout=5) as connection,
-            client_context.wrap_socket(connection, server_hostname="localhost") as tls,
+            client_context.wrap_socket(connection, server_hostname=server_hostname) as tls,
         ):
             tls.sendall(b"x")
             client_succeeded = tls.recv(1) == b"x"

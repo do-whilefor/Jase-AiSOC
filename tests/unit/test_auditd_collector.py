@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from blue_team.agent_core.auditd_collector import (
+from aisoc.agent_core.auditd_collector import (
     AuditdCollector,
     AuditdCollectorConfig,
     AuditdCollectorError,
@@ -19,8 +19,8 @@ from blue_team.agent_core.auditd_collector import (
     AuditdTailCursor,
     parse_auditctl_status,
 )
-from blue_team.agent_core.queue import LocalDiskQueue
-from blue_team.platform import CollectorState
+from aisoc.agent_core.queue import LocalDiskQueue
+from aisoc.platform import CollectorState
 from tests.unit.test_agent_contracts import AGENT_ID, BOOT_ID, HOST_ID, TENANT_ID
 from tests.unit.test_agent_queue import config as queue_config
 

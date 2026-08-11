@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from blue_team.detection_engine.rules.web_recon_scan import WebReconScanRule
-from blue_team.domain.detection import AttackState
-from blue_team.domain.security_event import SecurityEvent
+from aisoc.detection_engine.rules.web_recon_scan import WebReconScanRule
+from aisoc.domain.detection import AttackState
+from aisoc.domain.security_event import SecurityEvent
 
 from ._helpers import HOST, TENANT, http_event, rule_context
 

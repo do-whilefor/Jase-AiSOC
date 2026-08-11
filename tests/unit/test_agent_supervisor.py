@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import os
-import shutil
 import sys
 from pathlib import Path
 
 import pytest
 
-from blue_team.agent_core import (
+from aisoc.agent_core import (
     PROCESS_HEALTHY_MARKER,
     PROCESS_STARTED_MARKER,
     AgentProcessSupervisor,
@@ -46,25 +45,19 @@ def python_launch(source: str, *arguments: str) -> ProcessLaunch:
 
 
 def marker_source(*, started: bool = True, healthy: bool = True, body: str = "") -> str:
-    lines = ["import signal,time"]
-    if os.name != "nt":
-        lines.extend(
-            (
-                "stopping=False",
-                "def stop(*_args):\n global stopping; stopping=True",
-                "signal.signal(signal.SIGTERM,stop)",
-            )
-        )
+    lines = [
+        "import signal,time",
+        "stopping=False",
+        "def stop(*_args):\n global stopping; stopping=True",
+        "signal.signal(signal.SIGTERM,stop)",
+    ]
     if started:
         lines.append(f"print({PROCESS_STARTED_MARKER.decode()!r},flush=True)")
     if body:
         lines.append(body)
     if healthy:
         lines.append(f"print({PROCESS_HEALTHY_MARKER.decode()!r},flush=True)")
-    if os.name == "nt":
-        lines.append("time.sleep(30)")
-    else:
-        lines.append("\nwhile not stopping: time.sleep(0.01)")
+    lines.append("\nwhile not stopping: time.sleep(0.01)")
     return "\n".join(lines)
 
 
@@ -110,8 +103,6 @@ def test_probe_rejects_crash_and_out_of_order_health_protocol() -> None:
 
 
 def test_probe_kills_process_that_ignores_graceful_stop() -> None:
-    if os.name == "nt":
-        pytest.skip("Windows TerminateProcess has no catchable graceful-stop phase")
     source = "\n".join(
         (
             "import signal,time",
@@ -152,18 +143,18 @@ def test_launch_uses_literal_argv_and_does_not_inherit_parent_secrets(
 ) -> None:
     injected = tmp_path / "would-have-been-created"
     malicious = f";__import__('pathlib').Path({str(injected)!r}).write_text('bad')"
-    monkeypatch.setenv("BLUE_TEAM_TEST_PARENT_SECRET", "must-not-cross-exec")
+    monkeypatch.setenv("AISOC_TEST_PARENT_SECRET", "must-not-cross-exec")
     source = "\n".join(
         (
             "import os,signal,sys,time",
             "assert sys.argv[1].startswith(';__import__')",
-            "assert 'BLUE_TEAM_TEST_PARENT_SECRET' not in os.environ",
+            "assert 'AISOC_TEST_PARENT_SECRET' not in os.environ",
             "stopping=False",
             "def stop(*_args):\n global stopping; stopping=True",
-            "signal.signal(signal.SIGTERM,stop)" if os.name != "nt" else "pass",
+            "signal.signal(signal.SIGTERM,stop)",
             f"print({PROCESS_STARTED_MARKER.decode()!r},flush=True)",
             f"print({PROCESS_HEALTHY_MARKER.decode()!r},flush=True)",
-            "time.sleep(30)" if os.name == "nt" else "\nwhile not stopping: time.sleep(0.01)",
+            "\nwhile not stopping: time.sleep(0.01)",
         )
     )
 
@@ -180,8 +171,6 @@ def test_launch_rejects_loader_environment_and_linked_executable(tmp_path: Path)
             environment=(("LD_PRELOAD", "malicious.so"),),
         )
 
-    if os.name == "nt":
-        return
     linked = tmp_path / "python"
     linked.symlink_to(Path(sys.executable))
     with pytest.raises(AgentProcessSupervisorError) as error:
@@ -190,23 +179,18 @@ def test_launch_rejects_loader_environment_and_linked_executable(tmp_path: Path)
 
 
 def _resolve_agent_executable() -> tuple[Path, tuple[str, ...]]:
-    """Resolve the real ``blue-team-agent`` health-probe entry point.
-
-    The supervisor deliberately rejects symlink executables (anti-symlink-attack
-    hardening in ``_validate_launch``), so ``Path(sys.executable).resolve()`` is
-    unsafe as-is: in a symlink-based uv venv it dereferences ``.venv/bin/python``
-    to the uv-managed base CPython, which has no ``blue_team`` installed and
-    exits with ``ModuleNotFoundError`` before emitting the STARTED marker. Prefer
-    the venv console script beside the running interpreter (a regular file whose
-    shebang points back at the venv interpreter) before that fallback.
-    """
-    command = shutil.which("blue-team-agent")
-    if command is not None:
-        return Path(command), ("health-probe",)
-    sibling = Path(sys.executable).parent / "blue-team-agent"
+    """Resolve the real health-probe without relying on inherited PYTHONPATH."""
+    sibling = Path(sys.executable).parent / "aisoc-agent"
     if sibling.is_file() and not sibling.is_symlink() and os.access(sibling, os.X_OK):
         return sibling, ("health-probe",)
-    return Path(sys.executable).resolve(), ("-m", "blue_team.agent_core", "health-probe")
+    source_root = Path(__file__).resolve().parents[2] / "src"
+    bootstrap = (
+        "import sys;"
+        f"sys.path.insert(0, {str(source_root)!r});"
+        "from aisoc.agent_core.__main__ import main;"
+        "raise SystemExit(main(['health-probe']))"
+    )
+    return Path(sys.executable).resolve(), ("-c", bootstrap)
 
 
 def test_real_agent_health_probe_runs_under_the_same_protocol() -> None:

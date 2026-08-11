@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import SecretStr, ValidationError
 
-from blue_team.config import Settings, get_settings
+from aisoc.config import Settings, get_settings
 
 
 def test_development_settings_require_async_postgresql() -> None:
@@ -79,6 +79,35 @@ def test_agent_ca_paths_must_be_configured_as_a_pair() -> None:
         Settings(agent_ca_certificate_path=Path("ca.pem"))
 
 
+def test_wildcard_ingest_bind_requires_explicit_server_identity() -> None:
+    with pytest.raises(ValidationError, match="ingest_server_name"):
+        Settings(ingest_host="0.0.0.0")
+    with pytest.raises(ValidationError, match="ingest_server_name"):
+        Settings(ingest_host="::")
+
+    settings = Settings(
+        ingest_host="0.0.0.0",
+        ingest_server_name="INGEST.Example.Internal.",
+    )
+
+    assert settings.ingest_host == "0.0.0.0"
+    assert settings.ingest_server_name == "ingest.example.internal"
+    assert settings.effective_ingest_server_name == "ingest.example.internal"
+
+
+@pytest.mark.parametrize(
+    "server_name",
+    ("0.0.0.0", "::", "https://ingest.example", "user@ingest.example", "bad_name"),
+)
+def test_ingest_server_identity_must_be_an_exact_dns_name_or_ip(server_name: str) -> None:
+    with pytest.raises(ValidationError, match="ingest_server_name"):
+        Settings(ingest_server_name=server_name)
+
+
+def test_ingest_bind_host_is_the_default_certificate_identity() -> None:
+    assert Settings(ingest_host="127.0.0.1").effective_ingest_server_name == "127.0.0.1"
+
+
 def test_detection_lookback_must_cover_host_and_burst_windows() -> None:
     with pytest.raises(ValidationError, match="detection_lookback_seconds"):
         Settings(
@@ -86,6 +115,19 @@ def test_detection_lookback_must_cover_host_and_burst_windows() -> None:
             detection_host_chain_window_seconds=300,
             detection_lookback_seconds=299,
         )
+
+
+def test_ioc_feed_requires_path_and_digest_as_a_pair(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="detection_ioc_feed_path"):
+        Settings(detection_ioc_feed_path=tmp_path / "feed.json")
+    with pytest.raises(ValidationError, match="detection_ioc_feed_path"):
+        Settings(detection_ioc_feed_sha256="a" * 64)
+
+    settings = Settings(
+        detection_ioc_feed_path=tmp_path / "feed.json",
+        detection_ioc_feed_sha256="a" * 64,
+    )
+    assert settings.detection_ioc_feed_sha256 == "a" * 64
 
 
 def test_incident_lookback_must_cover_correlation_and_context_windows() -> None:
@@ -194,8 +236,8 @@ def test_notification_worker_requires_fixed_allowlisted_signed_destination() -> 
 def test_only_application_settings_loader_reads_dotenv(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("BLUE_TEAM_API_PORT", raising=False)
-    (tmp_path / ".env").write_text("BLUE_TEAM_API_PORT=8123\n", encoding="utf-8")
+    monkeypatch.delenv("AISOC_API_PORT", raising=False)
+    (tmp_path / ".env").write_text("AISOC_API_PORT=8123\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     get_settings.cache_clear()
 

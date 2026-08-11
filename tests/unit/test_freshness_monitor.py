@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from blue_team.domain.console import FreshnessStatus
-from blue_team.observability.freshness import classify_freshness
+from aisoc.domain.console import FreshnessStatus
+from aisoc.observability.freshness import classify_freshness
 
 # Mirrors Settings defaults: production SLO 5s, verify SLO 10s.
 _VERIFY = 10
