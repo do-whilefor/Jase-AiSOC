@@ -74,7 +74,7 @@ jobs:
             --output-file reports/sbom.cdx.json
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom-python-${{ github.sha }}
           path: reports/sbom.cdx.json
@@ -206,7 +206,7 @@ jobs:
         run: docker build --file deploy/Dockerfile --tag aisoc-security-platform:${{ github.sha }} .
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-dist-${{ github.sha }}
           path: |
