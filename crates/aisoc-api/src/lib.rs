@@ -12,7 +12,7 @@ use aisoc_storage::central::CentralStore;
 use aisoc_storage::postgres::{
     connect_postgres, healthcheck as postgres_healthcheck, PostgresPoolConfig,
 };
-use axum::extract::{Extension, Request, State};
+use axum::extract::{Extension, Path as AxumPath, Request, State};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -228,6 +228,14 @@ pub fn router(state: Arc<ApiState>) -> Router {
         .route("/api/v1/agents", get(agents))
         .route("/api/v1/detections", get(detections))
         .route("/api/v1/incidents", get(incidents))
+        .route(
+            "/api/v1/incidents/{incident_id}/revisions",
+            get(incident_revisions),
+        )
+        .route(
+            "/api/v1/incidents/{incident_id}/evidence",
+            get(incident_evidence),
+        )
         .route("/api/v1/system/status", get(system_status))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_layer));
 
@@ -314,6 +322,82 @@ async fn incidents(
     request: Request,
 ) -> Response {
     tenant_resource(state, principal, request, "incidents").await
+}
+
+async fn incident_revisions(
+    State(state): State<Arc<ApiState>>,
+    Extension(principal): Extension<Principal>,
+    AxumPath(incident_id): AxumPath<String>,
+    request: Request,
+) -> Response {
+    if !principal.can_read() {
+        return forbidden(&request);
+    }
+    let request_id = request_header(&request, "x-request-id")
+        .unwrap_or("unknown")
+        .to_owned();
+    if !valid_prefixed_id(&incident_id, "inc_") {
+        return api_error(StatusCode::BAD_REQUEST, "invalid_incident_id", request_id);
+    }
+    if let Some(database) = &state.database {
+        return match database
+            .list_incident_revisions(&principal.tenant_id, &incident_id)
+            .await
+        {
+            Ok(values) => (StatusCode::OK, Json(values)).into_response(),
+            Err(error) => {
+                tracing::error!(%error, %request_id, %incident_id, "incident revision query failed");
+                api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "central_repository_unavailable",
+                    request_id,
+                )
+            }
+        };
+    }
+    let path = format!(
+        "/internal/v1/tenants/{}/incidents/{}/revisions",
+        principal.tenant_id, incident_id
+    );
+    upstream_response(state, request, path).await
+}
+
+async fn incident_evidence(
+    State(state): State<Arc<ApiState>>,
+    Extension(principal): Extension<Principal>,
+    AxumPath(incident_id): AxumPath<String>,
+    request: Request,
+) -> Response {
+    if !principal.can_read() {
+        return forbidden(&request);
+    }
+    let request_id = request_header(&request, "x-request-id")
+        .unwrap_or("unknown")
+        .to_owned();
+    if !valid_prefixed_id(&incident_id, "inc_") {
+        return api_error(StatusCode::BAD_REQUEST, "invalid_incident_id", request_id);
+    }
+    if let Some(database) = &state.database {
+        return match database
+            .list_incident_evidence(&principal.tenant_id, &incident_id)
+            .await
+        {
+            Ok(values) => (StatusCode::OK, Json(values)).into_response(),
+            Err(error) => {
+                tracing::error!(%error, %request_id, %incident_id, "incident evidence query failed");
+                api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "central_repository_unavailable",
+                    request_id,
+                )
+            }
+        };
+    }
+    let path = format!(
+        "/internal/v1/tenants/{}/incidents/{}/evidence",
+        principal.tenant_id, incident_id
+    );
+    upstream_response(state, request, path).await
 }
 
 async fn system_status(

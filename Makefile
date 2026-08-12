@@ -108,13 +108,13 @@ typecheck:
 	$(VENV)/bin/mypy
 
 rust-first-check:
-	./scripts/check-rust-first.sh
+	bash ./scripts/check-rust-first.sh
 
 rust-resolve:
 	cargo generate-lockfile
 
 rust-lock-check:
-	./scripts/check-cargo-lock.sh
+	bash ./scripts/check-cargo-lock.sh
 	cargo metadata --locked --no-deps --format-version 1 >/dev/null
 
 rust-check: rust-lock-check
@@ -149,7 +149,7 @@ rust-wheel: rust-lock-check
 
 rust-release: rust-lock-check
 	cargo build --locked --release -p aisoc-agent -p aisoc-ingest -p aisoc-api -p aisoc-console -p aisoc-web-guard -p aisoc-storage
-	./scripts/package-rust-release.sh
+	bash ./scripts/package-rust-release.sh
 
 deploy-check: rust-first-check
 	$(PYTHON) scripts/check-sqlx-migrations.py

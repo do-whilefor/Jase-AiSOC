@@ -105,6 +105,13 @@ pub fn build_evidence_package(
 ) -> Result<EvidencePackage, ProviderError> {
     available_tools.sort();
     available_tools.dedup();
+    let mut evidence_ids = candidate
+        .evidence_index
+        .iter()
+        .map(|item| item.evidence_id.clone())
+        .collect::<Vec<_>>();
+    evidence_ids.sort();
+    evidence_ids.dedup();
     let package = EvidencePackage {
         schema_version: aisoc_contracts::AI_REVIEW_SCHEMA_VERSION.to_owned(),
         review_task_id,
@@ -114,11 +121,7 @@ pub fn build_evidence_package(
         reason,
         risk_score: candidate.risk_score,
         aggregate_metrics: candidate.aggregate_metrics.clone(),
-        evidence_ids: candidate
-            .evidence_index
-            .iter()
-            .map(|item| item.event_id.clone())
-            .collect(),
+        evidence_ids,
         sample_event_ids: candidate.sample_event_ids.clone(),
         evidence_index: candidate.evidence_index.clone(),
         full_query_ref: Some(candidate.full_query_ref.clone()),

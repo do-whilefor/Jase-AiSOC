@@ -21,7 +21,14 @@ REQUIRED_TABLES = {
     "detections",
     "incidents",
     "incident_detections",
+    "incident_revisions",
+    "incident_revision_detections",
+    "incident_revision_evidence_events",
+    "incident_revision_entities",
+    "incident_revision_evidence_records",
     "evidence_records",
+    "evidence_hold_events",
+    "evidence_lifecycle_events",
     "analysis_claims",
 }
 

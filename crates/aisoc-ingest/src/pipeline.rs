@@ -3,7 +3,7 @@ use std::path::Path;
 
 use aisoc_contracts::{Detection, IncidentState, SecurityEvent};
 use aisoc_detection::{DetectionConfig, DetectionEngine};
-use aisoc_incident::IncidentCorrelator;
+use aisoc_incident::{IncidentCorrelationError, IncidentCorrelator};
 use aisoc_normalize::{NormalizationPipeline, NormalizeError, NormalizedEvent};
 use aisoc_storage::{AppendOnlyJsonl, StorageError};
 use serde::{Deserialize, Serialize};
@@ -72,6 +72,8 @@ pub enum PipelineError {
     Storage(#[from] StorageError),
     #[error("normalization state recovery failed: {0}")]
     Normalize(#[from] NormalizeError),
+    #[error("incident correlation failed: {0}")]
+    Incident(#[from] IncidentCorrelationError),
     #[error("pipeline is poisoned after a persistence failure and must be restarted")]
     Poisoned,
     #[error("pipeline journal contains an invalid persisted record")]
@@ -168,7 +170,7 @@ impl PipelineRuntime {
             }
         }
         let mut incidents = IncidentCorrelator::default();
-        incidents.restore(&incident_states);
+        incidents.restore(&incident_states)?;
         Ok(Self {
             store,
             normalize,
@@ -277,7 +279,7 @@ impl PipelineRuntime {
             .filter(|detection| !self.detections.contains_key(&detection.id))
             .collect::<Vec<_>>();
         new_detections.sort_by(|left, right| left.id.cmp(&right.id));
-        let incident_revisions = self.incidents.correlate(&new_detections);
+        let incident_revisions = self.incidents.correlate(&new_detections)?;
         let record = PipelineJournalRecord::successful(
             evidence,
             normalized,
@@ -428,7 +430,9 @@ mod tests {
             boot_id: envelope.boot_id.clone(),
             sequence,
             raw_ref: format!("raw://test/{sequence}"),
+            object_key: None,
             sha256: sha256_hex(&canonical_json),
+            content_bytes: canonical_json.len(),
             canonical_json,
         }
     }

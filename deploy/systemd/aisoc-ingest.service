@@ -1,5 +1,5 @@
 [Unit]
-Description=AI-SOC Rust ingest and deterministic pipeline
+Description=Jase-AiSOC Rust ingest and deterministic pipeline
 After=network-online.target
 Wants=network-online.target
 
@@ -10,12 +10,14 @@ Group=aisoc
 UMask=0077
 RuntimeDirectory=aisoc-ingest
 RuntimeDirectoryMode=0700
-StateDirectory=aisoc-ingest
+StateDirectory=aisoc-ingest aisoc-raw-evidence
 StateDirectoryMode=0700
 EnvironmentFile=-/etc/aisoc/aisoc-rust.env
 Environment=AISOC_INGEST_BIND=127.0.0.1:8080
 Environment=AISOC_INGEST_STATE_DIR=/var/lib/aisoc-ingest
+Environment=AISOC_INGEST_OBJECT_STORE_ROOT=/var/lib/aisoc-raw-evidence
 Environment=AISOC_INGEST_PROXY_SECRET_FILE=/etc/aisoc/ingest-proxy.secret
+Environment=AISOC_INGEST_CONTROL_SECRET_FILE=/etc/aisoc/ingest-control.secret
 ExecStart=/opt/aisoc/current/bin/aisoc-ingest
 Restart=on-failure
 RestartSec=2s
@@ -25,7 +27,7 @@ PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/aisoc-ingest
+ReadWritePaths=/var/lib/aisoc-ingest /var/lib/aisoc-raw-evidence
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

@@ -1085,9 +1085,9 @@ export function OperationsConsole() {
     <div className="console-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true">BT</div>
+          <div className="brand-mark" aria-hidden="true">JA</div>
           <div className="brand-copy">
-            <strong>AI-SOC</strong>
+            <strong>Jase-AiSOC</strong>
             <span>Evidence Operations</span>
           </div>
         </div>

@@ -61,6 +61,7 @@ services:
       AISOC_DATABASE_URL: postgresql://aisoc:aisoc-local-development-only@postgres:5432/aisoc
       AISOC_INGEST_BIND: 127.0.0.1:8080
       AISOC_INGEST_STATE_DIR: /var/lib/aisoc-ingest
+      AISOC_INGEST_OBJECT_STORE_ROOT: /var/lib/aisoc-raw-evidence
       AISOC_INGEST_PROXY_SECRET_FILE: /run/aisoc-secrets/ingest-proxy.secret
       AISOC_INGEST_CONTROL_SECRET_FILE: /run/aisoc-secrets/ingest-control.secret
       RUST_LOG: aisoc_ingest=info
@@ -75,6 +76,7 @@ services:
     volumes:
       - p1-secrets:/run/aisoc-secrets:ro
       - p1-ingest-state:/var/lib/aisoc-ingest
+      - p1-raw-evidence:/var/lib/aisoc-raw-evidence
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/readyz"]
       interval: 5s
@@ -126,4 +128,5 @@ services:
 volumes:
   p1-secrets:
   p1-ingest-state:
+  p1-raw-evidence:
   p1-postgres:

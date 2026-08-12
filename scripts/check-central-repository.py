@@ -20,12 +20,20 @@ def require(text: str, needle: str, label: str) -> None:
 def main() -> None:
     storage = (ROOT / "crates/aisoc-storage/src/central.rs").read_text(encoding="utf-8")
     storage_lib = (ROOT / "crates/aisoc-storage/src/lib.rs").read_text(encoding="utf-8")
+    object_store = (ROOT / "crates/aisoc-storage/src/object_store.rs").read_text(encoding="utf-8")
     ingest_lib = (ROOT / "crates/aisoc-ingest/src/lib.rs").read_text(encoding="utf-8")
     ingest_main = (ROOT / "crates/aisoc-ingest/src/main.rs").read_text(encoding="utf-8")
     ingest_pipeline = (ROOT / "crates/aisoc-ingest/src/pipeline.rs").read_text(encoding="utf-8")
     api = (ROOT / "crates/aisoc-api/src/lib.rs").read_text(encoding="utf-8")
+    ai = (ROOT / "crates/aisoc-ai/src/lib.rs").read_text(encoding="utf-8")
+    ai_contract = (ROOT / "crates/aisoc-contracts/src/ai_review.rs").read_text(encoding="utf-8")
     migration = (ROOT / "crates/aisoc-storage/migrations/202608110004_central_repository_cutover.sql").read_text(encoding="utf-8")
     replay_migration = (ROOT / "crates/aisoc-storage/migrations/202608110005_dlq_replay_control.sql").read_text(encoding="utf-8")
+    object_migration = (ROOT / "crates/aisoc-storage/migrations/202608120006_raw_evidence_object_store.sql").read_text(encoding="utf-8")
+    watermark_migration = (ROOT / "crates/aisoc-storage/migrations/202608120007_event_watermark_reconciliation.sql").read_text(encoding="utf-8")
+    incident_revision_migration = (ROOT / "crates/aisoc-storage/migrations/202608120008_incident_revision_history.sql").read_text(encoding="utf-8")
+    incident_context_migration = (ROOT / "crates/aisoc-storage/migrations/202608120009_incident_revision_context.sql").read_text(encoding="utf-8")
+    evidence_custody_migration = (ROOT / "crates/aisoc-storage/migrations/202608120010_evidence_custody_retention.sql").read_text(encoding="utf-8")
 
     for item in [
         "CentralStore",
@@ -44,16 +52,39 @@ def main() -> None:
         "list_agents",
         "list_detections",
         "list_incidents",
+        "list_incident_revisions",
         "tenant_status",
         "event_watermarks",
         "event_dlq",
         "incident_detections",
+        "incident_revisions",
+        "incident_revision_detections",
+        "incident_revision_evidence_events",
+        "incident_revision_entities",
+        "incident_revision_evidence_records",
+        "evidence_hold_events",
+        "evidence_lifecycle_events",
+        "list_incident_evidence",
+        "record_evidence_hold_event",
+        "persist_raw_event_evidence",
     ]:
         require(storage, item, "aisoc-storage central repository")
 
     require(storage_lib, "DataConflict", "storage fail-closed error model")
     require(storage_lib, "NumericOverflow", "storage bounded integer model")
     require(storage_lib, "AgentBindingMismatch", "storage agent identity binding model")
+    for item in [
+        "Jase-AiSOC immutable raw-evidence object storage",
+        "evidence://",
+        "create_new(true)",
+        "open_regular_file_nofollow",
+        "secure_compare",
+        "get_by_ref",
+        "get_by_key",
+        "metadata.nlink() != 1",
+        "final_metadata.ctime_nsec() != opened.ctime_nsec()",
+    ]:
+        require(object_store, item, "Rust immutable raw evidence object store")
 
     # A retry after local journal success must reconstruct deterministic evidence
     # so central PostgreSQL can repair a prior failed transaction.
@@ -72,12 +103,17 @@ def main() -> None:
     require(ingest_main, '/internal/v1/replay/normalize-dlq', "internal DLQ replay control")
     require(ingest_main, "internal_replay_normalize_dlq", "internal DLQ replay handler")
     require(ingest_lib, "evidence_by_raw_ref", "immutable raw evidence lookup for replay")
+    require(ingest_lib, "LocalObjectStore", "ingest raw evidence object storage")
+    require(ingest_lib, "persisted.canonical_json.clear()", "raw bytes excluded from new journal rows")
+    require(ingest_main, "AISOC_INGEST_OBJECT_STORE_ROOT", "Linux object-store configuration")
 
     # Production API reads tenant resources from PostgreSQL rather than treating
     # the ingest process's in-memory maps as the system of record.
     require(api, '"agents" => database.list_agents', "API central read path")
     require(api, '"detections" => database.list_detections', "API central read path")
     require(api, '"incidents" => database.list_incidents', "API central read path")
+    require(api, ".list_incident_revisions", "API incident revision read path")
+    require(api, '"/api/v1/incidents/{incident_id}/revisions"', "API incident revision route")
     require(api, '"source": "postgresql"', "API system status source")
     require(api, "AISOC_DATABASE_URL is required in production", "production API fail-closed DB")
 
@@ -99,6 +135,13 @@ def main() -> None:
     ]:
         require(replay_migration, ddl, "DLQ replay control migration")
 
+    for ddl in [
+        "raw_event_index_object_key_required",
+        "CHECK (object_key IS NOT NULL) NOT VALID",
+        "raw_event_index_object_key_idx",
+    ]:
+        require(object_migration, ddl, "raw evidence object-store migration")
+
     # Both local compose profiles run the production image; therefore ingest must
     # receive the same PostgreSQL URL as API and the native migrator.
     for compose_name in ["deploy/compose/p1.yml", "deploy/compose/p2.yml"]:
@@ -106,6 +149,55 @@ def main() -> None:
         ingest = re.search(r"(?ms)^  ingest:\n(.*?)(?=^  [a-zA-Z0-9_-]+:\n|\Z)", compose)
         if not ingest or "AISOC_DATABASE_URL:" not in ingest.group(1):
             fail(f"{compose_name}: ingest is not wired to PostgreSQL")
+        if "AISOC_INGEST_OBJECT_STORE_ROOT:" not in ingest.group(1):
+            fail(f"{compose_name}: ingest is not wired to immutable raw evidence storage")
+
+    require(watermark_migration, "next_expected_sequence", "watermark reconciliation migration")
+    require(storage, "next_expected_sequence", "central gap-safe watermark")
+    require(storage, "FROM raw_event_index", "central gap reconciliation")
+    require(storage, "AND sequence = $4", "central gap reconciliation")
+
+    for ddl in [
+        "CREATE TABLE incident_revisions",
+        "snapshot_sha256 CHAR(64)",
+        "PRIMARY KEY (tenant_id, incident_id, revision)",
+        "CREATE TABLE incident_revision_detections",
+    ]:
+        require(incident_revision_migration, ddl, "P6 append-only incident revision migration")
+    require(storage, "revision_sha256", "P6 immutable incident revision snapshot")
+    require(storage, "incident_revisions.snapshot_sha256 = EXCLUDED.snapshot_sha256", "P6 revision conflict gate")
+    require(storage, "AND revision < $9", "P6 latest incident materialization")
+    require(storage, "normalized_events.normalized = EXCLUDED.normalized", "normalized-event idempotency conflict gate")
+    require(storage, "detections.payload = EXCLUDED.payload", "detection idempotency conflict gate")
+
+    for ddl in [
+        "CREATE TABLE incident_revision_evidence_events",
+        "REFERENCES normalized_events(tenant_id, event_id) ON DELETE RESTRICT",
+        "CREATE TABLE incident_revision_entities",
+        "REFERENCES incident_revisions(tenant_id, incident_id, revision) ON DELETE RESTRICT",
+    ]:
+        require(incident_context_migration, ddl, "P6 revision evidence/entity migration")
+    require(storage, "INSERT INTO incident_revision_evidence_events", "P6 revision evidence persistence")
+    require(storage, "INSERT INTO incident_revision_entities", "P6 revision entity persistence")
+
+    for ddl in [
+        "ADD COLUMN custody_sha256 CHAR(64)",
+        "retention_class TEXT NOT NULL DEFAULT 'tenant_policy_default'",
+        "CREATE TABLE evidence_hold_events",
+        "CREATE TABLE evidence_lifecycle_events",
+        "CREATE TABLE incident_revision_evidence_records",
+        "REFERENCES evidence_records(tenant_id, id) ON DELETE RESTRICT",
+    ]:
+        require(evidence_custody_migration, ddl, "P6 evidence custody/retention migration")
+    require(storage, "custody_sequence DESC", "P6 serialized evidence custody chain")
+    require(storage, "integrity_state = 'verified'", "P6 verified evidence gate")
+    require(storage, "retention_class = 'tenant_policy_default'", "P6 retention metadata")
+    require(storage, "INSERT INTO incident_revision_evidence_records", "P6 revision EvidenceRef persistence")
+    require(storage, "observed_at <= $3::timestamptz AS chronological", "P6 legal-hold chronology gate")
+    require(api, '"/api/v1/incidents/{incident_id}/evidence"', "P6 tenant-scoped evidence API")
+    require(ai, ".map(|item| item.evidence_id.clone())", "P6->P7 authoritative evidence identity")
+    require(ai_contract, ".map(|item| item.evidence_id.as_str())", "P7 EvidencePackage authoritative evidence validation")
+    require(ai_contract, ".map(|item| item.event_id.as_str())", "P7 sample event validation")
 
     print("Central PostgreSQL repository gate: OK")
 

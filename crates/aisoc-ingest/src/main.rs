@@ -15,6 +15,7 @@ use aisoc_ingest::inventory::AgentInventory;
 use aisoc_ingest::pipeline::{PipelineRuntime, ReplayOutcome};
 use aisoc_ingest::{AuthenticatedAgent, IngestError, IngestLimits, PersistentIngest};
 use aisoc_storage::central::CentralStore;
+use aisoc_storage::object_store::LocalObjectStore;
 use aisoc_storage::StorageError;
 use aisoc_storage::postgres::{
     connect_postgres, healthcheck as postgres_healthcheck, PostgresPoolConfig,
@@ -117,12 +118,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ingest_path = state_dir.join("accepted-events.jsonl");
     let pipeline_path = state_dir.join("pipeline.jsonl");
     let inventory_path = state_dir.join("agent-heartbeats.jsonl");
-    let ingest = PersistentIngest::open(&ingest_path, IngestLimits::default())?;
+    let object_root = env_absolute_path(
+        "AISOC_INGEST_OBJECT_STORE_ROOT",
+        "/var/lib/aisoc/raw-evidence",
+    )?;
+    let object_store = LocalObjectStore::open(&object_root)?;
+    let ingest = PersistentIngest::open(&ingest_path, object_store, IngestLimits::default())?;
     let backlog = ingest.replay_evidence()?;
     let mut pipeline = PipelineRuntime::open(&pipeline_path)?;
     let replayed = pipeline.process_backlog(&backlog)?;
     let inventory = AgentInventory::open(&inventory_path)?;
-    tracing::info!(replayed, raw_records = backlog.len(), "ingest pipeline recovered");
+    tracing::info!(
+        replayed,
+        raw_records = backlog.len(),
+        object_store_root = %object_root.display(),
+        brand = "Jase-AiSOC",
+        "ingest pipeline recovered"
+    );
 
     if let Some(central) = &database {
         let mut inventory_backfilled = 0_usize;
@@ -455,7 +467,7 @@ async fn internal_replay_normalize_dlq(
     for claim in claims {
         let evidence_lookup = match state.ingest.lock() {
             Ok(ingest) => ingest
-                .evidence_by_raw_ref(&claim.raw_ref)
+                .evidence_by_raw_ref(&claim.tenant_id, &claim.raw_ref)
                 .map_err(|error| error.to_string()),
             Err(_) => Err("ingest state mutex is poisoned".to_owned()),
         };

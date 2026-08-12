@@ -7,7 +7,7 @@
 - `aisoc-ingest` 正常运行；
 - `AISOC_DATABASE_URL` 可用且 SQLx migration 已完成；
 - 操作者能够读取 Ingest 的 `AISOC_INGEST_CONTROL_SECRET`；
-- 目标 raw evidence 仍存在于本地 append-only raw journal。
+- 目标 raw evidence 仍存在于 `AISOC_INGEST_OBJECT_STORE_ROOT`，且 locator、object key、长度和 SHA-256 校验通过。
 
 ## 执行
 
@@ -49,4 +49,7 @@ curl --fail-with-body \
 
 ## 当前限制
 
-当前 raw replay source 仍是本地 journal。V4 的 Object Store immutable raw body、跨节点 replay source、Operator RBAC/audit replay API 和 JetStream durable replay 尚未完成，因此该 runbook 只代表 P3 base profile 的当前能力，不代表 P3 已验收关闭。
+当前 Base/Standalone raw replay source 已是 Rust 本地不可变 Object Store；
+本地 journal 只保留元数据和旧格式迁移入口。Central/HA 的 S3/MinIO adapter、
+跨节点 replay source、Operator RBAC/audit replay API 和 JetStream durable
+replay 尚未完成，因此该 runbook 仍不代表 P3 已验收关闭。

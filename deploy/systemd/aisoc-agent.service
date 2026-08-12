@@ -1,5 +1,5 @@
 [Unit]
-Description=AI-SOC Rust endpoint collector Agent
+Description=Jase-AiSOC Rust endpoint collector Agent
 After=network-online.target
 Wants=network-online.target
 

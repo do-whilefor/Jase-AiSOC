@@ -23,9 +23,9 @@ die() { printf '[aisoc-release] error: %s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'USAGE'
 Usage:
-  sudo deploy/linux/release-manager.sh install RELEASE_DIR [VERSION]
-  sudo deploy/linux/release-manager.sh rollback
-  deploy/linux/release-manager.sh status
+  sudo bash deploy/linux/release-manager.sh install RELEASE_DIR [VERSION]
+  sudo bash deploy/linux/release-manager.sh rollback
+  bash deploy/linux/release-manager.sh status
 
 A release directory must contain:
   bin/aisoc-agent

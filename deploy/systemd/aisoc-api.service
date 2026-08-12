@@ -1,5 +1,5 @@
 [Unit]
-Description=AI-SOC Rust control-plane API
+Description=Jase-AiSOC Rust control-plane API
 After=network-online.target
 Wants=network-online.target
 

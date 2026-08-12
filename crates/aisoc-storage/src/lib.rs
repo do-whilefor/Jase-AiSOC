@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod central;
+pub mod object_store;
 pub mod postgres;
 
 use std::fs::{self, File, OpenOptions};

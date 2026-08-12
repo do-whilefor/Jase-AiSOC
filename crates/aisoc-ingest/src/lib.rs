@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use aisoc_contracts::{BatchAck, EventBatch, EventError};
 use aisoc_core::{sha256_hex, verify_batch_integrity};
+use aisoc_storage::object_store::{LocalObjectStore, ObjectStoreError};
 use aisoc_storage::{AppendOnlyJsonl, StorageError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -44,7 +45,12 @@ pub struct RawEvidence {
     pub boot_id: String,
     pub sequence: u64,
     pub raw_ref: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub object_key: Option<String>,
     pub sha256: String,
+    #[serde(default)]
+    pub content_bytes: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub canonical_json: Vec<u8>,
 }
 
@@ -70,6 +76,8 @@ pub enum IngestError {
     Serialization(#[from] serde_json::Error),
     #[error("persistent ingest storage failed: {0}")]
     Storage(#[from] StorageError),
+    #[error("immutable raw evidence storage failed: {0}")]
+    ObjectStore(#[from] ObjectStoreError),
 }
 
 #[derive(Debug)]
@@ -152,7 +160,9 @@ impl InMemoryIngest {
                 boot_id: batch.boot_id.clone(),
                 sequence,
                 raw_ref,
+                object_key: None,
                 sha256: digest,
+                content_bytes: bytes.len(),
                 canonical_json: bytes,
             });
         }
@@ -182,18 +192,30 @@ struct AcceptedRecord {
 pub struct PersistentIngest {
     limits: IngestLimits,
     inflight: usize,
-    accepted: BTreeMap<(String, String, String, String, u64), String>,
+    accepted: BTreeMap<(String, String, String, String, u64), RawEvidence>,
     store: AppendOnlyJsonl<AcceptedRecord>,
+    objects: LocalObjectStore,
 }
 
 impl PersistentIngest {
     pub fn open(
         path: impl AsRef<std::path::Path>,
+        objects: LocalObjectStore,
         limits: IngestLimits,
     ) -> Result<Self, IngestError> {
         let store = AppendOnlyJsonl::<AcceptedRecord>::open(path)?;
         let mut accepted = BTreeMap::new();
         for record in store.read_all()? {
+            let evidence = hydrate_evidence(&objects, record.evidence, limits.max_batch_bytes)?;
+            if evidence.tenant_id != record.tenant_id
+                || evidence.agent_id != record.agent_id
+                || evidence.host_id != record.host_id
+                || evidence.boot_id != record.boot_id
+                || evidence.sequence != record.sequence
+                || evidence.sha256 != record.digest
+            {
+                return Err(IngestError::Storage(StorageError::Integrity));
+            }
             let key = (
                 record.tenant_id,
                 record.agent_id,
@@ -201,8 +223,10 @@ impl PersistentIngest {
                 record.boot_id,
                 record.sequence,
             );
-            if let Some(existing) = accepted.insert(key, record.digest.clone()) {
-                if existing != record.digest {
+            let mut pointer = evidence;
+            pointer.canonical_json.clear();
+            if let Some(existing) = accepted.insert(key, pointer) {
+                if existing.sha256 != record.digest {
                     return Err(IngestError::SequenceConflict {
                         sequence: record.sequence,
                     });
@@ -214,6 +238,7 @@ impl PersistentIngest {
             inflight: 0,
             accepted,
             store,
+            objects,
         })
     }
 
@@ -257,35 +282,51 @@ impl PersistentIngest {
                 batch.boot_id.clone(),
                 envelope.sequence,
             );
-            let evidence = RawEvidence {
-                tenant_id: batch.tenant_id.clone(),
-                agent_id: batch.agent_id.clone(),
-                host_id: batch.host_id.clone(),
-                boot_id: batch.boot_id.clone(),
-                sequence: envelope.sequence,
-                raw_ref: format!(
-                    "raw://{}/{}/{}/{}",
-                    batch.tenant_id, batch.agent_id, batch.boot_id, envelope.sequence
-                ),
-                sha256: digest.clone(),
-                canonical_json: bytes,
-            };
             if let Some(existing) = self.accepted.get(&key) {
-                if existing != &digest {
+                if existing.sha256.as_str() != digest {
                     return Err(IngestError::SequenceConflict {
                         sequence: envelope.sequence,
                     });
                 }
                 // Return deterministic evidence on idempotent replay so a prior
                 // central PostgreSQL failure can be repaired by the client retry.
-                accepted_evidence.push(evidence);
+                accepted_evidence.push(RawEvidence {
+                    tenant_id: batch.tenant_id.clone(),
+                    agent_id: batch.agent_id.clone(),
+                    host_id: batch.host_id.clone(),
+                    boot_id: batch.boot_id.clone(),
+                    sequence: envelope.sequence,
+                    raw_ref: existing.raw_ref.clone(),
+                    object_key: existing.object_key.clone(),
+                    sha256: existing.sha256.clone(),
+                    content_bytes: existing.content_bytes,
+                    canonical_json: bytes,
+                });
                 continue;
             }
-            staged.push((key, digest, evidence.clone()));
-            accepted_evidence.push(evidence);
+            staged.push((key, digest, bytes, envelope.sequence));
         }
 
-        for (key, digest, evidence) in staged {
+        for (key, digest, bytes, sequence) in staged {
+            let metadata = self.objects.put(
+                &batch.tenant_id,
+                &bytes,
+                "application/vnd.jase-aisoc.agent-envelope+json",
+            )?;
+            let evidence = RawEvidence {
+                tenant_id: batch.tenant_id.clone(),
+                agent_id: batch.agent_id.clone(),
+                host_id: batch.host_id.clone(),
+                boot_id: batch.boot_id.clone(),
+                sequence,
+                raw_ref: metadata.raw_ref,
+                object_key: Some(metadata.object_key),
+                sha256: metadata.sha256,
+                content_bytes: metadata.content_bytes,
+                canonical_json: bytes,
+            };
+            let mut persisted = evidence.clone();
+            persisted.canonical_json.clear();
             self.store.append(AcceptedRecord {
                 tenant_id: key.0.clone(),
                 agent_id: key.1.clone(),
@@ -293,9 +334,12 @@ impl PersistentIngest {
                 boot_id: key.3.clone(),
                 sequence: key.4,
                 digest: digest.clone(),
-                evidence,
+                evidence: persisted,
             })?;
-            self.accepted.insert(key, digest);
+            let mut pointer = evidence.clone();
+            pointer.canonical_json.clear();
+            self.accepted.insert(key, pointer);
+            accepted_evidence.push(evidence);
         }
         Ok(IngestAcceptResult {
             ack: BatchAck {
@@ -309,22 +353,137 @@ impl PersistentIngest {
     }
 
     pub fn replay_evidence(&self) -> Result<Vec<RawEvidence>, IngestError> {
-        Ok(self
-            .store
+        self.store
             .read_all()?
             .into_iter()
-            .map(|record| record.evidence)
-            .collect())
+            .map(|record| {
+                hydrate_evidence(&self.objects, record.evidence, self.limits.max_batch_bytes)
+            })
+            .collect()
     }
 
-    pub fn evidence_by_raw_ref(&self, raw_ref: &str) -> Result<Option<RawEvidence>, IngestError> {
-        Ok(self
-            .store
-            .read_all()?
-            .into_iter()
-            .map(|record| record.evidence)
-            .find(|evidence| evidence.raw_ref == raw_ref))
+    pub fn evidence_by_raw_ref(
+        &self,
+        requested_tenant_id: &str,
+        raw_ref: &str,
+    ) -> Result<Option<RawEvidence>, IngestError> {
+        for record in self.store.read_all()? {
+            if record.tenant_id != requested_tenant_id || record.evidence.raw_ref != raw_ref {
+                continue;
+            }
+            let mut pointer = record.evidence;
+            if pointer.object_key.is_none() {
+                if pointer.canonical_json.is_empty()
+                    || sha256_hex(&pointer.canonical_json) != pointer.sha256
+                {
+                    return Err(IngestError::Storage(StorageError::Integrity));
+                }
+                let metadata = self.objects.put(
+                    requested_tenant_id,
+                    &pointer.canonical_json,
+                    "application/vnd.jase-aisoc.agent-envelope+json",
+                )?;
+                pointer.object_key = Some(metadata.object_key);
+                pointer.content_bytes = metadata.content_bytes;
+                pointer.canonical_json.clear();
+            }
+            let evidence = hydrate_evidence(&self.objects, pointer, self.limits.max_batch_bytes)?;
+            if evidence.tenant_id == requested_tenant_id && evidence.raw_ref == raw_ref {
+                return Ok(Some(evidence));
+            }
+        }
+        let Some((reference_tenant_id, digest)) = parse_evidence_ref(raw_ref) else {
+            return Ok(None);
+        };
+        if reference_tenant_id != requested_tenant_id {
+            return Ok(None);
+        }
+        let (object_key, content_bytes) = self.objects.metadata_for_ref(
+            reference_tenant_id,
+            raw_ref,
+            digest,
+        )?;
+        if content_bytes > self.limits.max_batch_bytes {
+            return Err(IngestError::Storage(StorageError::Integrity));
+        }
+        let canonical_json = self.objects.get_by_ref(
+            reference_tenant_id,
+            raw_ref,
+            digest,
+            self.limits.max_batch_bytes,
+        )?;
+        let envelope: aisoc_contracts::AgentEnvelope = serde_json::from_slice(&canonical_json)?;
+        if !envelope.is_valid() || envelope.tenant_id != reference_tenant_id {
+            return Err(IngestError::Storage(StorageError::Integrity));
+        }
+        Ok(Some(RawEvidence {
+            tenant_id: envelope.tenant_id,
+            agent_id: envelope.agent_id,
+            host_id: envelope.host_id,
+            boot_id: envelope.boot_id,
+            sequence: envelope.sequence,
+            raw_ref: raw_ref.to_owned(),
+            object_key: Some(object_key),
+            sha256: digest.to_owned(),
+            content_bytes,
+            canonical_json,
+        }))
     }
+}
+
+fn parse_evidence_ref(raw_ref: &str) -> Option<(&str, &str)> {
+    let remainder = raw_ref.strip_prefix("evidence://")?;
+    let (tenant_id, digest) = remainder.split_once('/')?;
+    if digest.contains('/')
+        || !tenant_id.starts_with("ten_")
+        || digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        return None;
+    }
+    Some((tenant_id, digest))
+}
+
+fn hydrate_evidence(
+    objects: &LocalObjectStore,
+    mut evidence: RawEvidence,
+    max_bytes: usize,
+) -> Result<RawEvidence, IngestError> {
+    match evidence.object_key.as_deref() {
+        Some(object_key) => {
+            if !evidence.canonical_json.is_empty()
+                || evidence.content_bytes == 0
+                || evidence.content_bytes > max_bytes
+            {
+                return Err(IngestError::Storage(StorageError::Integrity));
+            }
+            evidence.canonical_json = objects.get_by_key(
+                &evidence.tenant_id,
+                object_key,
+                &evidence.sha256,
+                evidence.content_bytes,
+                max_bytes,
+            )?;
+        }
+        None => {
+            if evidence.canonical_json.is_empty()
+                || evidence.canonical_json.len() > max_bytes
+                || sha256_hex(&evidence.canonical_json) != evidence.sha256
+            {
+                return Err(IngestError::Storage(StorageError::Integrity));
+            }
+            let metadata = objects.put(
+                &evidence.tenant_id,
+                &evidence.canonical_json,
+                "application/vnd.jase-aisoc.agent-envelope+json",
+            )?;
+            evidence.object_key = Some(metadata.object_key);
+            evidence.content_bytes = metadata.content_bytes;
+        }
+    }
+    Ok(evidence)
 }
 
 fn validate_batch_request(
@@ -450,19 +609,82 @@ mod tests {
                 .expect("time")
                 .as_nanos()
         ));
+        let object_root = path.with_extension("objects");
         let auth = AuthenticatedAgent {
             tenant_id: "ten_12345678".to_owned(),
             agent_id: "agent_12345678".to_owned(),
             host_id: "host_12345678".to_owned(),
         };
         {
-            let mut ingest = PersistentIngest::open(&path, IngestLimits::default()).expect("open");
+            let objects = LocalObjectStore::open(&object_root).expect("object store");
+            let mut ingest = PersistentIngest::open(&path, objects, IngestLimits::default())
+                .expect("open");
             ingest.accept(&auth, &batch()).expect("first");
         }
-        let mut ingest = PersistentIngest::open(&path, IngestLimits::default()).expect("reopen");
+        let objects = LocalObjectStore::open(&object_root).expect("object store reopen");
+        let mut ingest = PersistentIngest::open(&path, objects, IngestLimits::default())
+            .expect("reopen");
         ingest.accept(&auth, &batch()).expect("idempotent replay");
-        assert_eq!(ingest.replay_evidence().expect("evidence").len(), 1);
+        let evidence = ingest.replay_evidence().expect("evidence");
+        assert_eq!(evidence.len(), 1);
+        assert!(evidence[0].raw_ref.starts_with("evidence://ten_12345678/"));
+        assert!(evidence[0].object_key.is_some());
+        assert!(!evidence[0].canonical_json.is_empty());
         std::fs::remove_file(path).expect("cleanup");
+        std::fs::remove_dir_all(object_root).expect("object cleanup");
+    }
+
+    #[test]
+    fn legacy_inline_journal_is_verified_and_backfilled_to_object_store() {
+        let path = std::env::temp_dir().join(format!(
+            "jase-aisoc-legacy-ingest-{}-{}.jsonl",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        let object_root = path.with_extension("objects");
+        let event_batch = batch();
+        let envelope = event_batch.events[0].clone();
+        let canonical_json = serde_json::to_vec(&envelope).expect("serialize legacy evidence");
+        let digest = sha256_hex(&canonical_json);
+        let mut journal = AppendOnlyJsonl::<AcceptedRecord>::open(&path).expect("legacy journal");
+        journal
+            .append(AcceptedRecord {
+                tenant_id: event_batch.tenant_id.clone(),
+                agent_id: event_batch.agent_id.clone(),
+                host_id: event_batch.host_id.clone(),
+                boot_id: event_batch.boot_id.clone(),
+                sequence: envelope.sequence,
+                digest: digest.clone(),
+                evidence: RawEvidence {
+                    tenant_id: event_batch.tenant_id,
+                    agent_id: event_batch.agent_id,
+                    host_id: event_batch.host_id,
+                    boot_id: event_batch.boot_id,
+                    sequence: envelope.sequence,
+                    raw_ref: format!("raw://legacy/{}", envelope.sequence),
+                    object_key: None,
+                    sha256: digest,
+                    content_bytes: canonical_json.len(),
+                    canonical_json,
+                },
+            })
+            .expect("append legacy evidence");
+        drop(journal);
+
+        let objects = LocalObjectStore::open(&object_root).expect("object store");
+        let ingest = PersistentIngest::open(&path, objects, IngestLimits::default())
+            .expect("open legacy ingest");
+        let evidence = ingest.replay_evidence().expect("legacy replay");
+        assert_eq!(evidence.len(), 1);
+        assert!(evidence[0].object_key.is_some());
+        assert!(evidence[0].raw_ref.starts_with("raw://legacy/"));
+        assert!(!evidence[0].canonical_json.is_empty());
+
+        std::fs::remove_file(path).expect("cleanup");
+        std::fs::remove_dir_all(object_root).expect("object cleanup");
     }
 
     #[test]

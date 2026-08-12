@@ -1,7 +1,7 @@
 # P3：Ingest 与事件管道（Rust First）
 
 状态：**部分完成，尚未达到 V4.0 P3 退出条件**。  
-依据：`AI-SOC_Rust_AI-Web-Guard_项目计划书_V4.0.docx` P3，以及“接入与数据管道”“消息”“Pipeline”相关架构要求。
+依据：`AI-SOC_Rust_AI-Web-Guard_项目计划书_V4.0_RustFirst_实施完善版.docx` P3，以及“接入与数据管道”“消息”“Pipeline”相关架构要求。
 
 ## V4.0 验收口径
 
@@ -22,7 +22,15 @@ P3 的退出条件不是“存在 ingest/normalize crate”，而是以下能力
 
 生产数据路径当前为：
 
-`Agent/Web Guard -> aisoc-ingest -> local immutable raw journal -> normalize -> detection -> incident -> PostgreSQL central repository`
+`Agent/Web Guard -> aisoc-ingest -> immutable raw object -> normalize -> detection -> incident -> PostgreSQL central repository`
+
+Jase-AiSOC Base/Standalone profile 现已把 canonical Agent envelope 写入
+Rust `LocalObjectStore`（`AISOC_INGEST_OBJECT_STORE_ROOT`）。新的
+`accepted-events.jsonl` 记录只保留 tenant-bound `evidence://` locator、
+server-side object key、SHA-256 和 byte length，不再重复保存 raw bytes；
+PostgreSQL `raw_event_index` 同样只保存这些 metadata。启动时仍保留显式
+兼容路径：先校验旧 inline journal 的 SHA-256，再幂等回填本地对象目录；
+后续 central repair 会补齐 legacy PostgreSQL row 的 object key。
 
 其中 PostgreSQL 已成为 Agent inventory、raw event index、normalized event、Detection、Incident 和 DLQ 状态的中心权威查询源；API 在 production 不再把 Ingest 内存映射作为这些资源的 system of record。
 
@@ -79,7 +87,11 @@ Ingest 新增仅内部控制面的：
 
 `POST /internal/v1/replay/normalize-dlq`
 
-重放只从本地不可变 raw evidence 读取原始输入，不接受调用方提供替换 payload。成功 normalize 后写入 pipeline journal 并幂等修复 PostgreSQL；缺失 raw evidence、仍无法 normalize 或 central write 失败时，DLQ 带退避重新进入 pending。
+重放只从 tenant-bound `evidence://` 不透明引用定位的不可变 raw evidence
+读取原始输入，不接受调用方提供替换 payload。读取时重新验证租户、对象
+key、长度与 SHA-256。成功 normalize 后写入 pipeline journal 并幂等修复
+PostgreSQL；缺失 raw evidence、仍无法 normalize 或 central write 失败时，
+DLQ 带退避重新进入 pending。
 
 ### 5. Watermark / 基础乱序保护
 
@@ -102,7 +114,7 @@ P3 目前仍不能标记为完成，主要缺口：
 2. 当前沙箱没有 PostgreSQL server，central repository integration test 只能交由 CI/真实 Linux 环境执行。
 3. JetStream/`async-nats` stream profile 尚未进入正式 Rust production path；中心化高吞吐情况下的 durable consumer、ACK/redelivery、consumer lag/backpressure 仍待实现。
 4. late event / gap reconciliation / disconnect-reconnect / out-of-order 故障注入尚未形成完整 P3 acceptance suite。
-5. raw body 当前主要依赖本地 append-only journal；V4 Object Store immutable evidence + lifecycle/retention 尚未完成。
+5. Base/Standalone 已有 Rust 本地不可变 Object Store；Central/HA 的 S3/MinIO adapter、lifecycle/retention 与跨节点验证尚未完成。
 6. enrichment 仍未完成 Rust production cutover。
 7. replay 目前是内部 Ingest control endpoint；面向 Operator 的 RBAC/audit API 属于后续 P12 收敛。
 
@@ -112,5 +124,5 @@ P3 目前仍不能标记为完成，主要缺口：
 2. 对 central repository integration test 增加并发 claim、DB restart、transaction rollback 和 replay crash-window 测试。
 3. 实现 Rust JetStream transport abstraction 与 durable consumer，保持 base/local profile 可独立运行。
 4. 增加 `1,3,2`、gap replay、重复 batch、断网重连、consumer redelivery、DLQ replay 的容器级验收。
-5. 把 raw immutable body 下沉到 V4 Object Store，并让 PostgreSQL 只保存 locator/hash/metadata。
+5. 在现有 Rust Object Store contract 后实现 S3/MinIO adapter，并完成 lifecycle/retention 与跨节点 replay；PostgreSQL 继续只保存 locator/key/hash/metadata。
 6. 完成 Rust enrichment + freshness/lag metrics 后，再按 P3 硬门禁决定是否关闭阶段。

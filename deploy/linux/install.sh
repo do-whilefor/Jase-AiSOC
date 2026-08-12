@@ -52,7 +52,13 @@ INSTALL_PREFIX="${AISOC_INSTALL_PREFIX:-/opt/aisoc}"
 CONFIG_DIR="${AISOC_CONFIG_DIR:-/etc/aisoc}"
 AGENT_STATE_DIR="${AISOC_AGENT_STATE_DIR:-/var/lib/aisoc-agent}"
 INGEST_STATE_DIR="${AISOC_INGEST_STATE_DIR:-/var/lib/aisoc-ingest}"
+INGEST_OBJECT_STORE_ROOT="${AISOC_INGEST_OBJECT_STORE_ROOT:-/var/lib/aisoc-raw-evidence}"
 RUST_ENV_FILE="$CONFIG_DIR/aisoc-rust.env"
+
+[[ "$INGEST_STATE_DIR" = /* && "$INGEST_OBJECT_STORE_ROOT" = /* ]] || {
+  echo "AISOC ingest state and object-store paths must be absolute Linux paths." >&2
+  exit 1
+}
 
 log() { printf '[aisoc-install] %s\n' "$*"; }
 warn() { printf '[aisoc-install] warning: %s\n' "$*" >&2; }
@@ -106,6 +112,7 @@ prepare_directories() {
   fi
   if [[ "$ROLE" == "control" || "$ROLE" == "all" ]]; then
     install -d -m 0700 -o "$APP_USER" -g "$APP_GROUP" "$INGEST_STATE_DIR"
+    install -d -m 0700 -o "$APP_USER" -g "$APP_GROUP" "$INGEST_OBJECT_STORE_ROOT"
   fi
 }
 
@@ -119,7 +126,7 @@ activate_release() {
   AISOC_INSTALL_PREFIX="$INSTALL_PREFIX" \
   AISOC_SERVICE_USER="$APP_USER" \
   AISOC_SERVICE_GROUP="$APP_GROUP" \
-    "$PROJECT_ROOT/deploy/linux/release-manager.sh" "${args[@]}"
+    bash "$PROJECT_ROOT/deploy/linux/release-manager.sh" "${args[@]}"
 }
 
 migrate_control_database() {
@@ -151,6 +158,7 @@ AISOC_API_BIND=${AISOC_API_BIND:-127.0.0.1:8000}
 AISOC_CONSOLE_BIND=${AISOC_CONSOLE_BIND:-127.0.0.1:8088}
 AISOC_INGEST_BIND=127.0.0.1:8080
 AISOC_INGEST_STATE_DIR=${INGEST_STATE_DIR}
+AISOC_INGEST_OBJECT_STORE_ROOT=${INGEST_OBJECT_STORE_ROOT}
 AISOC_INGEST_PROXY_SECRET_FILE=${CONFIG_DIR}/ingest-proxy.secret
 AISOC_INGEST_CONTROL_SECRET_FILE=${CONFIG_DIR}/ingest-control.secret
 AISOC_INGEST_CONTROL_ORIGIN=http://127.0.0.1:8080
@@ -158,7 +166,7 @@ AISOC_API_AUTH_FILE=${CONFIG_DIR}/api-auth.json
 AISOC_CONSOLE_API_ORIGIN=http://127.0.0.1:8000
 EOF_ENV
   local name
-  for name in AISOC_DATABASE_URL AISOC_OBJECT_STORE_ROOT AISOC_API_AUTH_KEY_FILE; do
+  for name in AISOC_DATABASE_URL AISOC_API_AUTH_KEY_FILE; do
     if [[ -n "${!name:-}" ]]; then printf '%s=%s\n' "$name" "${!name}" >> "$RUST_ENV_FILE"; fi
   done
   chown root:"$APP_GROUP" "$RUST_ENV_FILE"
@@ -329,5 +337,5 @@ AI-SOC Rust-first installation completed.
 role:          $ROLE
 release:       $(readlink -f "$INSTALL_PREFIX/current" 2>/dev/null || true)
 configuration: $CONFIG_DIR
-rollback:      sudo AISOC_INSTALL_PREFIX=$INSTALL_PREFIX $PROJECT_ROOT/deploy/linux/release-manager.sh rollback
+rollback:      sudo AISOC_INSTALL_PREFIX=$INSTALL_PREFIX bash $PROJECT_ROOT/deploy/linux/release-manager.sh rollback
 EOF_DONE

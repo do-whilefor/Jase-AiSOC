@@ -1,6 +1,6 @@
-# AI-SOC V4.0
+# Jase-AiSOC V4.0
 
-AI-SOC 是面向蓝队和安全运营团队的通用 Linux 安全分析、证据溯源与实时 Web 防护平台。当前实现严格以 `AI-SOC_Rust_AI-Web-Guard_项目计划书_V4.0.docx` 为目标：**Rust First、确定性检测优先、AI 按需参与、证据驱动结论、分级响应**。
+Jase-AiSOC 是面向蓝队和安全运营团队的通用 Linux 安全分析、证据溯源与实时 Web 防护平台。当前实现严格以 `AI-SOC_Rust_AI-Web-Guard_项目计划书_V4.0_RustFirst_实施完善版.docx` 为目标：**Rust First、确定性检测优先、AI 按需参与、证据驱动结论、分级响应**。
 
 V4.0 的生产目标不是“Rust Core + Python Service Layer”，而是 Agent、Web Guard、Ingest、Normalize、Detection、Incident、Evidence、AI、Malware、Trace、Policy、Response、API/Console 的关键链路由 Rust 实现，正式运行不依赖 Python runtime。`src/aisoc`、Alembic 和 Python worker 仍保留为迁移期行为基线与回归资产；其中部分高级能力尚未完全迁移，所以不能视为已经完成的 P0-P14 产品。
 
@@ -35,7 +35,7 @@ aisoc-core          aisoc-contracts     aisoc-linux
 
 另有 `aisoc-python` PyO3 bridge，仅用于迁移回归，不在 `default-members`，也不属于生产 runtime。
 
-目前已有的原生能力包括：Linux capability/collector/queue/mTLS Agent 基础链；Rust Ingest + raw append + Normalize/Detection/Incident 管线；Web/SSH/host 等确定性检测；Incident/Evidence ledger；AI Provider/Review Gate/EvidencePackage/claim verification/circuit-breaker；Malware 静态分析骨架；AttackGraph；Policy/Response runner；Axum API；Rust Console；Web Guard reverse proxy、canonicalization、Fast Path、shadow/canary/enforce 和 OpenAI-compatible provider 接入。
+目前已有的原生能力包括：Linux capability/collector/queue/mTLS Agent 基础链；Rust Ingest + 不可变 raw object + Normalize/Detection/Incident 管线；Web/SSH/host 等确定性检测；Incident/Evidence ledger；AI Provider/Review Gate/EvidencePackage/claim verification/circuit-breaker；Malware 静态分析骨架；AttackGraph；Policy/Response runner；Axum API；Rust Console；Web Guard reverse proxy、canonicalization、Fast Path、shadow/canary/enforce 和 OpenAI-compatible provider 接入。
 
 这只是“架构已铺开”，不等于各阶段验收关闭。详细差距见 `docs/v4-plan-conformance-2026-08-11.md`。
 
@@ -57,7 +57,7 @@ sudo -E bash deploy/linux/install.sh \
 
 生产 Dockerfile、P1/P2 Rust Compose、systemd unit 和正常 release bundle 不执行 Python/Alembic。Python 兼容环境必须显式 `--legacy-python`，旧数据库迁移必须显式 `make legacy-migrate`。
 
-P1 已新增 `aisoc-storage` SQLx/PostgreSQL migration plane 与原生 `aisoc-db migrate|health`，P1/P2 Compose、Linux production installer 和 CI 均使用该 Rust 路径，不再调用 Alembic。P3 base profile 已把 Agent inventory、batch/raw index、normalized event、Detection、Incident 与 DLQ 的权威读写切入 PostgreSQL；本地 append-only journal 继续承担 immutable raw staging、崩溃恢复和 central repair。完整 P1/P3 仍需关闭 Cargo.lock/真实 Rust CI、Object Store 与 JetStream 等门禁。
+P1 已新增 `aisoc-storage` SQLx/PostgreSQL migration plane 与原生 `aisoc-db migrate|health`，P1/P2 Compose、Linux production installer 和 CI 均使用该 Rust 路径，不再调用 Alembic。P3 Base/Standalone profile 已把 raw bytes 下沉到 Rust 不可变 Object Store，并把 Agent inventory、batch/raw metadata、normalized event、Detection、Incident 与 DLQ 的权威读写切入 PostgreSQL；本地 append-only journal 只保留恢复 metadata 和旧格式迁移入口。完整 P1/P3 仍需关闭 Cargo.lock/真实 Rust CI、Central/HA S3/MinIO adapter 与 JetStream 等门禁。
 
 完整安装说明见 `docs/deploy-linux.md`。
 
@@ -110,7 +110,7 @@ cargo build --locked --workspace
 
 - `Cargo.lock` 未与完整 Workspace 同步，导致 `--locked` release/CI 无法通过。
 - P1 SQLx/PostgreSQL migration plane 与 P3 base central repository cutover 已落地，但 `Cargo.lock`/真实 Rust 1.82 + PostgreSQL 验收尚未关闭。
-- P3 DLQ lease/replay 已进入 Rust base profile；NATS/JetStream、Object Store、late/gap 故障注入、enrichment/freshness 的正式 Rust 路径仍未完成。
+- P3 DLQ lease/replay 与 Base/Standalone 不可变 Object Store 已进入 Rust 主链；NATS/JetStream、Central/HA S3/MinIO adapter、late/gap 故障注入、enrichment/freshness 的正式 Rust 路径仍未完成。
 - P7/P8 AI Review/Claim Verification 尚未形成独立生产 worker/persistence 全链。
 - P9 YARA-X/ClamAV/reputation/sandbox concrete adapters 不完整。
 - P10 跨主机 trace 与真实数据输入闭环不足。
@@ -120,7 +120,7 @@ cargo build --locked --workspace
 
 ## 文档
 
-- 核心计划书：`AI-SOC_Rust_AI-Web-Guard_项目计划书_V4.0.docx`
+- 核心计划书：`AI-SOC_Rust_AI-Web-Guard_项目计划书_V4.0_RustFirst_实施完善版.docx`
 - 本轮 P0-P14 审计：`docs/v4-plan-conformance-2026-08-11.md`
 - V05 P1 SQLx 推进：`docs/v4-next-step-2026-08-11.md`
 - V06 P3 central/replay 推进：`docs/v4-next-step-v06-2026-08-11.md`

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -279,19 +279,26 @@ impl IncidentState {
                 .detection_ids
                 .iter()
                 .all(|value| valid_prefixed_id(value, "det_"))
+            && unique_strings(&self.detection_ids)
             && self.evidence_refs.len() <= 8192
             && self
                 .evidence_refs
                 .iter()
                 .all(|value| !value.is_empty() && value.len() <= 2048)
+            && unique_strings(&self.evidence_refs)
             && self.entity_keys.len() <= 1024
             && self
                 .entity_keys
                 .iter()
                 .all(|value| !value.is_empty() && value.len() <= 256)
+            && unique_strings(&self.entity_keys)
     }
 }
 
+fn unique_strings(values: &[String]) -> bool {
+    let unique = values.iter().collect::<BTreeSet<_>>();
+    unique.len() == values.len()
+}
 
 pub fn valid_batch_id(value: &str) -> bool {
     value.strip_prefix("batch_").is_some_and(|suffix| {

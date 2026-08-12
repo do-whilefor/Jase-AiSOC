@@ -1,6 +1,6 @@
 # 通用 Linux Rust-first 部署
 
-`deploy/linux/install.sh` 是 AI-SOC V4 的原生 Linux 安装入口。正常安装只接受经过校验的 Rust release bundle；Python 仅能通过显式 `--legacy-python` 进入迁移兼容环境，不属于生产主链路。
+`deploy/linux/install.sh` 是 Jase-AiSOC V4 的原生 Linux 安装入口。正常安装只接受经过校验的 Rust release bundle；Python 仅能通过显式 `--legacy-python` 进入迁移兼容环境，不属于生产主链路。
 
 ## 支持策略
 
@@ -24,7 +24,7 @@
 - Control role 首次安装需要长度至少 32 的 bootstrap API token 与合法 `ten_...` tenant id，或提供 `AISOC_API_AUTH_SOURCE`。
 - Agent role 需要 enrollment 后的 `agent-rust.json`，启用 mTLS 时还需要证书、私钥、CA 路径。
 
-当前已实现原生 PostgreSQL + SQLx migration plane，生产 Control 安装要求 `AISOC_DATABASE_URL` 并在启动服务前运行 release 内的 `aisoc-db migrate`。API 在 production 也要求数据库连接并把 PostgreSQL health 纳入 `/readyz`。但 Ingest/Detection/Incident 等 central repository 尚未完全从本地 append-only state 切换到 PostgreSQL/Object Store，因此 P1/P3 数据层验收仍未关闭。
+当前已实现原生 PostgreSQL + SQLx migration plane，生产 Control 安装要求 `AISOC_DATABASE_URL` 并在启动服务前运行 release 内的 `aisoc-db migrate`。API 在 production 也要求数据库连接并把 PostgreSQL health 纳入 `/readyz`。Ingest 的 raw body 已切到 `AISOC_INGEST_OBJECT_STORE_ROOT` 下的 Rust 不可变本地对象存储，PostgreSQL 与 local journal 只保留 locator/key/hash/size metadata；Central/HA 的 S3/MinIO adapter 和 JetStream 仍未关闭，因此 P3 数据层验收仍保持开放。
 
 ## 构建 release bundle
 
@@ -89,8 +89,8 @@ Web Guard 配置使用 `AISOC_WEB_GUARD_*`。AI 默认关闭；启用时必须�
 ## 回滚
 
 ```bash
-sudo AISOC_INSTALL_PREFIX=/opt/aisoc deploy/linux/release-manager.sh status
-sudo AISOC_INSTALL_PREFIX=/opt/aisoc deploy/linux/release-manager.sh rollback
+sudo AISOC_INSTALL_PREFIX=/opt/aisoc bash deploy/linux/release-manager.sh status
+sudo AISOC_INSTALL_PREFIX=/opt/aisoc bash deploy/linux/release-manager.sh rollback
 ```
 
 Release manager 只切换已经通过 checksum/signature 验证的不可变 release，并尝试重启已启用的 systemd unit。

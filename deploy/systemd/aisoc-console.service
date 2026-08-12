@@ -1,5 +1,5 @@
 [Unit]
-Description=AI-SOC Rust operations console
+Description=Jase-AiSOC Rust operations console
 After=network-online.target aisoc-api.service
 Wants=network-online.target
 

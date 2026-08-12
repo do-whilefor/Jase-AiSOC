@@ -18,7 +18,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 aisoc \
     && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin aisoc \
-    && install -d -m 0700 -o aisoc -g aisoc /var/lib/aisoc /var/lib/aisoc-ingest
+    && install -d -m 0700 -o aisoc -g aisoc \
+        /var/lib/aisoc /var/lib/aisoc-ingest /var/lib/aisoc-raw-evidence
 COPY --from=builder /build/target/release/aisoc-agent /usr/local/bin/aisoc-agent
 COPY --from=builder /build/target/release/aisoc-ingest /usr/local/bin/aisoc-ingest
 COPY --from=builder /build/target/release/aisoc-api /usr/local/bin/aisoc-api

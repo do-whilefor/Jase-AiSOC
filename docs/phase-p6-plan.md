@@ -73,3 +73,30 @@ P6 将 P4/P5 Detection 聚合为稳定、可修订的 Incident，同时保持每
    API 状态、audit log 和回滚对照。
 
 完成上述动态门禁前，P6 状态保持“进行中”，不得宣称阶段退出或生产可用。
+
+## V4.0 Rust 原生 P6 增量（2026-08-12）
+
+> 本节描述当前 V4 Rust production path。上文 Python/Alembic 内容保留为迁移历史与 differential baseline，不是 V4 正式运行依赖。
+
+- `aisoc-incident::IncidentCorrelator` 已改为同 tenant、同 host、共享主体/证据 anchor 且默认 900 秒有界窗口关联。不同来源、超窗事件不会因为共享 host 被长期并入同一个 Incident。
+- 迟到 Detection 在仍落入关联窗且只命中一个 Incident 时形成新 revision；若同时桥接多个既有 Incident，则 fail closed 为 `AmbiguousMerge`，不静默改写历史。
+- correlator 更新采用 copy-then-commit，非法 Detection/时间戳、容量、revision overflow、Detection 双重绑定等错误不会留下部分状态。
+- 安全状态强度明确为 `observed < blocked < attack_attempt < suspected_success < confirmed_compromise`。
+- SQLx `202608120008_incident_revision_history.sql` 追加保存所有 Incident snapshot SHA-256 和 revision Detection membership；`incidents` 只保存最新 materialized state，同 revision 不同 snapshot 返回 `DataConflict`。
+- SQLx `202608120009_incident_revision_context.sql` 追加保存 revision evidence event refs 与 entity keys；evidence event 通过 `(tenant_id,event_id)` 复合 FK 指向 `normalized_events`，不能跨租户引用。
+- Rust API 新增 `GET /api/v1/incidents/{incident_id}/revisions`，tenant 来自认证 principal，不接受客户端自行指定。
+- central repository 同步收紧 Normalized Event/Detection 幂等语义：同 key 同内容为幂等，同 key 不同内容 fail closed，不再覆盖安全事实。
+- 真实 PostgreSQL integration 已加入 revision append/idempotency/conflict/evidence/entity 检查，但当前沙箱无 Rust/PostgreSQL，尚未运行；旧 Python Incident correlator 基线本轮实际为 6 passed，仅用于迁移行为对照。
+
+- SQLx `202608120010_evidence_custody_retention.sql` 新增 authoritative evidence/custody/retention/legal-hold/lifecycle 模型，并以 revision→`evidence_id` 关系取代仅靠 event ref 的证据身份。
+- raw event 写入会生成稳定 `evi_*`，tenant 内 custody chain 由 PostgreSQL transaction + tenant row lock 串行；Incident 只可绑定 verified/chained evidence。
+- `GET /api/v1/incidents/{incident_id}/evidence` 提供当前 revision 的租户作用域证据投影；legal hold 为 append-only transition，跨 tenant、重复/倒退状态 fail closed。
+- P7 `EvidencePackage.evidence_ids` 已从错误的 `event_id` 语义修正为 authoritative `evidence_id`；`sample_event_ids` 仍为 event ID。
+
+### 仍需关闭
+
+1. Retention policy materialization、到期删除 worker/Object Store 生命周期和 legal hold 对删除的强制阻断；本轮已完成 authoritative evidence metadata、tenant custody chain 和 append-only legal-hold/lifecycle event 基础。
+2. revision-scoped timeline、规范化 entity/node/edge 图和 evidence index 的完整 typed repository/API，而不是只保留 entity key。
+3. confirmed-compromise Claim 对可访问同租户 authoritative `evi_*` 的程序化 coverage gate，并与 P8 verifier 接通；P7 `EvidencePackage.evidence_ids` 已修正为真正的 `evi_*`。
+4. 真实 PostgreSQL 双租户、并发 worker、迟到/乱序/重启、冲突 revision、backdated hold 和跨租户 evidence FK 负向测试。
+5. 在 Rust 1.82 builder 执行 `fmt/check/clippy/test/build --locked` 后才能评价本节源码是否通过编译门禁。

@@ -1,5 +1,5 @@
 [Unit]
-Description=AI-SOC Rust Web Guard
+Description=Jase-AiSOC Rust Web Guard
 Documentation=https://github.com/do-whilefor/Jase-AiSOC
 After=network-online.target
 Wants=network-online.target

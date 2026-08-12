@@ -19,11 +19,11 @@ const PAGE: &str = r#"<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AI-SOC Operations</title>
+<title>Jase-AiSOC Operations</title>
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-<header><h1>AI-SOC Operations</h1><span>Rust V4</span></header>
+<header><h1>Jase-AiSOC Operations</h1><span>Rust First V4</span></header>
 <main>
 <section class="auth"><label>API Bearer Token <input id="token" type="password" autocomplete="off"></label><button id="refresh">刷新</button><span id="state">未认证</span></section>
 <nav><button data-view="system">System</button><button data-view="agents">Agents</button><button data-view="detections">Detections</button><button data-view="incidents">Incidents</button></nav>

@@ -198,11 +198,11 @@ jobs:
           uv tool install maturin==1.14.1
 
       - name: Verify Rust-first production entrypoints
-        run: ./scripts/check-rust-first.sh
+        run: bash ./scripts/check-rust-first.sh
 
       - name: Verify committed Cargo.lock is immutable and complete
         run: |
-          ./scripts/check-cargo-lock.sh
+          bash ./scripts/check-cargo-lock.sh
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
 
       - name: Verify native SQLx migration and central repository structure
@@ -286,8 +286,8 @@ jobs:
 
       - name: Verify committed Cargo.lock for release build
         run: |
-          ./scripts/check-rust-first.sh
-          ./scripts/check-cargo-lock.sh
+          bash ./scripts/check-rust-first.sh
+          bash ./scripts/check-cargo-lock.sh
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
 
       - name: Build V4 Rust production binaries
@@ -303,7 +303,7 @@ jobs:
       - name: Package checksum-verified Rust release bundle
         run: |
           AISOC_RELEASE_OUTPUT_ROOT=dist/rust-release \
-            ./scripts/package-rust-release.sh "${GITHUB_SHA}"
+            bash ./scripts/package-rust-release.sh "${GITHUB_SHA}"
 
       - name: Build release Rust bridge wheel
         run: |

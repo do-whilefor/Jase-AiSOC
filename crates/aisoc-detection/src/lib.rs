@@ -114,14 +114,9 @@ impl DetectionEngine {
                     Severity::High,
                     confidence,
                     state,
-                    format!(
-                        "http:{}",
-                        event
-                            .network
-                            .as_ref()
-                            .and_then(|network| network.src_ip.as_deref())
-                            .or_else(|| event.extension_str("src.ip"))
-                            .unwrap_or("unknown")
+                    source_ip(event).map_or_else(
+                        || format!("event:{}", event.event_id),
+                        |source| format!("src_ip:{source}|event:{}", event.event_id),
                     ),
                     &[event],
                     BTreeMap::from([
@@ -146,14 +141,10 @@ impl DetectionEngine {
             matches!(event.event_type.as_str(), "auth.ssh" | "network.ssh")
                 && event.outcome.as_deref() == Some("failure")
         }) {
-            let source = event
-                .network
-                .as_ref()
-                .and_then(|network| network.src_ip.as_deref())
-                .or_else(|| event.extension_str("network.src_ip"))
-                .unwrap_or("unknown")
-                .to_owned();
-            by_source.entry(source).or_default().push(event);
+            let Some(source) = source_ip(event) else {
+                continue;
+            };
+            by_source.entry(source.to_owned()).or_default().push(event);
         }
 
         let mut out = Vec::new();
@@ -171,7 +162,7 @@ impl DetectionEngine {
                     Severity::High,
                     0.92,
                     AttackState::AttackAttempt,
-                    format!("ssh:{source}"),
+                    format!("src_ip:{source}"),
                     &window,
                     BTreeMap::from([("failed_logins".to_owned(), json!(window.len()))]),
                 );
@@ -189,50 +180,63 @@ impl DetectionEngine {
         host_id: &str,
         events: &[&SecurityEvent],
     ) -> Vec<Detection> {
-        let web: Vec<_> = events
+        let mut by_source: BTreeMap<String, Vec<&SecurityEvent>> = BTreeMap::new();
+        for event in events
             .iter()
             .copied()
             .filter(|event| event.event_type == "network.http")
-            .collect();
+        {
+            let Some(source) = source_ip(event) else {
+                continue;
+            };
+            by_source.entry(source.to_owned()).or_default().push(event);
+        }
+
         let mut out = Vec::new();
-        for window in burst_windows(&web, self.config.window_seconds) {
-            if window.len() <= self.config.web_scan_request_threshold {
-                continue;
+        for (source, group) in by_source {
+            for window in burst_windows(&group, self.config.window_seconds) {
+                if window.len() <= self.config.web_scan_request_threshold {
+                    continue;
+                }
+                let unique: BTreeSet<_> = window
+                    .iter()
+                    .filter_map(|event| event.extension_str("http.url"))
+                    .collect();
+                let failures = window
+                    .iter()
+                    .filter(|event| {
+                        extension_u64(event, "http.status")
+                            .is_some_and(|status| status / 100 == 4)
+                    })
+                    .count();
+                let ratio = failures as f64 / window.len() as f64;
+                if unique.len() <= self.config.web_scan_unique_path_threshold || ratio <= 0.70 {
+                    continue;
+                }
+                let mut detection = build_detection(
+                    tenant_id,
+                    host_id,
+                    "web.recon.scanning",
+                    "0.2.0",
+                    "web.recon.scanning",
+                    Severity::Medium,
+                    0.88,
+                    AttackState::AttackAttempt,
+                    format!("src_ip:{source}"),
+                    &window,
+                    BTreeMap::from([
+                        ("src_ip".to_owned(), json!(source.clone())),
+                        ("request_count".to_owned(), json!(window.len())),
+                        ("unique_path_count".to_owned(), json!(unique.len())),
+                        ("client_error_ratio".to_owned(), json!(ratio)),
+                    ]),
+                );
+                detection.summary = Some(format!(
+                    "High-rate HTTP path reconnaissance detected from {source}"
+                ));
+                out.push(detection);
+                break;
             }
-            let unique: BTreeSet<_> = window
-                .iter()
-                .filter_map(|event| event.extension_str("http.url"))
-                .collect();
-            let failures = window
-                .iter()
-                .filter(|event| {
-                    extension_u64(event, "http.status").is_some_and(|status| status / 100 == 4)
-                })
-                .count();
-            let ratio = failures as f64 / window.len() as f64;
-            if unique.len() <= self.config.web_scan_unique_path_threshold || ratio <= 0.70 {
-                continue;
-            }
-            let mut detection = build_detection(
-                tenant_id,
-                host_id,
-                "web.recon.scanning",
-                "0.2.0",
-                "web.recon.scanning",
-                Severity::Medium,
-                0.88,
-                AttackState::AttackAttempt,
-                "web-scan".to_owned(),
-                &window,
-                BTreeMap::from([
-                    ("request_count".to_owned(), json!(window.len())),
-                    ("unique_path_count".to_owned(), json!(unique.len())),
-                    ("client_error_ratio".to_owned(), json!(ratio)),
-                ]),
-            );
-            detection.summary = Some("High-rate HTTP path reconnaissance detected".to_owned());
-            out.push(detection);
-            break;
         }
         out
     }
@@ -788,6 +792,16 @@ fn extension_u64(event: &SecurityEvent, name: &str) -> Option<u64> {
     })
 }
 
+fn source_ip(event: &SecurityEvent) -> Option<&str> {
+    event
+        .network
+        .as_ref()
+        .and_then(|network| network.src_ip.as_deref())
+        .or_else(|| event.extension_str("network.src_ip"))
+        .or_else(|| event.extension_str("src.ip"))
+        .filter(|value| !value.is_empty())
+}
+
 fn contains_any(value: &str, patterns: &[&str]) -> bool {
     patterns.iter().any(|pattern| value.contains(pattern))
 }
@@ -1086,6 +1100,77 @@ mod tests {
         let detections = DetectionEngine::new(DetectionConfig::default()).evaluate(&events);
         assert_eq!(detections.len(), 1);
         assert_eq!(detections[0].attack_state, AttackState::AttackAttempt);
+        assert_eq!(detections[0].entity_key, "src_ip:203.0.113.9");
+    }
+
+    #[test]
+    fn web_scan_does_not_combine_different_sources() {
+        let config = DetectionConfig {
+            web_scan_request_threshold: 3,
+            web_scan_unique_path_threshold: 2,
+            ..DetectionConfig::default()
+        };
+        let mut events = Vec::new();
+        for index in 0..6 {
+            let mut item = event(
+                index,
+                "network.http",
+                &format!("2026-08-11T00:00:{index:02}Z"),
+            );
+            let source = if index < 3 { "203.0.113.10" } else { "203.0.113.11" };
+            item.network = Some(Network {
+                src_ip: Some(source.to_owned()),
+                src_port: Some(41000 + index as u16),
+                dst_ip: Some("192.0.2.10".to_owned()),
+                dst_port: Some(80),
+                transport: Some("tcp".to_owned()),
+            });
+            item.extensions
+                .insert("http.url".to_owned(), json!(format!("/scan/{index}")));
+            item.extensions.insert("http.status".to_owned(), json!(404));
+            events.push(item);
+        }
+
+        let detections = DetectionEngine::new(config).evaluate(&events);
+        assert!(!detections
+            .iter()
+            .any(|detection| detection.rule_id == "web.recon.scanning"));
+    }
+
+    #[test]
+    fn web_scan_is_keyed_by_source_ip() {
+        let config = DetectionConfig {
+            web_scan_request_threshold: 3,
+            web_scan_unique_path_threshold: 2,
+            ..DetectionConfig::default()
+        };
+        let mut events = Vec::new();
+        for index in 0..4 {
+            let mut item = event(
+                index,
+                "network.http",
+                &format!("2026-08-11T00:00:{index:02}Z"),
+            );
+            item.network = Some(Network {
+                src_ip: Some("203.0.113.12".to_owned()),
+                src_port: Some(42000 + index as u16),
+                dst_ip: Some("192.0.2.10".to_owned()),
+                dst_port: Some(80),
+                transport: Some("tcp".to_owned()),
+            });
+            item.extensions
+                .insert("http.url".to_owned(), json!(format!("/probe/{index}")));
+            item.extensions.insert("http.status".to_owned(), json!(404));
+            events.push(item);
+        }
+
+        let detections = DetectionEngine::new(config).evaluate(&events);
+        let scan = detections
+            .iter()
+            .find(|detection| detection.rule_id == "web.recon.scanning")
+            .expect("source-local scan should be detected");
+        assert_eq!(scan.entity_key, "src_ip:203.0.113.12");
+        assert_eq!(scan.aggregate_metrics.get("src_ip"), Some(&json!("203.0.113.12")));
     }
 
     #[test]

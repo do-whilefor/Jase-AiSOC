@@ -68,7 +68,7 @@ grep -q '/usr/local/bin/aisoc-db' deploy/Dockerfile || fail 'production image do
 for compose in deploy/compose/p1.yml deploy/compose/p2.yml; do
   grep -q '/usr/local/bin/aisoc-db' "$compose" || fail "$compose does not run the native SQLx migrator"
 done
-"$ROOT/scripts/check-sqlx-migrations.py" >/dev/null
-"$ROOT/scripts/check-central-repository.py" >/dev/null
+python3 "$ROOT/scripts/check-sqlx-migrations.py" >/dev/null
+python3 "$ROOT/scripts/check-central-repository.py" >/dev/null
 
 printf 'Rust-first production gate: OK\n'

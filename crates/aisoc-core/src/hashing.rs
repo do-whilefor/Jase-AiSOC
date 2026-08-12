@@ -54,15 +54,15 @@ pub fn secure_compare(left: &[u8], right: &[u8]) -> bool {
     diff == 0
 }
 
-pub fn sha256_file(path: &Path, max_bytes: u64) -> io::Result<(String, u64)> {
+pub fn open_regular_file_nofollow(path: &Path, max_bytes: u64) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.read(true).custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK);
-    let mut file: File = options.open(path)?;
+    let file: File = options.open(path)?;
     let metadata = file.metadata()?;
-    if !metadata.is_file() {
+    if !metadata.is_file() || metadata.nlink() != 1 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "hash target must be a regular file",
+            "hash target must be a private single-link regular file",
         ));
     }
     if metadata.len() > max_bytes {
@@ -71,6 +71,12 @@ pub fn sha256_file(path: &Path, max_bytes: u64) -> io::Result<(String, u64)> {
             "hash target exceeds the configured size limit",
         ));
     }
+    Ok(file)
+}
+
+pub fn sha256_file(path: &Path, max_bytes: u64) -> io::Result<(String, u64)> {
+    let mut file = open_regular_file_nofollow(path, max_bytes)?;
+    let metadata = file.metadata()?;
 
     let mut hasher = Sha256::new();
     let mut total = 0_u64;

@@ -72,3 +72,11 @@
 - Web 注入统一输出 `web.attack.injection` 类别，具体 SQLi/XSS/command 由 `rule_id`/summary 区分；同时收窄 `javascript:` 误报条件以保护正常基线。
 - `scripts/replay_detection.py` 继续保留为迁移期差异基线，不再是 V4 Rust P4 的权威退出门禁；权威命令为 `make rust-replay`。
 - 本沙箱没有 Rust 1.82 toolchain，且当前 `Cargo.lock` 不完整，因此新增 Rust replay 尚未能在本轮环境中真正编译执行；这项必须在 P1 lock/toolchain 修复后重验，不能据静态检查标记 P4 Accepted。
+
+## V4.0 Rust 主体窗口隔离整改（2026-08-12）
+
+- 对照 legacy Python 规则确认 Web Recon 与 SSH brute-force 都是 source-scoped burst；共享目标 host 不能成为合并不同攻击来源的充分条件。
+- `aisoc-detection` Web Recon 现先按 `src_ip` 分组，再独立计算滑动窗口指标；缺少来源地址的事件不进入来源型 burst。
+- SSH brute-force 的 entity key 统一为 `src_ip:{source}`；Web injection 的单事件 key 同时携带来源与 `event` anchor，供 P6 做有界主体关联。
+- 新增 Rust 测试验证两个不同 source 的流量不会被拼成一次扫描、同一 source 仍可达到扫描阈值。
+- 当前沙箱没有 Rust 1.82/Cargo，以上 Rust 测试尚未真实执行；P4 状态仍为“部分完成”，不得据源码变更宣称退出。

@@ -9,4 +9,6 @@ publish = false
 
 [dependencies]
 aisoc-contracts = { path = "../aisoc-contracts" }
+chrono.workspace = true
+thiserror.workspace = true
 uuid.workspace = true

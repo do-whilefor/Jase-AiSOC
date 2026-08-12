@@ -62,8 +62,12 @@ pub fn event_batch_write(
             event_id: envelope.event.event_id.clone(),
             event_time: envelope.event.event_time.clone(),
             raw_ref: raw.raw_ref.clone(),
+            object_key: raw
+                .object_key
+                .clone()
+                .ok_or(CentralMappingError::InvalidPersistedEvidence)?,
             sha256: raw.sha256.clone(),
-            content_bytes: raw.canonical_json.len(),
+            content_bytes: raw.content_bytes,
         });
     }
     let host = &batch.events[0].event.host;
@@ -178,6 +182,8 @@ pub fn pipeline_write(record: &PipelineJournalRecord) -> Result<PipelineWrite, C
                 first_seen_at: incident.first_seen.clone(),
                 last_seen_at: incident.last_seen.clone(),
                 detection_ids: incident.detection_ids.clone(),
+                evidence_refs: incident.evidence_refs.clone(),
+                entity_keys: incident.entity_keys.clone(),
                 summary: serde_json::to_value(incident)?,
             })
         })

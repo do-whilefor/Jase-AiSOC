@@ -105,19 +105,26 @@ impl EvidencePackage {
         {
             return false;
         }
-        let indexed: HashSet<&str> = self
+        let indexed_evidence_ids: HashSet<&str> = self
+            .evidence_index
+            .iter()
+            .map(|item| item.evidence_id.as_str())
+            .collect();
+        let indexed_event_ids: HashSet<&str> = self
             .evidence_index
             .iter()
             .map(|item| item.event_id.as_str())
             .collect();
-        let selected: HashSet<&str> = self.evidence_ids.iter().map(String::as_str).collect();
-        self.evidence_ids
-            .iter()
-            .all(|event_id| indexed.contains(event_id.as_str()))
+        !self.evidence_ids.is_empty()
+            && is_sorted_unique(&self.evidence_ids)
+            && self
+                .evidence_ids
+                .iter()
+                .all(|evidence_id| indexed_evidence_ids.contains(evidence_id.as_str()))
             && self
                 .sample_event_ids
                 .iter()
-                .all(|event_id| selected.contains(event_id.as_str()))
+                .all(|event_id| indexed_event_ids.contains(event_id.as_str()))
     }
 }
 
@@ -919,7 +926,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn evidence_package_rejects_selected_event_missing_from_index() {
+    fn evidence_package_rejects_selected_evidence_missing_from_index() {
         let package = EvidencePackage {
             schema_version: AI_REVIEW_SCHEMA_VERSION.to_owned(),
             review_task_id: format!("air_{}", "a".repeat(32)),
@@ -929,7 +936,7 @@ mod tests {
             reason: "high risk".into(),
             risk_score: 90,
             aggregate_metrics: BTreeMap::new(),
-            evidence_ids: vec!["evt_missing00".into()],
+            evidence_ids: vec![format!("evi_{}", "b".repeat(24))],
             sample_event_ids: Vec::new(),
             evidence_index: Vec::new(),
             full_query_ref: None,
@@ -937,6 +944,43 @@ mod tests {
             data_trust: AI_EVIDENCE_DATA_TRUST.into(),
         };
         assert!(!package.is_valid());
+    }
+
+    #[test]
+    fn evidence_package_separates_authoritative_evidence_from_sample_event_ids() {
+        let evidence_id = format!("evi_{}", "a".repeat(24));
+        let event_id = "evt_12345678".to_owned();
+        let package = EvidencePackage {
+            schema_version: AI_REVIEW_SCHEMA_VERSION.to_owned(),
+            review_task_id: format!("air_{}", "a".repeat(32)),
+            tenant_id: "ten_12345678".into(),
+            incident_id: "inc-test".into(),
+            incident_revision: 1,
+            reason: "high risk".into(),
+            risk_score: 90,
+            aggregate_metrics: BTreeMap::new(),
+            evidence_ids: vec![evidence_id.clone()],
+            sample_event_ids: vec![event_id.clone()],
+            evidence_index: vec![IncidentEvidenceRef {
+                evidence_id,
+                event_id,
+                event_type: "network.http".into(),
+                event_time: "2026-08-11T10:00:00Z".into(),
+                host_id: "host_12345678".into(),
+                raw_ref: "raw://sha256/example".into(),
+                integrity_sha256: Some("a".repeat(64)),
+                source_time_quality: crate::SourceTimeQuality::Trusted,
+                is_late: false,
+            }],
+            full_query_ref: None,
+            available_tools: Vec::new(),
+            data_trust: AI_EVIDENCE_DATA_TRUST.into(),
+        };
+        assert!(package.is_valid());
+
+        let mut event_as_evidence = package;
+        event_as_evidence.evidence_ids = vec!["evt_12345678".into()];
+        assert!(!event_as_evidence.is_valid());
     }
 
     #[test]
