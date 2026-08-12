@@ -17,23 +17,41 @@ def require(text: str, needle: str, label: str) -> None:
         fail(f"{label}: missing {needle!r}")
 
 
+def read_file(relative_path: str) -> str:
+    return (ROOT / relative_path).read_text(encoding="utf-8")
+
+
 def main() -> None:
-    storage = (ROOT / "crates/aisoc-storage/src/central.rs").read_text(encoding="utf-8")
-    storage_lib = (ROOT / "crates/aisoc-storage/src/lib.rs").read_text(encoding="utf-8")
-    object_store = (ROOT / "crates/aisoc-storage/src/object_store.rs").read_text(encoding="utf-8")
-    ingest_lib = (ROOT / "crates/aisoc-ingest/src/lib.rs").read_text(encoding="utf-8")
-    ingest_main = (ROOT / "crates/aisoc-ingest/src/main.rs").read_text(encoding="utf-8")
-    ingest_pipeline = (ROOT / "crates/aisoc-ingest/src/pipeline.rs").read_text(encoding="utf-8")
-    api = (ROOT / "crates/aisoc-api/src/lib.rs").read_text(encoding="utf-8")
-    ai = (ROOT / "crates/aisoc-ai/src/lib.rs").read_text(encoding="utf-8")
-    ai_contract = (ROOT / "crates/aisoc-contracts/src/ai_review.rs").read_text(encoding="utf-8")
-    migration = (ROOT / "crates/aisoc-storage/migrations/202608110004_central_repository_cutover.sql").read_text(encoding="utf-8")
-    replay_migration = (ROOT / "crates/aisoc-storage/migrations/202608110005_dlq_replay_control.sql").read_text(encoding="utf-8")
-    object_migration = (ROOT / "crates/aisoc-storage/migrations/202608120006_raw_evidence_object_store.sql").read_text(encoding="utf-8")
-    watermark_migration = (ROOT / "crates/aisoc-storage/migrations/202608120007_event_watermark_reconciliation.sql").read_text(encoding="utf-8")
-    incident_revision_migration = (ROOT / "crates/aisoc-storage/migrations/202608120008_incident_revision_history.sql").read_text(encoding="utf-8")
-    incident_context_migration = (ROOT / "crates/aisoc-storage/migrations/202608120009_incident_revision_context.sql").read_text(encoding="utf-8")
-    evidence_custody_migration = (ROOT / "crates/aisoc-storage/migrations/202608120010_evidence_custody_retention.sql").read_text(encoding="utf-8")
+    storage = read_file("crates/aisoc-storage/src/central.rs")
+    storage_lib = read_file("crates/aisoc-storage/src/lib.rs")
+    object_store = read_file("crates/aisoc-storage/src/object_store.rs")
+    ingest_lib = read_file("crates/aisoc-ingest/src/lib.rs")
+    ingest_main = read_file("crates/aisoc-ingest/src/main.rs")
+    ingest_pipeline = read_file("crates/aisoc-ingest/src/pipeline.rs")
+    api = read_file("crates/aisoc-api/src/lib.rs")
+    ai = read_file("crates/aisoc-ai/src/lib.rs")
+    ai_contract = read_file("crates/aisoc-contracts/src/ai_review.rs")
+    migration = read_file(
+        "crates/aisoc-storage/migrations/202608110004_central_repository_cutover.sql"
+    )
+    replay_migration = read_file(
+        "crates/aisoc-storage/migrations/202608110005_dlq_replay_control.sql"
+    )
+    object_migration = read_file(
+        "crates/aisoc-storage/migrations/202608120006_raw_evidence_object_store.sql"
+    )
+    watermark_migration = read_file(
+        "crates/aisoc-storage/migrations/202608120007_event_watermark_reconciliation.sql"
+    )
+    incident_revision_migration = read_file(
+        "crates/aisoc-storage/migrations/202608120008_incident_revision_history.sql"
+    )
+    incident_context_migration = read_file(
+        "crates/aisoc-storage/migrations/202608120009_incident_revision_context.sql"
+    )
+    evidence_custody_migration = read_file(
+        "crates/aisoc-storage/migrations/202608120010_evidence_custody_retention.sql"
+    )
 
     for item in [
         "CentralStore",
@@ -88,15 +106,31 @@ def main() -> None:
 
     # A retry after local journal success must reconstruct deterministic evidence
     # so central PostgreSQL can repair a prior failed transaction.
-    require(ingest_lib, "Return deterministic evidence on idempotent replay", "ingest retry semantics")
+    require(
+        ingest_lib,
+        "Return deterministic evidence on idempotent replay",
+        "ingest retry semantics",
+    )
     require(ingest_pipeline, "record_for_raw_ref", "pipeline replay semantics")
     require(ingest_pipeline, "retry_rejected", "operator normalization replay")
     require(ingest_pipeline, "ReplayOutcome", "operator normalization replay outcome")
-    ingest_mapping = (ROOT / "crates/aisoc-ingest/src/central.rs").read_text(encoding="utf-8")
+    ingest_mapping = read_file("crates/aisoc-ingest/src/central.rs")
     require(ingest_mapping, "backfill_event_batch_write", "upgrade journal backfill mapper")
-    require(ingest_main, "central PostgreSQL repository synchronized from local durable journals", "upgrade journal backfill startup")
-    require(ingest_main, "persist_event_batch(&central_batch, &central_pipeline)", "ingest central write path")
-    require(ingest_main, "AISOC_DATABASE_URL is required for aisoc-ingest in production", "production ingest fail-closed DB")
+    require(
+        ingest_main,
+        "central PostgreSQL repository synchronized from local durable journals",
+        "upgrade journal backfill startup",
+    )
+    require(
+        ingest_main,
+        "persist_event_batch(&central_batch, &central_pipeline)",
+        "ingest central write path",
+    )
+    require(
+        ingest_main,
+        "AISOC_DATABASE_URL is required for aisoc-ingest in production",
+        "production ingest fail-closed DB",
+    )
     require(ingest_main, "central_repository_unavailable", "ingest central persistence error")
     require(ingest_main, '"agent_revoked"', "ingest revoked identity enforcement")
     require(ingest_main, '"agent_binding_mismatch"', "ingest host-binding enforcement")
@@ -104,7 +138,11 @@ def main() -> None:
     require(ingest_main, "internal_replay_normalize_dlq", "internal DLQ replay handler")
     require(ingest_lib, "evidence_by_raw_ref", "immutable raw evidence lookup for replay")
     require(ingest_lib, "LocalObjectStore", "ingest raw evidence object storage")
-    require(ingest_lib, "persisted.canonical_json.clear()", "raw bytes excluded from new journal rows")
+    require(
+        ingest_lib,
+        "persisted.canonical_json.clear()",
+        "raw bytes excluded from new journal rows",
+    )
     require(ingest_main, "AISOC_INGEST_OBJECT_STORE_ROOT", "Linux object-store configuration")
 
     # Production API reads tenant resources from PostgreSQL rather than treating
@@ -145,7 +183,7 @@ def main() -> None:
     # Both local compose profiles run the production image; therefore ingest must
     # receive the same PostgreSQL URL as API and the native migrator.
     for compose_name in ["deploy/compose/p1.yml", "deploy/compose/p2.yml"]:
-        compose = (ROOT / compose_name).read_text(encoding="utf-8")
+        compose = read_file(compose_name)
         ingest = re.search(r"(?ms)^  ingest:\n(.*?)(?=^  [a-zA-Z0-9_-]+:\n|\Z)", compose)
         if not ingest or "AISOC_DATABASE_URL:" not in ingest.group(1):
             fail(f"{compose_name}: ingest is not wired to PostgreSQL")
@@ -165,10 +203,22 @@ def main() -> None:
     ]:
         require(incident_revision_migration, ddl, "P6 append-only incident revision migration")
     require(storage, "revision_sha256", "P6 immutable incident revision snapshot")
-    require(storage, "incident_revisions.snapshot_sha256 = EXCLUDED.snapshot_sha256", "P6 revision conflict gate")
+    require(
+        storage,
+        "incident_revisions.snapshot_sha256 = EXCLUDED.snapshot_sha256",
+        "P6 revision conflict gate",
+    )
     require(storage, "AND revision < $9", "P6 latest incident materialization")
-    require(storage, "normalized_events.normalized = EXCLUDED.normalized", "normalized-event idempotency conflict gate")
-    require(storage, "detections.payload = EXCLUDED.payload", "detection idempotency conflict gate")
+    require(
+        storage,
+        "normalized_events.normalized = EXCLUDED.normalized",
+        "normalized-event idempotency conflict gate",
+    )
+    require(
+        storage,
+        "detections.payload = EXCLUDED.payload",
+        "detection idempotency conflict gate",
+    )
 
     for ddl in [
         "CREATE TABLE incident_revision_evidence_events",
@@ -177,7 +227,11 @@ def main() -> None:
         "REFERENCES incident_revisions(tenant_id, incident_id, revision) ON DELETE RESTRICT",
     ]:
         require(incident_context_migration, ddl, "P6 revision evidence/entity migration")
-    require(storage, "INSERT INTO incident_revision_evidence_events", "P6 revision evidence persistence")
+    require(
+        storage,
+        "INSERT INTO incident_revision_evidence_events",
+        "P6 revision evidence persistence",
+    )
     require(storage, "INSERT INTO incident_revision_entities", "P6 revision entity persistence")
 
     for ddl in [
@@ -192,12 +246,32 @@ def main() -> None:
     require(storage, "custody_sequence DESC", "P6 serialized evidence custody chain")
     require(storage, "integrity_state = 'verified'", "P6 verified evidence gate")
     require(storage, "retention_class = 'tenant_policy_default'", "P6 retention metadata")
-    require(storage, "INSERT INTO incident_revision_evidence_records", "P6 revision EvidenceRef persistence")
-    require(storage, "observed_at <= $3::timestamptz AS chronological", "P6 legal-hold chronology gate")
+    require(
+        storage,
+        "INSERT INTO incident_revision_evidence_records",
+        "P6 revision EvidenceRef persistence",
+    )
+    require(
+        storage,
+        "observed_at <= $3::timestamptz AS chronological",
+        "P6 legal-hold chronology gate",
+    )
     require(api, '"/api/v1/incidents/{incident_id}/evidence"', "P6 tenant-scoped evidence API")
-    require(ai, ".map(|item| item.evidence_id.clone())", "P6->P7 authoritative evidence identity")
-    require(ai_contract, ".map(|item| item.evidence_id.as_str())", "P7 EvidencePackage authoritative evidence validation")
-    require(ai_contract, ".map(|item| item.event_id.as_str())", "P7 sample event validation")
+    require(
+        ai,
+        ".map(|item| item.evidence_id.clone())",
+        "P6->P7 authoritative evidence identity",
+    )
+    require(
+        ai_contract,
+        ".map(|item| item.evidence_id.as_str())",
+        "P7 EvidencePackage authoritative evidence validation",
+    )
+    require(
+        ai_contract,
+        ".map(|item| item.event_id.as_str())",
+        "P7 sample event validation",
+    )
 
     print("Central PostgreSQL repository gate: OK")
 

@@ -4,6 +4,7 @@ set -euo pipefail
 COMMAND="${1:-}"
 [[ -n "$COMMAND" ]] && shift || true
 
+INSTALL_PREFIX_EXPLICIT="${AISOC_INSTALL_PREFIX+x}"
 PREFIX="${AISOC_INSTALL_PREFIX:-/opt/aisoc}"
 RELEASES_DIR="$PREFIX/releases"
 CURRENT_LINK="$PREFIX/current"
@@ -42,7 +43,44 @@ verify the signature with OpenSSL.
 USAGE
 }
 
-require_root() { [[ "$EUID" -eq 0 ]] || die "run as root"; }
+is_root() { [[ "$EUID" -eq 0 ]]; }
+
+require_install_access() {
+  is_root && return 0
+  [[ "$INSTALL_PREFIX_EXPLICIT" == "x" ]] \
+    || die "run as root unless AISOC_INSTALL_PREFIX explicitly selects a user-writable prefix"
+  [[ "$PREFIX" == /* ]] || die "non-root AISOC_INSTALL_PREFIX must be an absolute path"
+  local resolved_prefix
+  resolved_prefix="$(realpath -m -- "$PREFIX")"
+  [[ "$PREFIX" == "$resolved_prefix" ]] \
+    || die "non-root AISOC_INSTALL_PREFIX must use a normalized path: $resolved_prefix"
+  case "$resolved_prefix" in
+    /|/bin|/bin/*|/boot|/boot/*|/dev|/dev/*|/etc|/etc/*|/lib|/lib/*|/lib64|/lib64/*|\
+    /opt|/opt/*|/proc|/proc/*|/root|/root/*|/run|/run/*|/sbin|/sbin/*|/sys|/sys/*|\
+    /usr|/usr/*|/var|/var/*)
+      die "non-root installs may not target system prefixes: $PREFIX"
+      ;;
+  esac
+}
+
+install_dir() {
+  local mode="$1"
+  shift
+  if is_root; then
+    install -d -m "$mode" -o root -g root "$@"
+  else
+    install -d -m "$mode" "$@"
+  fi
+}
+
+install_file() {
+  local mode="$1" source="$2" target="$3"
+  if is_root; then
+    install -m "$mode" -o root -g root "$source" "$target"
+  else
+    install -m "$mode" "$source" "$target"
+  fi
+}
 
 safe_version() {
   local value="$1"
@@ -87,6 +125,7 @@ atomic_link() {
 }
 
 restart_installed_services() {
+  is_root || return 0
   command -v systemctl >/dev/null 2>&1 || return 0
   [[ "$(cat /proc/1/comm 2>/dev/null || true)" == "systemd" ]] || return 0
   local unit
@@ -98,7 +137,7 @@ restart_installed_services() {
 }
 
 install_release() {
-  require_root
+  require_install_access
   [[ $# -ge 1 && $# -le 2 ]] || { usage >&2; exit 2; }
   local source version target stage old_current=""
   source="$(resolve_dir "$1")"
@@ -113,19 +152,19 @@ install_release() {
   safe_version "$version"
   verify_release "$source"
 
-  install -d -m 0755 -o root -g root "$PREFIX" "$RELEASES_DIR"
+  install_dir 0755 "$PREFIX" "$RELEASES_DIR"
   target="$RELEASES_DIR/$version"
   [[ ! -e "$target" ]] || die "release already exists: $target"
   stage="$RELEASES_DIR/.${version}.staging.$$"
   trap 'rm -rf -- "$stage"' EXIT
-  install -d -m 0755 -o root -g root "$stage/bin"
+  install_dir 0755 "$stage/bin"
   local binary
   for binary in aisoc-agent aisoc-ingest aisoc-api aisoc-console aisoc-web-guard; do
-    install -m 0755 -o root -g root "$source/bin/$binary" "$stage/bin/$binary"
+    install_file 0755 "$source/bin/$binary" "$stage/bin/$binary"
   done
-  install -m 0644 -o root -g root "$source/manifest.sha256" "$stage/manifest.sha256"
-  [[ ! -f "$source/manifest.sha256.sig" ]] || install -m 0644 -o root -g root \
-    "$source/manifest.sha256.sig" "$stage/manifest.sha256.sig"
+  install_file 0644 "$source/manifest.sha256" "$stage/manifest.sha256"
+  [[ ! -f "$source/manifest.sha256.sig" ]] || \
+    install_file 0644 "$source/manifest.sha256.sig" "$stage/manifest.sha256.sig"
   printf '%s\n' "$version" > "$stage/VERSION"
   chmod 0644 "$stage/VERSION"
   mv "$stage" "$target"
@@ -139,7 +178,7 @@ install_release() {
 }
 
 rollback_release() {
-  require_root
+  require_install_access
   [[ -L "$PREVIOUS_LINK" ]] || die "no previous release is available"
   local previous current=""
   previous="$(readlink -f "$PREVIOUS_LINK")"

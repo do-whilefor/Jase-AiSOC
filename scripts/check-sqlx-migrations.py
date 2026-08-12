@@ -83,7 +83,8 @@ def main() -> None:
         fail("aisoc-storage does not depend on workspace SQLx")
     if 'sqlx::migrate!("./migrations")' not in postgres_rs:
         fail("SQLx migrations are not embedded in the Rust storage crate")
-    if "alembic_version" not in postgres_rs or "LegacySchemaDetected" not in (ROOT / "crates" / "aisoc-storage" / "src" / "lib.rs").read_text():
+    storage_lib = (ROOT / "crates" / "aisoc-storage" / "src" / "lib.rs").read_text()
+    if "alembic_version" not in postgres_rs or "LegacySchemaDetected" not in storage_lib:
         fail("native migration path does not fail closed on a legacy Alembic schema")
     if '"migrate"' not in db_rs or '"health"' not in db_rs:
         fail("aisoc-db must expose migrate and health commands")
