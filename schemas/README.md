@@ -57,3 +57,13 @@ health、deployment inventory、human user directory、签名制品/升级/自�
 - Agent 事件正文中的 tenant/agent/host/boot/sequence 必须与可信 Envelope 完全一致；
   接入端仍需以 mTLS 身份重新校验，不能仅因 Schema 通过就信任正文。
 - 部分 ACK 不得改变原批次内容；重试复用相同 `batch_id` 和完整性摘要，直至完整确认。
+
+## V4.0 Web Guard 契约
+
+V4.0 新增 Rust-first Web 数据面，并新增三份由 `aisoc-contracts` 维护的契约：
+
+- `web-request-envelope-v0.1.schema.json`：请求原始/规范化 URI、最小化 Header、字段化 Query/Body、Hash、WAF/Guard 命中与策略结果。
+- `web-security-event-v0.1.schema.json`：Web Guard 决策进入 SOC 主链路时使用的事件，包含安全状态、规则命中、AI Review 标记、请求 Hash 与策略结果。
+- `model-assessment-v0.1.schema.json`：AI 语义分类器的严格结构化输出；模型只能提交判断，不能写策略或执行动作。
+
+V4.0 约束：密码、Token、Cookie、Authorization 等字段默认不进入请求采样；Web Guard 的 `tenant_id`/`service_id` 由部署身份与受控配置确定，不能由攻击者请求参数覆盖；高置信确定性结果不依赖模型，模型不可用时灰区请求按显式策略降级。

@@ -1,5 +1,5 @@
 [Unit]
-Description=AI-SOC mTLS ingest gateway
+Description=AI-SOC Rust ingest and deterministic pipeline
 After=network-online.target
 Wants=network-online.target
 
@@ -7,27 +7,38 @@ Wants=network-online.target
 Type=simple
 User=aisoc
 Group=aisoc
-RuntimeDirectory=aisoc
-RuntimeDirectoryMode=0750
-StateDirectory=aisoc
-StateDirectoryMode=0750
-EnvironmentFile=-/etc/aisoc/aisoc.env
-ExecStart=/opt/aisoc/.venv/bin/aisoc-ingest
+UMask=0077
+RuntimeDirectory=aisoc-ingest
+RuntimeDirectoryMode=0700
+StateDirectory=aisoc-ingest
+StateDirectoryMode=0700
+EnvironmentFile=-/etc/aisoc/aisoc-rust.env
+Environment=AISOC_INGEST_BIND=127.0.0.1:8080
+Environment=AISOC_INGEST_STATE_DIR=/var/lib/aisoc-ingest
+Environment=AISOC_INGEST_PROXY_SECRET_FILE=/etc/aisoc/ingest-proxy.secret
+ExecStart=/opt/aisoc/current/bin/aisoc-ingest
 Restart=on-failure
 RestartSec=2s
+TimeoutStopSec=20s
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/aisoc
-PrivateDevices=true
+ReadWritePaths=/var/lib/aisoc-ingest
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=true
 RestrictNamespaces=true
 LockPersonality=true
 MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
 CapabilityBoundingSet=
 AmbientCapabilities=
 LimitNOFILE=65536

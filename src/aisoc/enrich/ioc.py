@@ -76,7 +76,9 @@ class IocFeed(_FeedModel):
             normalized = normalize_indicator(indicator.indicator_type, indicator.value)
             key = (indicator.indicator_type, normalized)
             if key in seen:
-                raise ValueError(f"duplicate IOC indicator: {indicator.indicator_type}:{normalized}")
+                raise ValueError(
+                    f"duplicate IOC indicator: {indicator.indicator_type}:{normalized}"
+                )
             seen.add(key)
             if indicator.expires_at is not None and (
                 indicator.expires_at.tzinfo is None or indicator.expires_at.utcoffset() is None
@@ -100,8 +102,10 @@ class LocalIocEnricher:
         self.feed_id = feed.feed_id
         self.feed_version = feed.version
         self._by_key = {
-            (indicator.indicator_type, normalize_indicator(indicator.indicator_type, indicator.value)):
-            indicator
+            (
+                indicator.indicator_type,
+                normalize_indicator(indicator.indicator_type, indicator.value),
+            ): indicator
             for indicator in active
         }
         self._matcher = IocMatcher(

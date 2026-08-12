@@ -38,5 +38,6 @@
     }
   ],
   "license": "CC0-1.0",
-  "events_sha256": "d46aede5825eefcf6bbf85e94bc5443fa442449c958e7a78bcb28526b7f38b0c"
+  "events_sha256": "d46aede5825eefcf6bbf85e94bc5443fa442449c958e7a78bcb28526b7f38b0c",
+  "canonical_events_sha256": "c4ef519002fc5564613187c36c7f7a9388a64f6c0121519329a58cd8fbcc236b"
 }

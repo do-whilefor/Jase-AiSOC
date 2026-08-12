@@ -1,0 +1,58 @@
+# Install inside nginx's http{} context (for Debian/Ubuntu this can be a
+# sites-enabled file). Identity maps are generated from enrolled certificate
+# serial numbers; never trust identity headers supplied by the Agent itself.
+map $ssl_client_serial $aisoc_tenant_id {
+    default "";
+    include /etc/aisoc/nginx/agent-tenant.map;
+}
+map $ssl_client_serial $aisoc_agent_id {
+    default "";
+    include /etc/aisoc/nginx/agent-id.map;
+}
+map $ssl_client_serial $aisoc_host_id {
+    default "";
+    include /etc/aisoc/nginx/agent-host.map;
+}
+
+server {
+    listen 8443 ssl;
+    server_name soc.example.internal;
+
+    ssl_certificate /etc/aisoc/ingest-server.crt;
+    ssl_certificate_key /etc/aisoc/ingest-server.key;
+    ssl_client_certificate /etc/aisoc/agent-ca.crt;
+    ssl_verify_client on;
+    ssl_verify_depth 2;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_tickets off;
+
+    client_max_body_size 8m;
+    client_body_timeout 15s;
+
+    location = /v1/agent/heartbeat {
+        if ($aisoc_agent_id = "") { return 403; }
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header X-AISOC-TLS-Verified $ssl_client_verify;
+        proxy_set_header X-AISOC-Client-Serial $ssl_client_serial;
+        proxy_set_header X-AISOC-Tenant-ID $aisoc_tenant_id;
+        proxy_set_header X-AISOC-Agent-ID $aisoc_agent_id;
+        proxy_set_header X-AISOC-Host-ID $aisoc_host_id;
+        include /etc/aisoc/nginx-ingest-proxy-secret.conf;
+    }
+
+    location = /v1/agent/events {
+        if ($aisoc_agent_id = "") { return 403; }
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_request_buffering on;
+        proxy_set_header X-AISOC-TLS-Verified $ssl_client_verify;
+        proxy_set_header X-AISOC-Client-Serial $ssl_client_serial;
+        proxy_set_header X-AISOC-Tenant-ID $aisoc_tenant_id;
+        proxy_set_header X-AISOC-Agent-ID $aisoc_agent_id;
+        proxy_set_header X-AISOC-Host-ID $aisoc_host_id;
+        include /etc/aisoc/nginx-ingest-proxy-secret.conf;
+    }
+}

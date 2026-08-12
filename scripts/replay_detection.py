@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay a detection dataset: normalize EVE JSONL -> detect -> print a report.
+"""Legacy differential replay runner for migration verification.
 
 Usage:
     uv run python scripts/replay_detection.py tests/replay/web_scan/
@@ -10,8 +10,10 @@ canonical :class:`SecurityEvent` via the Suricata normalizer, runs the P4
 DetectionEngine, and prints which detections fired versus the manifest's
 ``expected_detections``. Exit code is 0 when expectations match, 1 otherwise.
 
-This is the replay runner referenced by plan §8.4 ("高危规则修改必须支持历史回放")
-and the P4 exit-condition verification.
+This runner is retained only as a Python migration/differential baseline. The
+authoritative V4 Rust replay gate is ``cargo test --locked -p aisoc-detection
+--test replay`` (or ``make rust-replay``), which consumes the immutable
+``canonical-events.jsonl`` fixtures next to these source datasets.
 """
 
 from __future__ import annotations

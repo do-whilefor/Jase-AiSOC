@@ -7,5 +7,6 @@
   "generator": "tests/replay/build_datasets.py",
   "expected_detections": [],
   "license": "CC0-1.0",
-  "events_sha256": "cf745d19b89d3729c94a47d6888c0285659b1086135dfecece90db6791369322"
+  "events_sha256": "cf745d19b89d3729c94a47d6888c0285659b1086135dfecece90db6791369322",
+  "canonical_events_sha256": "800bf563b37766618803007568d5b1a174cb2f0f07460d217fbaf3ef66c2c862"
 }

@@ -25,7 +25,9 @@ def _write_feed(path: Path, *, expired: bool = False) -> str:
                 "type": "sha256",
                 "value": "a" * 64,
                 "confidence": 90,
-                "expires_at": (now - timedelta(minutes=1) if expired else now + timedelta(days=1)).isoformat(),
+                "expires_at": (
+                    now - timedelta(minutes=1) if expired else now + timedelta(days=1)
+                ).isoformat(),
             },
         ],
     }
@@ -40,8 +42,12 @@ def test_local_ioc_enricher_exact_match_and_normalization(tmp_path: Path) -> Non
     enricher = LocalIocEnricher.from_file(path, expected_sha256=digest)
 
     assert asyncio.run(enricher.enrich_ip("203.0.113.7"))["confidence"] == 95  # type: ignore[index]
-    assert asyncio.run(enricher.enrich_domain("BAD.EXAMPLE."))["indicator_type"] == "domain"  # type: ignore[index]
-    assert asyncio.run(enricher.enrich_sha256("A" * 64))["feed_id"] == "local.threat-intel"  # type: ignore[index]
+    assert (
+        asyncio.run(enricher.enrich_domain("BAD.EXAMPLE."))["indicator_type"] == "domain"
+    )  # type: ignore[index]
+    assert (
+        asyncio.run(enricher.enrich_sha256("A" * 64))["feed_id"] == "local.threat-intel"
+    )  # type: ignore[index]
     assert asyncio.run(enricher.enrich_ip("203.0.113.8")) is None
     assert asyncio.run(enricher.enrich_domain("sub.bad.example")) is None
 

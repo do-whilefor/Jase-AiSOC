@@ -1,49 +1,64 @@
-# P1：Python 核心平台与工程底座
+# P1：Rust 平台与工程治理
 
-状态：进行中（本地工程门禁已验证，正式退出仍依赖 P0 Accepted 和远端 CI）
-阶段目标：形成可启动、可迁移、可观察、租户边界可信的 Base Profile 核心平台。
-计划来源：项目计划书第 18 章“P1 Python 核心平台与工程底座”。
+状态：进行中。V4 Rust-first 工程骨架、原生 SQLx migration plane 与部署门禁已建立；正式退出仍被 committed `Cargo.lock`、真实 Rust 1.82 构建以及 central repository cutover 阻塞。
 
-## 工作包状态
+计划书硬验收：**Cargo CI、SQLx migration、API health、SBOM、签名和错误/日志规范通过。**
+
+## 当前工作包状态
 
 | 工作包 | 当前证据 | 状态 |
 |---|---|---|
-| 工程结构与契约 | `pyproject.toml`、`uv.lock`、`domain`、`platform`、`config` 包 | 已实现 |
-| 错误与可观测性 | 稳定错误信封、Trace ID、结构化日志、Prometheus 指标、OpenAPI | 已实现 |
-| PostgreSQL 与迁移 | 租户、凭据、资产、空 Incident、证据对象、审计表；两版 Alembic 迁移 | 已实现 |
-| 对象存储抽象 | 租户绑定、写入不可覆盖、SHA-256 完整性复核、本地 Base 适配器 | 已实现 |
-| 租户认证边界 | 一次性高熵令牌、数据库仅存摘要、令牌绑定服务端租户、可撤销字段 | 已实现 |
-| 平台扩展契约 | PlatformInfo、CapabilityReport、Collector 显式降级/失败状态 | 已实现 |
-| 测试与制品 | 单元/契约/真实 PostgreSQL 集成、Compose、非 root 容器、SBOM | 本地已验证 |
+| Cargo Workspace | 18 个 native production crate + migration-only `aisoc-python`；生产 `default-members` 不含 Python bridge | 部分完成：Workspace 已收敛，锁文件陈旧 |
+| Rust CI | GitHub Actions 固定 Rust 1.82，包含 fmt/check/clippy/test/schema/audit | 部分完成：当前提交必须在修复 `Cargo.lock` 后真实跑绿 |
+| SQLx/PostgreSQL | `aisoc-storage` 新增 SQLx 0.8.3、3 个 embedded migration、`aisoc-db migrate|health` | 已实现首版，真实 PostgreSQL execution 待 Rust 环境验证 |
+| API health/readiness | Rust Axum API 的 production 启动要求 PostgreSQL；`/readyz` 同时检查 DB 与 Ingest | 已实现首版 |
+| Rust-first 部署 | production Docker、P1/P2 Compose、Linux installer、release bundle 均走 Rust；`aisoc-db` 纳入 release | 已实现首版 |
+| Release integrity | `manifest.sha256`、detached signature、install/upgrade/rollback 测试 | 本地部署回归已通过 |
+| 错误/日志规范 | 原生 crate 使用 typed error、结构化 tracing；生产入口禁止 Python fallback | 部分完成：跨 crate error taxonomy 仍需统一 |
+| SBOM/供应链 | Python SBOM 保留；Rust job 新增 pinned `cargo-cyclonedx` 生成/上传 Workspace CycloneDX SBOM，并保留 cargo-audit | 已实现 CI 配置，待修复锁文件后远端实跑留证 |
+| Central storage cutover | schema 已覆盖 tenant/host/agent/audit、event pipeline、detection/incident/evidence/claim 基础事实 | 未完成：运行态 Ingest/Detection/Incident 仍有本地 append-only journal |
 
-## 本地验证证据（2026-08-03）
+## 本轮新增的原生数据库链路
 
-- Ruff 格式与 Lint 通过；mypy strict 对 `src`、`tests`、`migrations` 通过。
-- 全量 pytest：30 passed；真实 PostgreSQL 集成：1 passed。
-- Alembic `0002 -> 0001 -> 0002` 回滚和重升通过，`alembic check` 无漂移。
-- 双租户动态对照：租户 A 凭据读取租户 B 资产返回 404；伪造租户 B 请求头返回 403。
-- API 容器 health 为 healthy，readiness 为 ready，迁移容器成功完成。
-- `pip-audit --skip-editable` 未发现已知依赖漏洞；CycloneDX SBOM 生成成功。
-- Python 3.12.11 本地门禁通过；3.13 仍由 GitHub Actions 矩阵验证。
+1. `crates/aisoc-storage/src/postgres.rs`：PostgreSQL pool、healthcheck、embedded SQLx migrator。
+2. `crates/aisoc-storage/src/bin/aisoc-db.rs`：独立 `migrate` / `health` Rust binary，不依赖 Python/Alembic。
+3. `crates/aisoc-storage/migrations/202608110001_*` ～ `003_*`：建立 15 张 V4 基础表，使用 tenant-qualified 外键约束跨租户关系。
+4. `scripts/check-sqlx-migrations.py`：无需 Cargo 即可执行的 fail-closed schema 结构门禁。
+5. P1/P2 Compose：PostgreSQL healthy 后由 `aisoc-db migrate` 完成 schema，再允许 Ingest 启动。
+6. Linux installer：production control role 必须提供 `AISOC_DATABASE_URL`，启动 systemd 服务前运行 release 中的 `aisoc-db migrate`。
+7. Rust API：production 缺少数据库 URL 时拒绝启动；readiness 把 PostgreSQL health 纳入依赖状态。
+8. CI：Rust job 新增 PostgreSQL service，并计划在 `cargo test` 后实际执行 migration + health。
+
+## 当前实际验证（2026-08-11）
+
+已在当前 Linux 沙箱执行并通过：
+
+- `python3 scripts/check-sqlx-migrations.py`：PASS，3 migrations / 15 tables。
+- `./scripts/check-rust-first.sh`：PASS。
+- `python3 scripts/check_v4_contract_schemas.py`：PASS，23 个 authoritative DTO。
+- `bash tests/deploy/test_release_manager.sh`：PASS，release bundle 已包含 `aisoc-db`，覆盖 install/upgrade/rollback/signature/tamper gate。
+- shell syntax：PASS。
+- CI / P1 / P2 YAML parse：PASS。
+- legacy Settings PostgreSQL DSN compatibility：24 tests PASS。
+
+明确未通过/被阻塞：
+
+- `./scripts/check-cargo-lock.sh`：FAIL，committed `Cargo.lock` 缺少 17 个 native workspace package。
+- `cargo fmt/check/clippy/test/build --locked`：BLOCKED，当前沙箱不存在 Cargo/Rust 1.82，且外网不可达，不能安全生成新锁文件或下载 crates。
+- SQLx migrations 对真实 PostgreSQL 的执行：BLOCKED，同一 Rust toolchain/lock blocker。
 
 ## P1 正式退出条件
 
-- [x] 依赖锁定、格式、Lint、严格类型和本地全链路测试通过。
-- [x] 可通过 API 创建租户、资产和空 Incident，写操作具有审计记录。
-- [x] 迁移、健康、指标、对象存储和容器制品链可运行。
-- [x] 租户身份由服务端凭据绑定，调用方不能用请求字段切换租户。
-- [ ] P0 架构与安全评审完成，相关 ADR 从 `Proposed` 更新为 `Accepted`。依赖 P0-W7，按用户决策 ADR 维持 `Proposed`，详见 `docs/phase-p0-plan.md` 的收尾证据与残余风险。
-- [x] GitHub Actions 的 Python 3.12/3.13、集成、供应链和制品任务在当前提交上通过。本地等价验证（ruff/mypy/schema/pytest 含 PostgreSQL 集成/pip-audit/SBOM）全绿，CI 实跑待 push 到 `main` 触发；cryptography 已升至 50.0.0 修复 CVE-2026-69247/69249。
+- [x] Rust-first production entrypoint 不依赖 Python runtime。
+- [x] 原生 SQLx migration plane 与独立 migration binary 已进入源码、镜像、release、Compose、installer、CI。
+- [x] API production 配置把 PostgreSQL 设为硬依赖并纳入 readiness。
+- [x] release checksum/signature/install/upgrade/rollback 本地回归通过。
+- [ ] 使用 Rust 1.82 重新生成并审查 `Cargo.lock`，提交后所有 `--locked` 命令可复现。
+- [ ] `cargo fmt --all --check`、`cargo check --workspace --all-targets --all-features`、`cargo clippy -D warnings`、`cargo test --workspace`、`cargo build --release` 全绿。
+- [ ] SQLx migration 在真实 PostgreSQL 上完成 fresh install、重复 migrate、upgrade compatibility 与失败回滚/恢复测试。
+- [ ] Ingest/Detection/Incident/Evidence 的 central repository 从本地 journal 切换到 PostgreSQL/Object Store，避免“只迁 schema、不迁生产数据路径”。
+- [ ] 当前提交的 Rust SBOM、dependency audit、签名制品和远端 CI 全部留存证据。
 
 ## 下一主线
 
-P0 未 Accepted 前，P2 代码仅作为实验实现推进。Linux `os-release`/内核/init/BTF/
-cgroup/LSM 探测和 Collector 降级报告已经建立；下一批工作进入 Agent 本地缓存、背压/
-丢弃审计与 mTLS 身份契约。不得把本地单元结果或单一容器探测作为 Linux Agent
-兼容门禁证据。
-
-## 2026-08-08 复审补充
-
-- 直接 `Settings(...)` 不再隐式读取工作目录 `.env`；只有应用入口 `get_settings()` 加载 `.env`。这消除了本机 CA 路径对 API/配置单元测试的污染，同时保留正常应用启动行为。
-- 当前非 Docker 门禁为 Ruff/mypy/Schema 全绿、235 passed/14 skipped、依赖审计无已知漏洞；跳过的 PostgreSQL/POSIX 用例仍须在 Linux VM 重验。
-- 新迁移 `20260808_0007` 的离线链为单一 head；因本轮禁止 Docker，未执行真实 PostgreSQL upgrade/downgrade/alembic check，P1 正式退出状态不变。
+P1 下一增量不再扩展旧 Python storage。优先在有 Rust registry 的可信 Linux runner 修复锁文件并跑真实编译；随后以 `aisoc-storage` 为边界逐步迁移 central repositories，先覆盖 Agent inventory、Ingest batch/raw index、normalized event、Detection/Incident/Evidence，再进入 P3 JetStream/Object Store 生产 profile。

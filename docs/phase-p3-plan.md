@@ -1,67 +1,116 @@
-# P3：接入网关、消息、标准化、DLQ、幂等/重放/乱序、查询与新鲜度
+# P3：Ingest 与事件管道（Rust First）
 
-状态：base profile 主链路已实现并完成本地修正；stream profile（NATS JetStream）、新鲜度监控和 PostgreSQL/Linux VM 重验仍未完成。
-计划来源：项目计划书第 18 章“P3 接入网关、消息和标准化”，§7.2 流水线，§7.5 顺序/迟到/幂等，§12.1/§12.4，§16.1 SLO。
+状态：**部分完成，尚未达到 V4.0 P3 退出条件**。  
+依据：`AI-SOC_Rust_AI-Web-Guard_项目计划书_V4.0.docx` P3，以及“接入与数据管道”“消息”“Pipeline”相关架构要求。
 
-## 部署剖面
+## V4.0 验收口径
 
-- `deployment_profile: base|stream`（`Settings`）：base = 进程内有界队列 + PG/object-store checkpoint，无 NATS；stream = NATS JetStream（ACK/重放/DLQ/分区）。NATS 为 optional `[stream]` extra，base 不安装，惰性 import + 启动 fail-fast。
-- gRPC EventStream 评估为保持 mTLS HTTPS + JSON（与 FastAPI/Pydantic 栈一致）。
+P3 的退出条件不是“存在 ingest/normalize crate”，而是以下能力共同闭环：
 
-## 已完成（批次 C，2026-08-04）
+- Schema 校验；
+- 限流/背压；
+- raw evidence 持久化并可校验；
+- normalize 主链路；
+- DLQ；
+- 可控重放；
+- 乱序/水位线处理；
+- 幂等；
+- 中心化/高吞吐部署时的 JetStream consumer、背压和 DLQ；
+- 搜索/AI 等下游故障不能阻断基础检测数据面。
 
-- `Settings` 新增 `deployment_profile` + `ingest_normalize_workers/queue_depth` + `ingest_allowed_lateness_seconds` + `freshness_*` + NATS 字段；`require_nats_for_stream_profile` 校验。
-- Migration `20260804_0005_normalize_pipeline`：`normalized_events`（UQ tenant+dedupe / tenant+event_id、lineage、watermark 字段、revision、status）、`event_dlq`、`event_watermarks`、`event_freshness`、`enrichment_cache`；`agent_events` 加 `normalize_status` 列。`alembic check` 无漂移。
-- `src/aisoc/normalize/`：`Normalizer` Protocol + `RawInput`/`NormalizeResult`/`DlqEntry`/`dedupe_key`/`partition_key`/`clock_offset_ms`；`watermark.advance`；Agent、Suricata、journald、Nginx/Apache access log、Falco JSON 和 auditd serial-group adapter；尚未实现的 file_scan/import 明确进入 `no_normalizer` DLQ。
-- `src/aisoc/storage/event_repository.py`：`insert_normalized_event` 使用 `(tenant_id,dedupe_key)` 保证重放幂等；新的迟到事实以独立 dedupe key 追加并标记 `revision_reason=late_arrival`，不会覆盖或伪造同一事件 revision；另含查询、DLQ 和 watermark 原子推进。
-- `src/aisoc/enrich/`：`Enricher.orchestrate`（asset via `repositories.get_host` + external IOC/ASN/reputation，外部失败返回 None 不阻塞，extensions/labels 32/64 上限）。
-- 单测覆盖 registry、各 adapter、dedupe、watermark/迟到分类、重复迟到事件仍幂等、DLQ 和 enrichment 降级；Falco P5 adapter 另有独立用例。
+## 当前 Rust 主链路
 
-## 退出条件对照（§18.1：断网重连无不可解释重复；非法入 DLQ；可重放）
+生产数据路径当前为：
 
-- 幂等/乱序：`NormalizeWorker` 现在会实际读取并推进 partition watermark；新迟到事件追加并标记，重复 dedupe key 仍返回原事实。✅ 本地逻辑与 worker 单测通过；真实 PostgreSQL 乱序/并发重验待 Linux VM。
-- 非法入 DLQ：`EventDlqRecord` + normalizer 失败路径。✅ 代码就绪，**集成验证在批次 D**。
-- 可重放：base 扫 `agent_events.normalize_status='pending'` 重处理 + dedupe UQ；stream durable consumer + dedupe UQ。✅ 字段就绪，**管道接入在批次 D**。
+`Agent/Web Guard -> aisoc-ingest -> local immutable raw journal -> normalize -> detection -> incident -> PostgreSQL central repository`
 
-## 已完成（批次 D/E，2026-08-04）
+其中 PostgreSQL 已成为 Agent inventory、raw event index、normalized event、Detection、Incident 和 DLQ 状态的中心权威查询源；API 在 production 不再把 Ingest 内存映射作为这些资源的 system of record。
 
-### 批次 D：管道接入（base profile）
-- `src/aisoc/normalize/worker.py`：`NormalizeWorker` 轮询 `agent_events.normalize_status='pending'` → 读对象存储 envelope → `AgentNormalizer` pass-through → `insert_normalized_event` → 置 `done`/`failed`（DLQ）。
-- `src/aisoc/detection_engine/worker.py`：`DetectionWorker` 轮询 `normalized_events` active（lookback ≥ 2×突发窗口且覆盖 P5 host-chain 窗口）→ 重建 `SecurityEvent` → `DetectionEngine.evaluate` → `create_detection`（幂等）。
-- `src/aisoc/api_server/app.py`：lifespan 启停两个后台 worker（`workers_enabled` 开关）；`aisoc-process` CLI 离线推进。
-- 集成测试 `tests/integration/test_pipeline_e2e.py`：301 事件 → normalize → detect → 查 `/api/v1/events` + `/api/v1/detections` → 幂等重放。
-- **stream profile（NATS JetStream）与容器级 reconnect/乱序集成仍为实验**，未在本轮交付。
+本地 append-only JSONL 当前仍保留为 P3 raw staging/recovery source，用于进程崩溃恢复、数据库短暂失败后的幂等补写，以及 normalize DLQ replay。它不是 Control Plane 的权威查询数据库。
 
-### 批次 E：查询 API + 文档
-- `src/aisoc/api_server/routes/events.py`：`GET /api/v1/events`（list + filters）、`GET /api/v1/events/{id}`。
-- `src/aisoc/api_server/routes/detections.py`：`GET /api/v1/detections`（list + filters）、`GET /api/v1/detections/{id}`。
-- `NormalizedEventRead` 领域模型；`DetectionRead` schema 导出。
-- **新鲜度监控后台任务（FreshnessMonitor）已实现**（见 2026-08-09 增量）：`observability/freshness.py` 按 (tenant, host) 从 active `normalized_events` 计算最新 event_time 滞后、对照 verify/production SLO 分类（fresh/stale/degraded）并以 `ON CONFLICT (tenant_id, host_id)` 幂等 upsert `event_freshness`；`api_server/routes/freshness.py` 暴露租户隔离的 `GET /api/v1/freshness` 与 `/metrics`；接入 api_server lifespan 后台 worker；`tests/unit/test_freshness_monitor.py` + `tests/integration/test_freshness.py` 覆盖分类、幂等与租户隔离。
+## 本轮已闭环的能力
 
-## 2026-08-08 审计修正
+### 1. Central repository cutover
 
-- 修复原实现“声明支持 watermark 但 worker 从未调用”的断链；`NormalizeWorker` 现按配置的 allowed lateness 分类并持久化 watermark。
-- 删除不可执行的“同 dedupe key 迟到事件 revision+1”路径：该路径与两条唯一约束冲突，真实 PostgreSQL 必然失败。事件事实保持不可变，版本化重算属于 P6 Incident/时间线。
-- pending 批次查询增加 `FOR UPDATE SKIP LOCKED`，避免同一 base 队列记录被并发 worker 重复处理；对象存储读取失败保留 DLQ 记录。
-- 修复 tenant-wide 唯一约束与 source-local ID 的作用域错配：dedupe key 现在哈希 trusted
-  tenant/host/agent/boot/source 后再使用 source ID 或内容摘要；双主机单测证明相同 native payload 或
-  audit boot+serial 不会互相吞并，同一主机重放仍稳定。真实 PostgreSQL 对照留到 Linux VM。
+`aisoc-storage::central::CentralStore` 已提供 typed SQLx repository：
 
-## 待完成（stream profile）
+- Agent inventory；
+- ingest batch/raw event index；
+- normalized event；
+- Detection；
+- Incident + Detection link；
+- event watermark；
+- normalize DLQ；
+- tenant status/read model。
 
-> 新鲜度（FreshnessMonitor + `/api/v1/freshness` + `/metrics`）已于 2026-08-09 实现（见上文批次 E 与 `observability/freshness.py`），并经 `tests/integration/test_freshness.py` 在真实 PostgreSQL 上验证。剩余仅 stream profile（NATS JetStream）。
+Event batch + raw index + pipeline 写入位于同一 PostgreSQL transaction 内；batch/raw 冲突采用 fail-closed `DataConflict`，防止同一幂等键承载不同内容。
 
-### 批次 D-stream：JetStream
-- 抽 `ingest_gateway/server.py::_events` per-envelope block 到 `ingest_pipeline.py`（`BaseIngestPipeline` 进程内 worker + `StreamIngestPipeline`）；`normalize_status` 由 worker 置 `done`/`failed`；崩溃恢复扫 `pending`。
-- 集成测试 `test_normalize_pipeline`（3 事件→3 normalized + watermark + freshness）、`test_ingest_reconnect_replay`（停/重启无 dup）、`test_ingest_out_of_order`（1,3,2）、`test_ingest_invalid_dlq`。
-- `messaging/`：`NatsPublisher`/`NormalizerConsumer`（durable + DLQ stream）、`inproc_queue`、`p3.yml`（nats 服务）、CI `integration-stream` job、`pyproject` `[stream]` extra + `aisoc-process` processing entry point。
+### 2. 身份绑定与吊销
 
-### 批次 E：查询 API + 新鲜度 + 文档
-- `api_server/routes/events.py`（`/api/v1/events` list/single/revisions，租户隔离）、`routes/freshness.py`（`/api/v1/freshness` + `/metrics`）、`FreshnessMonitor` 后台任务、`observability/metrics.py` P3 指标。
-- 容器烟雾 `test_container_reconnect_replay`、`phase-p3-plan`/`milestones`/`README` 更新。
+Ingest 在落本地 raw journal **之前**检查 PostgreSQL Agent 状态，并在写事务中再次检查：
 
-## 非目标（本轮）
+- `tenant_id / agent_id / host_id` 已绑定后不可通过 heartbeat/event 静默换绑；
+- `revoked` Agent 不可由新 heartbeat/event 自动恢复为 online；
+- 历史 journal backfill 可导入旧证据，但不会把 revoked Agent 重新激活。
 
-- 检测引擎（P4）、主机行为链（P5）、Incident 关联（P6）、AI 研判（P7+）。
-- 迟到事件的 Incident/时间线版本化重算（P3 只在不可变事件上标记 `late_arrival`，重算在 P6）。
-- 显式 replay REST endpoint（Q3 决策：靠幂等重处理满足“可重放”，endpoint 推迟 P4）。
+### 3. Startup backfill / database repair
+
+Rust Ingest 启动时会把本地 inventory/raw/pipeline journal 幂等回填到 PostgreSQL。客户端在“本地 raw 已成功、central transaction 失败”的窗口重试时，Ingest 会重新构造确定性 evidence，使 central repository 可以补写，而不是因为本地幂等命中永久漏写数据库。
+
+### 4. DLQ replay control plane
+
+新增 SQLx migration `202608110005_dlq_replay_control.sql`：
+
+- `event_dlq.state = pending|leased|resolved`；
+- `lease_owner` / `lease_until`；
+- `resolved_at`；
+- claim index。
+
+`CentralStore` 新增：
+
+- `claim_normalize_dlq`；
+- `release_normalize_dlq`；
+- `resolve_normalize_dlq_claim`；
+- `persist_pipeline_replay`。
+
+claim 使用 PostgreSQL `FOR UPDATE SKIP LOCKED`，允许多个 Rust worker 并发领取且不重复处理；过期 lease 可被下一 worker 回收。重复 rejected journal 不会重新打开已经 resolved 的 DLQ。
+
+Ingest 新增仅内部控制面的：
+
+`POST /internal/v1/replay/normalize-dlq`
+
+重放只从本地不可变 raw evidence 读取原始输入，不接受调用方提供替换 payload。成功 normalize 后写入 pipeline journal 并幂等修复 PostgreSQL；缺失 raw evidence、仍无法 normalize 或 central write 失败时，DLQ 带退避重新进入 pending。
+
+### 5. Watermark / 基础乱序保护
+
+PostgreSQL `event_watermarks` 只在 incoming sequence 与当前 contiguous watermark 相邻或重叠时前移。存在 gap 时不会把更大的 sequence 误报为连续完成。
+
+这已经具备“不能因为乱序而错误推进连续水位”的最低安全语义，但尚未完成 V4.0 要求的完整 late-event 分类、gap reconciliation、故障注入与 JetStream 重放验证。
+
+## 当前自动化门禁
+
+- `scripts/check-sqlx-migrations.py`：forward SQLx migration/schema 门禁；
+- `scripts/check-central-repository.py`：central read/write、identity、DLQ lease/replay、production wiring 的 fail-closed 结构门禁；
+- `scripts/check-rust-first.sh`：生产 Docker/Compose/systemd/Make 路径禁止 Python runtime，并组合执行 storage/central 门禁；
+- `crates/aisoc-storage/tests/central_repository.rs`：在 CI PostgreSQL service 中覆盖 inventory -> batch -> normalize -> detection -> incident、幂等、host binding、revocation、DLQ claim/release/expired lease reclaim/resolution。
+
+## 尚未完成
+
+P3 目前仍不能标记为完成，主要缺口：
+
+1. `Cargo.lock` 尚未在可联网可信 Rust 1.82 builder 中重建，因此新增 Rust 代码仍缺少真实 `cargo fmt/clippy/test/build --locked` 结果。
+2. 当前沙箱没有 PostgreSQL server，central repository integration test 只能交由 CI/真实 Linux 环境执行。
+3. JetStream/`async-nats` stream profile 尚未进入正式 Rust production path；中心化高吞吐情况下的 durable consumer、ACK/redelivery、consumer lag/backpressure 仍待实现。
+4. late event / gap reconciliation / disconnect-reconnect / out-of-order 故障注入尚未形成完整 P3 acceptance suite。
+5. raw body 当前主要依赖本地 append-only journal；V4 Object Store immutable evidence + lifecycle/retention 尚未完成。
+6. enrichment 仍未完成 Rust production cutover。
+7. replay 目前是内部 Ingest control endpoint；面向 Operator 的 RBAC/audit API 属于后续 P12 收敛。
+
+## P3 下一验收批次
+
+1. 在 Rust 1.82 + PostgreSQL 环境修复 `Cargo.lock` 并跑真实 workspace CI。
+2. 对 central repository integration test 增加并发 claim、DB restart、transaction rollback 和 replay crash-window 测试。
+3. 实现 Rust JetStream transport abstraction 与 durable consumer，保持 base/local profile 可独立运行。
+4. 增加 `1,3,2`、gap replay、重复 batch、断网重连、consumer redelivery、DLQ replay 的容器级验收。
+5. 把 raw immutable body 下沉到 V4 Object Store，并让 PostgreSQL 只保存 locator/hash/metadata。
+6. 完成 Rust enrichment + freshness/lag metrics 后，再按 P3 硬门禁决定是否关闭阶段。

@@ -310,9 +310,16 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def require_async_postgresql(cls, value: str) -> str:
-        if not value.startswith("postgresql+asyncpg://"):
-            raise ValueError("database_url must use postgresql+asyncpg")
-        return value
+        # V4 production Rust uses the standard PostgreSQL URI accepted by SQLx.
+        # Retained Python migration/regression code normalizes the same URI to
+        # SQLAlchemy's asyncpg dialect instead of forcing a second production DSN.
+        if value.startswith("postgresql+asyncpg://"):
+            return value
+        if value.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + value.removeprefix("postgresql://")
+        if value.startswith("postgres://"):
+            return "postgresql+asyncpg://" + value.removeprefix("postgres://")
+        raise ValueError("database_url must use PostgreSQL")
 
     @field_validator("bootstrap_admin_token")
     @classmethod

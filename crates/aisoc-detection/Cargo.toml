@@ -1,0 +1,14 @@
+[package]
+name = "aisoc-detection"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Deterministic Rust detection engine with single-event, window, and host-chain rules"
+publish = false
+
+[dependencies]
+aisoc-core = { path = "../aisoc-core" }
+aisoc-contracts = { path = "../aisoc-contracts" }
+chrono.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,10 @@
+[package]
+name = "aisoc-linux"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Linux capability discovery and platform compatibility layer for AI-SOC"
+publish = false
+
+[dependencies]

@@ -1,0 +1,19 @@
+[package]
+name = "aisoc-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Rust-first local persistence plus PostgreSQL/SQLx storage and migration primitives"
+publish = false
+
+[dependencies]
+aisoc-core = { path = "../aisoc-core" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+uuid.workspace = true

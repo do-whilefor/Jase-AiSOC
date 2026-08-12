@@ -731,7 +731,9 @@ class IncidentCorrelator:
     def _evidence_ref(self, item: IncidentEvidenceInput) -> IncidentEvidenceRef:
         event = item.event
         return IncidentEvidenceRef(
-            evidence_id=f"evi_{self._digest(f'{event.tenant.id}|{event.event_id}|{event.raw_ref}')[:24]}",
+            evidence_id=(
+                f"evi_{self._digest(f'{event.tenant.id}|{event.event_id}|{event.raw_ref}')[:24]}"
+            ),
             event_id=event.event_id,
             event_type=event.event_type,
             event_time=event.event_time,

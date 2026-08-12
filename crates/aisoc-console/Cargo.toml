@@ -1,0 +1,13 @@
+[package]
+name = "aisoc-console"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Rust operations console and same-origin control-plane proxy for AI-SOC"
+publish = false
+
+[dependencies]
+axum = "=0.8.3"
+reqwest = { version = "=0.12.15", default-features = false, features = ["rustls-tls"] }
+tokio = { version = "=1.44.1", features = ["macros", "net", "rt-multi-thread", "signal"] }

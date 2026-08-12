@@ -1,0 +1,15 @@
+[package]
+name = "aisoc-ai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Provider-neutral AI review, structured output validation, budgets, and circuit breaker"
+publish = false
+
+[dependencies]
+aisoc-contracts = { path = "../aisoc-contracts" }
+reqwest = { version = "=0.12.15", default-features = false, features = ["rustls-tls", "json"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

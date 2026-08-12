@@ -13,8 +13,8 @@ import hmac
 import math
 import os
 import stat
-from ipaddress import ip_address
 from collections import Counter
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
 
@@ -184,7 +184,9 @@ def _normalize_domain(value: str) -> str:
 
 def _normalize_sha256(value: str) -> str:
     normalized = value.strip().lower()
-    if len(normalized) != 64 or any(character not in "0123456789abcdef" for character in normalized):
+    if len(normalized) != 64 or any(
+        character not in "0123456789abcdef" for character in normalized
+    ):
         raise ValueError("invalid IOC SHA-256")
     return normalized
 

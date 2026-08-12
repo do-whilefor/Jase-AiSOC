@@ -1,0 +1,18 @@
+[package]
+name = "aisoc-response"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Fixed response adapters with target revalidation and no arbitrary shell execution"
+publish = false
+
+[dependencies]
+aisoc-contracts = { path = "../aisoc-contracts" }
+aisoc-core = { path = "../aisoc-core" }
+aisoc-storage = { path = "../aisoc-storage" }
+thiserror.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true

@@ -1,57 +1,129 @@
-name: aisoc-p1
+name: aisoc-p1-rust
 
+# Rust-only local P1 control-plane profile. PostgreSQL schema migration is now
+# performed by the native aisoc-db/SQLx binary before Ingest starts. Ingest/API
+# use PostgreSQL as the central repository; local journals remain edge durability/replay.
 services:
   postgres:
-    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    image: postgres:16-bookworm
     environment:
       POSTGRES_DB: aisoc
       POSTGRES_USER: aisoc
-      POSTGRES_PASSWORD: aisoc_dev
-    ports:
-      - "127.0.0.1:55432:5432"
+      POSTGRES_PASSWORD: aisoc-local-development-only
+    volumes:
+      - p1-postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aisoc -d aisoc"]
-      interval: 2s
+      interval: 5s
       timeout: 3s
       retries: 20
-    volumes:
-      - p1-postgres-data:/var/lib/postgresql/data
 
-  migrate:
+  db-migrate:
     build:
       context: ../..
       dockerfile: deploy/Dockerfile
-    command: ["alembic", "upgrade", "head"]
+    command: ["/usr/local/bin/aisoc-db", "migrate"]
     environment:
-      AISOC_DATABASE_URL: postgresql+asyncpg://aisoc:aisoc_dev@postgres:5432/aisoc
-      AISOC_OBJECT_STORE_ROOT: /var/lib/aisoc/evidence
+      AISOC_DATABASE_URL: postgresql://aisoc:aisoc-local-development-only@postgres:5432/aisoc
     depends_on:
       postgres:
         condition: service_healthy
     restart: "no"
 
+  secrets-init:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+    user: "0:0"
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        mkdir -p /run/aisoc-secrets
+        printf '%s\n' '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' > /run/aisoc-secrets/ingest-proxy.secret
+        printf '%s\n' 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789' > /run/aisoc-secrets/ingest-control.secret
+        cat > /run/aisoc-secrets/api-auth.json <<'JSON'
+        {"principals":[{"token_sha256":"f1a458d2e3fa294262a087f07c804db44e97b95b2cb0ccef7a09825f661a1f4d","subject":"local-admin","tenant_id":"ten_local001","roles":["admin"]}]}
+        JSON
+        chown -R 10001:10001 /run/aisoc-secrets
+        chmod 0600 /run/aisoc-secrets/*
+    volumes:
+      - p1-secrets:/run/aisoc-secrets
+    restart: "no"
+
+  ingest:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+    command: ["/usr/local/bin/aisoc-ingest"]
+    environment:
+      AISOC_DATABASE_URL: postgresql://aisoc:aisoc-local-development-only@postgres:5432/aisoc
+      AISOC_INGEST_BIND: 127.0.0.1:8080
+      AISOC_INGEST_STATE_DIR: /var/lib/aisoc-ingest
+      AISOC_INGEST_PROXY_SECRET_FILE: /run/aisoc-secrets/ingest-proxy.secret
+      AISOC_INGEST_CONTROL_SECRET_FILE: /run/aisoc-secrets/ingest-control.secret
+      RUST_LOG: aisoc_ingest=info
+    ports:
+      - "127.0.0.1:58000:8000"
+      - "127.0.0.1:58088:8088"
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+      db-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - p1-secrets:/run/aisoc-secrets:ro
+      - p1-ingest-state:/var/lib/aisoc-ingest
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   api:
     build:
       context: ../..
       dockerfile: deploy/Dockerfile
+    command: ["/usr/local/bin/aisoc-api"]
+    network_mode: "service:ingest"
     environment:
-      AISOC_ENVIRONMENT: development
-      AISOC_API_HOST: 0.0.0.0
-      AISOC_API_PORT: 8000
-      AISOC_LOG_FORMAT: json
-      AISOC_DATABASE_URL: postgresql+asyncpg://aisoc:aisoc_dev@postgres:5432/aisoc
-      AISOC_OBJECT_STORE_ROOT: /var/lib/aisoc/evidence
-      AISOC_BOOTSTRAP_ADMIN_TOKEN: p1-local-admin-token-change-me
-    ports:
-      - "127.0.0.1:58000:8000"
+      AISOC_API_BIND: 0.0.0.0:8000
+      AISOC_DATABASE_URL: postgresql://aisoc:aisoc-local-development-only@postgres:5432/aisoc
+      AISOC_API_AUTH_FILE: /run/aisoc-secrets/api-auth.json
+      AISOC_INGEST_CONTROL_SECRET_FILE: /run/aisoc-secrets/ingest-control.secret
+      AISOC_INGEST_CONTROL_ORIGIN: http://127.0.0.1:8080
+      RUST_LOG: aisoc_api=info
     depends_on:
-      postgres:
+      ingest:
         condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
     volumes:
-      - p1-evidence-data:/var/lib/aisoc/evidence
+      - p1-secrets:/run/aisoc-secrets:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  console:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+    command: ["/usr/local/bin/aisoc-console"]
+    network_mode: "service:ingest"
+    environment:
+      AISOC_CONSOLE_BIND: 0.0.0.0:8088
+      AISOC_CONSOLE_API_ORIGIN: http://127.0.0.1:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8088/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
 volumes:
-  p1-postgres-data:
-  p1-evidence-data:
+  p1-secrets:
+  p1-ingest-state:
+  p1-postgres:

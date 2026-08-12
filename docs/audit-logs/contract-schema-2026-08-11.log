@@ -1,0 +1,2 @@
+$ python3 scripts/check_v4_contract_schemas.py
+V4 Rust contract schemas: OK (23 authoritative DTOs checked)

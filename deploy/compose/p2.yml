@@ -1,109 +1,134 @@
-name: aisoc-p2
+name: aisoc-p2-rust
 
-# P2 容器级端到端编排：PostgreSQL + 迁移 + API + Ingest 网关。
-#
-# Agent enroll→heartbeat→batch→ACK→克隆拒绝的容器级 e2e 事实证据由
-# tests/integration/test_ingest_mtls.py 提供（真实 mTLS + PostgreSQL，在 Docker
-# Linux Engine 下已绿）。本 compose 把同一组服务以多容器形式编排，用于验证
-# 服务间网络、健康门禁与数据卷共享。
-#
-# 启用 Agent 容器需要先把 Agent CA（证书 + 0600 私钥）与已 enrolled 的客户端
-# 证书/密钥写入共享卷（provision 流程：生成 LocalCertificateAuthority、create_tenant、
-# create_host、create_registration_token、enroll_agent，参考 tests/integration/test_ingest_mtls.py
-# 的 LocalCertificateAuthority.generate + enroll_agent 序列）。该 provision 链与
-# systemd 切换、真机 eBPF/auditd/全盘克隆验证一并标记为 VM 级 Experimental，留待
-# 真 Linux VM 矩阵实跑（见 docs/phase-p2-plan.md）。
-
+# Rust-only P2 laboratory profile. PostgreSQL is initialized through native
+# SQLx migrations before Agent/Ingest/API startup. PostgreSQL is the central repository;
+# full Agent enrollment/collector VM matrix and P3 stream profile remain open gates.
 services:
   postgres:
-    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    image: postgres:16-bookworm
     environment:
       POSTGRES_DB: aisoc
       POSTGRES_USER: aisoc
-      POSTGRES_PASSWORD: aisoc_dev
-    ports:
-      - "127.0.0.1:55432:5432"
+      POSTGRES_PASSWORD: aisoc-local-development-only
+    volumes:
+      - p2-postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aisoc -d aisoc"]
-      interval: 2s
+      interval: 5s
       timeout: 3s
       retries: 20
-    volumes:
-      - p2-postgres-data:/var/lib/postgresql/data
 
-  migrate:
+  db-migrate:
     build:
       context: ../..
       dockerfile: deploy/Dockerfile
-    command: ["alembic", "upgrade", "head"]
+    command: ["/usr/local/bin/aisoc-db", "migrate"]
     environment:
-      AISOC_DATABASE_URL: postgresql+asyncpg://aisoc:aisoc_dev@postgres:5432/aisoc
-      AISOC_OBJECT_STORE_ROOT: /var/lib/aisoc/evidence
+      AISOC_DATABASE_URL: postgresql://aisoc:aisoc-local-development-only@postgres:5432/aisoc
     depends_on:
       postgres:
         condition: service_healthy
     restart: "no"
 
-  api:
+  secrets-init:
     build:
       context: ../..
       dockerfile: deploy/Dockerfile
-    environment:
-      AISOC_ENVIRONMENT: development
-      AISOC_API_HOST: 0.0.0.0
-      AISOC_API_PORT: 8000
-      AISOC_LOG_FORMAT: json
-      AISOC_DATABASE_URL: postgresql+asyncpg://aisoc:aisoc_dev@postgres:5432/aisoc
-      AISOC_OBJECT_STORE_ROOT: /var/lib/aisoc/evidence
-      AISOC_BOOTSTRAP_ADMIN_TOKEN: p2-local-admin-token-change-me
-    ports:
-      - "127.0.0.1:58000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
+    user: "0:0"
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        mkdir -p /run/aisoc-secrets
+        printf '%s\n' '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' > /run/aisoc-secrets/ingest-proxy.secret
+        printf '%s\n' 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789' > /run/aisoc-secrets/ingest-control.secret
+        cat > /run/aisoc-secrets/api-auth.json <<'JSON'
+        {"principals":[{"token_sha256":"f1a458d2e3fa294262a087f07c804db44e97b95b2cb0ccef7a09825f661a1f4d","subject":"local-admin","tenant_id":"ten_local001","roles":["admin"]}]}
+        JSON
+        chown -R 10001:10001 /run/aisoc-secrets
+        chmod 0600 /run/aisoc-secrets/*
     volumes:
-      - p2-evidence-data:/var/lib/aisoc/evidence
+      - p2-secrets:/run/aisoc-secrets
+    restart: "no"
 
   ingest:
     build:
       context: ../..
       dockerfile: deploy/Dockerfile
-    command: ["aisoc-ingest"]
+    command: ["/usr/local/bin/aisoc-ingest"]
     environment:
-      AISOC_ENVIRONMENT: development
-      AISOC_INGEST_HOST: 0.0.0.0
-      AISOC_INGEST_PORT: 8081
-      AISOC_LOG_FORMAT: json
-      AISOC_DATABASE_URL: postgresql+asyncpg://aisoc:aisoc_dev@postgres:5432/aisoc
-      AISOC_OBJECT_STORE_ROOT: /var/lib/aisoc/evidence
-      AISOC_AGENT_CA_CERTIFICATE_PATH: /run/secrets/agent-ca/ca.crt
-      AISOC_AGENT_CA_PRIVATE_KEY_PATH: /run/secrets/agent-ca/ca.key
+      AISOC_DATABASE_URL: postgresql://aisoc:aisoc-local-development-only@postgres:5432/aisoc
+      AISOC_INGEST_BIND: 127.0.0.1:8080
+      AISOC_INGEST_STATE_DIR: /var/lib/aisoc-ingest
+      AISOC_INGEST_PROXY_SECRET_FILE: /run/aisoc-secrets/ingest-proxy.secret
+      AISOC_INGEST_CONTROL_SECRET_FILE: /run/aisoc-secrets/ingest-control.secret
+      RUST_LOG: aisoc_ingest=info
     ports:
-      - "127.0.0.1:58001:8081"
+      - "127.0.0.1:58000:8000"
+      - "127.0.0.1:58088:8088"
     depends_on:
-      postgres:
-        condition: service_healthy
-      migrate:
+      secrets-init:
+        condition: service_completed_successfully
+      db-migrate:
         condition: service_completed_successfully
     volumes:
-      - p2-evidence-data:/var/lib/aisoc/evidence
-      - p2-agent-ca:/run/secrets/agent-ca:ro
-    # ingest 监听 8081 且强制 mTLS 客户端证书，复用的 deploy/Dockerfile HEALTHCHECK
-    # 探测的是 API 的 8000/health/live，在本容器恒为 connection refused，会把 ingest
-    # 误判为 unhealthy。此处用 8081 的 TCP 连通性作为 liveness，不要求客户端证书。
+      - p2-secrets:/run/aisoc-secrets:ro
+      - p2-ingest-state:/var/lib/aisoc-ingest
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('127.0.0.1', 8081), timeout=2); s.close()\""]
-      interval: 10s
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/readyz"]
+      interval: 5s
       timeout: 3s
-      start_period: 10s
-      retries: 3
-    # Agent CA 卷（p2-agent-ca）必须由 provision 步骤以 0600 私钥 + 证书填充后，
-    # ingest 才能加载 CertificateAuthority。provision 完成前 ingest 会启动失败
-    # 并由 restart 策略重试；这是有意的 fail-fast，避免静默降级。
+      retries: 20
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+    command: ["/usr/local/bin/aisoc-api"]
+    network_mode: "service:ingest"
+    environment:
+      AISOC_API_BIND: 0.0.0.0:8000
+      AISOC_DATABASE_URL: postgresql://aisoc:aisoc-local-development-only@postgres:5432/aisoc
+      AISOC_API_AUTH_FILE: /run/aisoc-secrets/api-auth.json
+      AISOC_INGEST_CONTROL_SECRET_FILE: /run/aisoc-secrets/ingest-control.secret
+      AISOC_INGEST_CONTROL_ORIGIN: http://127.0.0.1:8080
+      RUST_LOG: aisoc_api=info
+    depends_on:
+      ingest:
+        condition: service_healthy
+    volumes:
+      - p2-secrets:/run/aisoc-secrets:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  console:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+    command: ["/usr/local/bin/aisoc-console"]
+    network_mode: "service:ingest"
+    environment:
+      AISOC_CONSOLE_BIND: 0.0.0.0:8088
+      AISOC_CONSOLE_API_ORIGIN: http://127.0.0.1:8000
+    depends_on:
+      api:
+        condition: service_healthy
+
+  agent-probe:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+    command: ["/usr/local/bin/aisoc-agent", "probe"]
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+    restart: "no"
 
 volumes:
-  p2-postgres-data:
-  p2-evidence-data:
-  p2-agent-ca:
+  p2-secrets:
+  p2-ingest-state:
+  p2-postgres:

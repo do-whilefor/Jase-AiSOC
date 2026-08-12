@@ -1,0 +1,10 @@
+host_clock_skew: 4 events, sha256 OK, schema OK
+host_failed_attacks: 4 events, sha256 OK, schema OK
+host_missing_source: 23 events, sha256 OK, schema OK
+host_normal_baseline: 14 events, sha256 OK, schema OK
+host_success_chains: 29 events, sha256 OK, schema OK
+normal_baseline: 200 events, sha256 OK, schema OK
+ssh_bruteforce: 11 events, sha256 OK, schema OK
+web_injection: 3 events, sha256 OK, schema OK
+web_scan: 301 events, sha256 OK, schema OK
+canonical replay: PASS (589 events across 9 datasets)

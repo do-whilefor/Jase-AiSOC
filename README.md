@@ -1,182 +1,137 @@
-# AI-SOC
+# AI-SOC V4.0
 
-AI-SOC 是面向通用 Linux 的安全分析、Incident 聚合、证据溯源、恶意文件分析和受控响应平台。项目以 `AI安全分析与溯源_项目计划书_Python.docx` 为产品方向依据，在现有实现上采用 **Rust Core + Python AI/Service Layer**：确定性、安全敏感和性能敏感能力优先进入 Rust；LLM、Prompt、Provider 编排和服务层继续使用 Python。
+AI-SOC 是面向蓝队和安全运营团队的通用 Linux 安全分析、证据溯源与实时 Web 防护平台。当前实现严格以 `AI-SOC_Rust_AI-Web-Guard_项目计划书_V4.0.docx` 为目标：**Rust First、确定性检测优先、AI 按需参与、证据驱动结论、分级响应**。
 
-## 设计边界
+V4.0 的生产目标不是“Rust Core + Python Service Layer”，而是 Agent、Web Guard、Ingest、Normalize、Detection、Incident、Evidence、AI、Malware、Trace、Policy、Response、API/Console 的关键链路由 Rust 实现，正式运行不依赖 Python runtime。`src/aisoc`、Alembic 和 Python worker 仍保留为迁移期行为基线与回归资产；其中部分高级能力尚未完全迁移，所以不能视为已经完成的 P0-P14 产品。
 
-- Linux 是唯一目标运行平台，不依赖特定发行版或预装安全工具。
-- 优先使用 `/proc`、`/sys`、`/etc`、POSIX/Linux API 与能力探测；缺失 journald、auditd、eBPF、Suricata、Falco 时按能力降级。
-- 原始日志不逐条交给 LLM。Normalize、Detection、Incident 归并和证据裁剪先由确定性链路完成，AI 只审阅受限的 Incident EvidencePackage。
-- AI 结论不能覆盖原始证据；Claim、ToolResult、模型输出和响应动作均受结构化契约和审计约束。
-- 响应执行默认关闭，并受租户、Host/Agent 绑定、RBAC、审批、目标重验证和固定 Adapter 限制。
-- 生产路径不以 `todo!()`、固定成功返回或假扫描结果冒充已实现能力。
-
-## 架构
+## V4.0 链路
 
 ```text
-Linux Agent / external sensors
-        │
-        ▼
-Ingest Gateway ──► Normalize / Enrichment ──► Detection
-                                            │
-                                            ▼
-                                        Incident
-                                            │
-                    ┌───────────────────────┼───────────────────────┐
-                    ▼                       ▼                       ▼
-              Evidence / Trace       Malware Analysis          AI Review
-                    │                       │                       │
-                    └───────────────────────┴──────────────┬────────┘
-                                                          ▼
-                                                Policy / Response Gate
+Web 数据面：
+Internet -> Traditional WAF(optional) -> AISOC Web Guard -> Business Service
+                                      -> WebSecurityEvent -> Ingest -> Detection/Incident
+
+SOC 证据链：
+Linux Agent / Suricata / Falco / Service Logs
+  -> Ingest -> Raw Evidence -> Normalize -> Deterministic Detection
+  -> Incident -> EvidencePackage -> AI Review / Malware / Trace
+  -> Policy -> Approval -> Registered Action -> Verification/Rollback
 ```
 
-Rust Core 当前负责：
+系统区分 `observed`、`attack_attempt`、`blocked`、`suspected_success` 与 `confirmed_compromise`。攻击请求命中本身不能直接等同于已失陷；`confirmed_compromise` 必须绑定可验证 evidence。
 
-- SHA-256、HMAC-SHA256、常量时间比较与受限文件 Hash。
-- Linux 发行版/init/cgroup/LSM/BTF/journald/auditd/eBPF/包管理器能力探测。
-- 文件熵、可打印字符串和 ELF 头静态解析。
-- IP/domain/SHA-256 IOC 精确匹配。
+## 当前 Rust Workspace
 
-Python 继续负责：
-
-- FastAPI、SQLAlchemy/Alembic、worker 编排和业务契约。
-- AI/LLM Provider、Prompt、EvidencePackage、Verifier/Adjudicator。
-- 当前尚未迁移的 Agent collector、规则编排和响应控制面。
-
-PyO3 扩展模块为 `aisoc_rust`。Python 侧通过 `src/aisoc/_rustcore.py` 访问，并为开发、测试和诊断保留确定性的 Python fallback；常规 Linux 安装和运行容器默认要求 Rust bridge 存在，避免生产部署在不知情的情况下退回 Python。需要 Rust 才能提供的能力不会伪造结果。
-
-## 目录
+当前 Cargo workspace 已包含计划书定义的原生 crate：
 
 ```text
-.
-├── crates/
-│   ├── aisoc-core/          # 无 Python 依赖的 Rust 核心
-│   └── aisoc-python/        # PyO3 bridge: aisoc_rust
-├── src/aisoc/               # Python 服务层、AI 层和当前 Agent 编排
-├── configs/                 # 预留：部署配置应外置，不提交 secret
-├── deploy/
-│   ├── linux/               # 通用 Linux 安装入口
-│   ├── systemd/             # 可选 systemd units
-│   └── compose/             # 集成/验证 profile
-├── schemas/                 # 版本化事件/Agent schema
-├── migrations/              # Alembic migrations
-├── scripts/                 # enrollment、replay、artifact 工具
-├── tests/                   # unit / integration / smoke / replay
-├── docs/                    # 架构、阶段计划、部署和安全报告
-├── console/                 # 运营控制台
-├── Cargo.toml               # Cargo workspace
-└── pyproject.toml
+aisoc-core          aisoc-contracts     aisoc-linux
+ aisoc-agent         aisoc-web-guard     aisoc-ingest
+ aisoc-normalize     aisoc-detection     aisoc-incident
+ aisoc-evidence      aisoc-ai            aisoc-malware
+ aisoc-trace         aisoc-policy        aisoc-response
+ aisoc-storage       aisoc-api           aisoc-console
 ```
 
-`configs/` 在部署时可以由环境管理系统提供；仓库不会生成真实证书、Agent 身份或 API Key。
+另有 `aisoc-python` PyO3 bridge，仅用于迁移回归，不在 `default-members`，也不属于生产 runtime。
 
-## 当前阶段状态
+目前已有的原生能力包括：Linux capability/collector/queue/mTLS Agent 基础链；Rust Ingest + raw append + Normalize/Detection/Incident 管线；Web/SSH/host 等确定性检测；Incident/Evidence ledger；AI Provider/Review Gate/EvidencePackage/claim verification/circuit-breaker；Malware 静态分析骨架；AttackGraph；Policy/Response runner；Axum API；Rust Console；Web Guard reverse proxy、canonicalization、Fast Path、shadow/canary/enforce 和 OpenAI-compatible provider 接入。
 
-| 阶段 | 当前状态 |
-|---|---|
-| P0-P1 | 核心契约、存储、API、迁移和工程治理主体已实现；人工架构评审仍需项目侧关闭。 |
-| P2 | Agent、身份、队列、mTLS、auditd/journald/Suricata/service-log collector、能力探测已有实现；DEB/RPM、真实 VM 兼容矩阵和升级/回滚门禁未关闭。 |
-| P3-P5 | base pipeline、Normalize、DLQ、检测、规则生命周期、主机行为链已有实现；stream profile、高 EPS 与真实多发行版采集门禁未关闭。 |
-| P6-P10 | Incident、Evidence/Claim、AI Review、恶意文件分析、跨 Host Trace 已有非生产实现；真实 PostgreSQL/Provider/Scanner/双租户/动态隔离和攻击回放仍需验收。 |
-| P11 | 响应契约、审批、租约、通知、规则治理和控制台主体已实现；多 Host Agent-side 执行、真实回滚和 HTTPS 运营门禁未关闭。 |
-| P12 | 跨发行版发布、性能、安全动态测试、备份恢复和正式运维验收尚未完成。 |
+这只是“架构已铺开”，不等于各阶段验收关闭。详细差距见 `docs/v4-plan-conformance-2026-08-11.md`。
 
-本轮重构新增了固定摘要校验的本地 IOC feed 与确定性 `ioc.exact_match` 规则。IP、域名和 SHA-256 均使用精确匹配；域名可从 Suricata DNS/HTTP 事件进入 enrichment。IOC 命中仍受现有规则生命周期治理，不直接提升为 confirmed compromise。
+## Rust-first 生产部署
 
-## 本地开发
-
-需要 Python 3.12+。完整依赖安装：
+正常 Linux 安装使用经过校验的 Rust release bundle：
 
 ```bash
-make dev-install
+make rust-first-check
+make rust-lock-check
+make rust-ci
+make rust-release
+
+sudo -E bash deploy/linux/install.sh \
+  --role control \
+  --release-dir /secure/release/aisoc-v4 \
+  --enable-services
 ```
 
-基础检查：
+生产 Dockerfile、P1/P2 Rust Compose、systemd unit 和正常 release bundle 不执行 Python/Alembic。Python 兼容环境必须显式 `--legacy-python`，旧数据库迁移必须显式 `make legacy-migrate`。
+
+P1 已新增 `aisoc-storage` SQLx/PostgreSQL migration plane 与原生 `aisoc-db migrate|health`，P1/P2 Compose、Linux production installer 和 CI 均使用该 Rust 路径，不再调用 Alembic。P3 base profile 已把 Agent inventory、batch/raw index、normalized event、Detection、Incident 与 DLQ 的权威读写切入 PostgreSQL；本地 append-only journal 继续承担 immutable raw staging、崩溃恢复和 central repair。完整 P1/P3 仍需关闭 Cargo.lock/真实 Rust CI、Object Store 与 JetStream 等门禁。
+
+完整安装说明见 `docs/deploy-linux.md`。
+
+## Web Guard
 
 ```bash
-make lint
-make typecheck
-make test
+export AISOC_WEB_GUARD_UPSTREAM=http://127.0.0.1:8080
+export AISOC_TENANT_ID=tenant-local
+export AISOC_SERVICE_ID=web-local
+export AISOC_WEB_GUARD_MODE=shadow
+cargo run --locked -p aisoc-web-guard
 ```
 
-Schema 一致性：
+Web Guard 已具备有界 Body、TE/CL 歧义拒绝、URI/Unicode canonicalization、SQLi/XSS/命令注入/遍历/SSRF/JNDI/XXE/模板/Prompt Injection 等确定性检测，以及 monitor/shadow/canary/enforce 策略。AI 默认关闭；启用后需要显式 model gateway/key/model/budget/timeout。确定性高置信结果不能被模型覆盖。
+
+尚未关闭的 P5 门禁包括：直接 mTLS Ingest 事件发送、route-specific policy/budget、TLS/H2/request-smuggling 差异测试、challenge/rate-limit 执行器与正式性能基线。
+
+## 验证命令
+
+在具备 Rust 1.82 的 Linux 环境：
 
 ```bash
-.venv/bin/aisoc-export-schemas --check
+./scripts/check-rust-first.sh
+./scripts/check-cargo-lock.sh
+cargo metadata --locked --no-deps --format-version 1
+cargo fmt --all --check
+cargo check --locked --workspace --all-targets --all-features
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+cargo test --locked --workspace
+cargo build --locked --workspace
 ```
 
-### Rust
+本次 2026-08-11 检查所在沙箱没有 `cargo/rustc/rustfmt/clippy`，外网 DNS 也阻止安装 Rust 1.82，因此不能伪造上述 Rust 命令的成功结果。静态门禁已确认当前 `Cargo.lock` 仍是旧基线，缺少 17 个 native workspace package；GitHub Actions 已改为 fail-closed，不再在 CI 内 `cargo generate-lockfile` 后继续。需要在可访问 Rust registry 的环境重新生成、审查并提交锁文件，再运行完整 Rust 门禁。
 
-需要 Rust stable、Cargo 与 Clippy：
+在当前沙箱已实际通过：Python `compileall`、V4 Rust contract schema 静态检查、SQLx migration 结构门禁、release install/upgrade/rollback/signature 测试、shell syntax、YAML parse 与更新后的 Rust-first 生产门禁。准确结果见审计/推进报告。
 
-```bash
-make rust-check
-make rust-test
-```
+## Python 遗留策略
 
-构建 PyO3 bridge：
+当前仓库仍有 287 个 `.py` 文件，其中 162 个位于 `src/aisoc`，101 个为测试，18 个位于 Alembic migration 目录（含 `env.py`），6 个为迁移/CI/静态验收工具脚本。旧 Python 实现不能简单删除：它仍是完整 PostgreSQL/FastAPI/SQLAlchemy、旧 Agent、AI、Malware、Response、Trace 等能力的迁移基线，其中一些能力尚无等价 Rust production 实现。
 
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -e . maturin==1.14.1
-make rust-extension
-.venv/bin/python -c 'import aisoc_rust; print(aisoc_rust.version())'
-```
+迁移原则：
 
-构建发布 wheel / 容器：
+1. 生产入口、systemd、Docker、release bundle 不回退 Python。
+2. 新功能优先进入计划书对应 Rust crate，而不是继续扩展 Python service layer。
+3. Python 测试可保留用于 differential/regression，直到 Rust 端存在等价测试与真实 Linux 验收。
+4. SQLAlchemy/Alembic 只有在 SQLx schema/migration、数据兼容和回滚测试完成后才能退役。
+5. PyO3 bridge 仅用于迁移验证，不得成为生产关键依赖。
 
-```bash
-make rust-wheel
-make container
-```
+## 当前主要缺口
 
-`deploy/Dockerfile` 会验证并安装 `dist-rust/` 中的 Rust wheel；缺少 wheel 时镜像构建直接失败，而不是静默使用 Python fallback。CI 的 release job 会先生成 Rust wheel，再构建运行镜像，并同时上传 Python 与 Rust 制品。
+- `Cargo.lock` 未与完整 Workspace 同步，导致 `--locked` release/CI 无法通过。
+- P1 SQLx/PostgreSQL migration plane 与 P3 base central repository cutover 已落地，但 `Cargo.lock`/真实 Rust 1.82 + PostgreSQL 验收尚未关闭。
+- P3 DLQ lease/replay 已进入 Rust base profile；NATS/JetStream、Object Store、late/gap 故障注入、enrichment/freshness 的正式 Rust 路径仍未完成。
+- P7/P8 AI Review/Claim Verification 尚未形成独立生产 worker/persistence 全链。
+- P9 YARA-X/ClamAV/reputation/sandbox concrete adapters 不完整。
+- P10 跨主机 trace 与真实数据输入闭环不足。
+- P11 ResponseRunner 尚未与 Agent/control-plane 审批、下发、TTL/rollback 形成端到端闭环。
+- P12 Console 仍是基础 Rust Console，不是完整运营控制台。
+- P13/P14 的兼容、安全、性能、灾备和真实业务试点尚未执行。
 
-CI 会执行 `cargo fmt --check --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features -- -D warnings`、`cargo test --workspace` 以及 Rust-enabled Python unit tests。
+## 文档
 
-## 通用 Linux 部署
+- 核心计划书：`AI-SOC_Rust_AI-Web-Guard_项目计划书_V4.0.docx`
+- 本轮 P0-P14 审计：`docs/v4-plan-conformance-2026-08-11.md`
+- V05 P1 SQLx 推进：`docs/v4-next-step-2026-08-11.md`
+- V06 P3 central/replay 推进：`docs/v4-next-step-v06-2026-08-11.md`
+- P3 DLQ 重放 runbook：`docs/p3-dlq-replay-runbook.md`
+- Rust 迁移记录：`docs/v4-rust-migration.md`
+- Linux Rust-first 部署：`docs/deploy-linux.md`
+- 威胁模型：`docs/architecture/threat-model.md`
+- 兼容矩阵：`docs/compatibility-matrix.md`
+- 测试计划：`docs/test-plan.md`
+- P0-P14 阶段计划：`docs/phase-p0-plan.md` ～ `docs/phase-p14-plan.md`
 
-部署脚本不假设 apt、yum/dnf、systemd、auditd 或任何发行版预装工具：
-
-```bash
-export AISOC_DATABASE_URL='postgresql+asyncpg://aisoc:<password>@db.internal:5432/aisoc'
-export AISOC_RUST_WHEEL=/secure/release/aisoc_python-0.1.0-cp312-abi3-linux_x86_64.whl
-sudo -E bash deploy/linux/install.sh --role control --enable-services
-```
-
-也可以在目标机提供 Rust/Cargo 1.82+，让安装器用固定版本 maturin 从源码构建 bridge。只有开发或诊断场景才应显式使用 `--allow-python-core-fallback`。
-
-Agent 必须使用已完成 enrollment 的私有配置，安装器不会生成假身份或假证书：
-
-```bash
-export AISOC_AGENT_CONFIG_SOURCE=/secure/path/agent.json
-sudo -E bash deploy/linux/install.sh --role agent --enable-services
-```
-
-详细说明见 [docs/deploy-linux.md](docs/deploy-linux.md)。
-
-## IOC feed
-
-IOC feed 是启动时只读加载的本地、固定摘要数据源。配置必须成对出现：
-
-```text
-AISOC_DETECTION_IOC_FEED_PATH=/etc/aisoc/ioc/feed.json
-AISOC_DETECTION_IOC_FEED_SHA256=<64 lowercase hex chars>
-```
-
-Feed 仅接受普通、非 symlink、非 group/world-writable 文件，并在 JSON 解析前校验 SHA-256。其用途是提供可复现的确定性匹配，不替代后续完整的受管威胁情报生命周期。
-
-## 生产限制
-
-当前 `Settings.auth_mode` 只有 `development`。当 `AISOC_ENVIRONMENT=production` 时配置会 fail closed，因此仓库目前不能宣称生产认证已完成。正式发布前还必须完成生产身份认证、跨发行版 VM 矩阵、真实 PostgreSQL/双租户验收、响应回滚、性能容量、备份恢复和安全动态测试。
-
-本次重构明细与未关闭项见 [docs/refactor-2026-08-11.md](docs/refactor-2026-08-11.md)。
-
-## 贡献与维护
-
-```cmd
 git add -A
 git commit -m "Update project"
 git push
-```

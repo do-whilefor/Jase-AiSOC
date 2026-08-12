@@ -1,137 +1,118 @@
-# 通用 Linux 部署
+# 通用 Linux Rust-first 部署
 
-`deploy/linux/install.sh` 是 AI-SOC 的原生 Linux 安装入口。它不把某个发行版、包管理器、init system 或安全工具作为运行前提。
+`deploy/linux/install.sh` 是 AI-SOC V4 的原生 Linux 安装入口。正常安装只接受经过校验的 Rust release bundle；Python 仅能通过显式 `--legacy-python` 进入迁移兼容环境，不属于生产主链路。
 
 ## 支持策略
 
-目标发行版包括 Ubuntu、Debian、RHEL、Rocky Linux、AlmaLinux、Fedora、openSUSE、Arch Linux 以及兼容的主流 Linux Server。当前仓库提供通用安装逻辑，但“支持”不等于“Certified”：正式 Certified 状态必须来自固定版本 VM/镜像的持续兼容测试。
+目标是兼容 Ubuntu、Debian、RHEL/Rocky/Alma、Fedora、openSUSE、Arch 及兼容的主流 Linux Server。当前仓库具备通用安装器、systemd 单元、能力探测与 release install/upgrade/rollback 机制，但 P13 的固定版本 VM/镜像兼容矩阵尚未执行完成，因此不能把这些发行版标记为 Certified。
 
 安装器会：
 
-- 检查 Linux 与 Python 3.12+。
-- 可选检测 `apt-get`、`dnf`、`yum`、`zypper`、`pacman` 安装基础依赖。
-- 创建 `aisoc` 服务账号和 `/opt/aisoc`、`/etc/aisoc`、`/var/lib/aisoc*`。
-- 安装 Python 服务层，并默认要求可验证的 `aisoc_rust` bridge；Control role 随后执行 Alembic migration。
-- 检测 PID 1 是否为 systemd；若不是，仅给出手动进程命令，不直接失败。
-- Agent role 要求已有 enrollment 配置，不自动伪造 tenant/host/agent identity 或证书。
+- 要求 Linux；正常模式不检查、不安装 Python。
+- 可选检测 `apt-get`、`dnf`、`yum`、`zypper`、`pacman`，安装 CA、curl、OpenSSL、Nginx 等基础依赖。
+- 创建 `aisoc` 服务账号以及 `/opt/aisoc`、`/etc/aisoc`、Agent/Ingest 状态目录。
+- 通过 `deploy/linux/release-manager.sh` 校验 `manifest.sha256`，生产环境默认要求 detached signature，并原子切换 `current`/`previous` release。
+- 根据 role 配置 Rust Agent、Ingest、API、Console、Web Guard systemd 服务。
+- Agent role 要求外部 enrollment 生成的真实配置，不伪造 tenant/host/agent identity 或证书。
 
-## 前置条件
+## 正常部署前置条件
 
-Control role 至少需要：
+至少需要：
 
-- Python 3.12+ 与 `venv`/pip。
-- 可访问的 PostgreSQL。
-- 正确配置的 `AISOC_DATABASE_URL`。
-- 与目标 Python/架构兼容的 `AISOC_RUST_WHEEL`，或 Rust/Cargo 1.82+ 用于源码构建 bridge。
+- 已构建的 Rust release bundle，包含 `aisoc-agent`、`aisoc-ingest`、`aisoc-api`、`aisoc-console`、`aisoc-web-guard`、`aisoc-db` 和 `manifest.sha256`。
+- `openssl`、`sha256sum`；生产环境还需要 release verification public key。
+- Control role 首次安装需要长度至少 32 的 bootstrap API token 与合法 `ten_...` tenant id，或提供 `AISOC_API_AUTH_SOURCE`。
+- Agent role 需要 enrollment 后的 `agent-rust.json`，启用 mTLS 时还需要证书、私钥、CA 路径。
 
-Agent role 至少需要：
+当前已实现原生 PostgreSQL + SQLx migration plane，生产 Control 安装要求 `AISOC_DATABASE_URL` 并在启动服务前运行 release 内的 `aisoc-db migrate`。API 在 production 也要求数据库连接并把 PostgreSQL health 纳入 `/readyz`。但 Ingest/Detection/Incident 等 central repository 尚未完全从本地 append-only state 切换到 PostgreSQL/Object Store，因此 P1/P3 数据层验收仍未关闭。
 
-- Python 3.12+。
-- 与目标 Python/架构兼容的 `AISOC_RUST_WHEEL`，或 Rust/Cargo 1.82+。
-- enrollment 后的私有 `agent.json`。
-- 若启用 mTLS ingest，配置中必须包含对应证书、私钥与 CA 路径。
+## 构建 release bundle
 
-journald、auditd、eBPF、Suricata、Falco 都是能力项，不是基础安装前提。Agent 应通过 `aisoc-probe-platform` 报告可用、降级或不可用状态。
+在具备 Rust 1.82 且 `Cargo.lock` 已正确提交的构建机上：
+
+```bash
+make rust-first-check
+make rust-lock-check
+make rust-ci
+make rust-release
+```
+
+当前 `Cargo.lock` 若未覆盖所有 native workspace package，`make rust-lock-check` 会 fail closed；先在可访问 Rust registry 的可信构建环境执行 `cargo generate-lockfile`，审查并提交锁文件，再继续 release build。
 
 ## 安装 Control Plane
 
 ```bash
-export AISOC_DATABASE_URL='postgresql+asyncpg://aisoc:<password>@db.internal:5432/aisoc'
-export AISOC_ENVIRONMENT=development
-export AISOC_RUST_WHEEL=/secure/release/aisoc_python-0.1.0-cp312-abi3-linux_x86_64.whl
+export AISOC_RELEASE_DIR=/secure/release/aisoc-v4
+export AISOC_RELEASE_VERSION=v4.0.0-dev.1
+export AISOC_BOOTSTRAP_API_TOKEN='replace-with-at-least-32-random-characters'
+export AISOC_BOOTSTRAP_TENANT_ID='ten_local001'
+export AISOC_ENVIRONMENT=production
+export AISOC_RELEASE_VERIFY_KEY=/etc/aisoc-release/release-public.pem
+export AISOC_DATABASE_URL='postgresql://aisoc:replace-me@db.internal:5432/aisoc'
 sudo -E bash deploy/linux/install.sh --role control --enable-services
 ```
 
-如果未提供 `AISOC_RUST_WHEEL`，但系统存在 Cargo，安装器会固定使用 `maturin==1.14.1` 构建 `crates/aisoc-python` 并在安装后执行 `import aisoc_rust` 验证。正常安装缺少 wheel 和 Cargo 时会 fail closed。`--allow-python-core-fallback` 只用于开发/诊断，不属于正式部署路径。
+Control role 会生成 ingest control/proxy secret，并安装 Nginx mTLS 模板；证书 serial 映射和真实 TLS 路径仍必须由部署系统填充后再启用公网/跨主机 Ingest。
 
-如果机器缺少 Python/CA/OpenSSL 等基础包，可让安装器使用检测到的包管理器：
+## 安装 Agent
+
+```bash
+export AISOC_RELEASE_DIR=/secure/release/aisoc-v4
+export AISOC_RELEASE_VERSION=v4.0.0-dev.1
+export AISOC_AGENT_CONFIG_SOURCE=/secure/enrollment/agent-rust.json
+sudo -E bash deploy/linux/install.sh --role agent --enable-services
+```
+
+Agent 私有配置安装为 `/etc/aisoc/agent-rust.json`，默认 state 目录是 `/var/lib/aisoc-agent`。journald、auditd、eBPF、Suricata、Falco 属于 capability，不是所有安装的硬前提；实际 collector 取决于 capability probe 和配置。
+
+## Edge / Web Guard
+
+```bash
+export AISOC_RELEASE_DIR=/secure/release/aisoc-v4
+sudo -E bash deploy/linux/install.sh --role edge --enable-services
+```
+
+Web Guard 配置使用 `AISOC_WEB_GUARD_*`。AI 默认关闭；启用时必须显式提供模型 gateway、key、model、预算和 timeout。生产切换顺序仍应是 monitor/shadow -> canary -> enforce，并以 P5/P14 的误报和延迟门禁为准。
+
+## 非 systemd 系统
+
+安装器会完成 release 与配置，但不启用服务。可由现有 supervisor 直接运行 Rust binary：
+
+```bash
+/opt/aisoc/current/bin/aisoc-ingest
+/opt/aisoc/current/bin/aisoc-api
+/opt/aisoc/current/bin/aisoc-console
+/opt/aisoc/current/bin/aisoc-web-guard
+/opt/aisoc/current/bin/aisoc-agent run /etc/aisoc/agent-rust.json
+```
+
+## 回滚
+
+```bash
+sudo AISOC_INSTALL_PREFIX=/opt/aisoc deploy/linux/release-manager.sh status
+sudo AISOC_INSTALL_PREFIX=/opt/aisoc deploy/linux/release-manager.sh rollback
+```
+
+Release manager 只切换已经通过 checksum/signature 验证的不可变 release，并尝试重启已启用的 systemd unit。
+
+## 迁移期 Python 基线
+
+只有明确需要对照旧实现时才使用：
 
 ```bash
 sudo -E bash deploy/linux/install.sh \
   --role control \
-  --install-system-deps \
-  --enable-services
+  --release-dir /secure/release/aisoc-v4 \
+  --legacy-python
 ```
 
-`--install-system-deps` 只安装最小通用依赖，不会安装 auditd、Suricata、Falco 或发行版特有安全工具。
+它会创建 `/opt/aisoc/legacy-python-venv`。该环境不被 Rust systemd unit、正常 Dockerfile、P1/P2 Rust Compose 或 release bundle引用。Alembic/FastAPI/SQLAlchemy 路径仅用于迁移回归；`make legacy-migrate` 也是同一性质。生产迁移使用 `make migrate AISOC_DATABASE_URL=postgresql://...` 或 release 内的 `aisoc-db migrate`。
 
-## 安装 Agent
+## 当前未关闭的部署门禁
 
-先通过平台的 enrollment 流程得到真实 Agent 配置，再执行：
-
-```bash
-export AISOC_AGENT_CONFIG_SOURCE=/secure/enrollment/agent.json
-export AISOC_RUST_WHEEL=/secure/release/aisoc_python-0.1.0-cp312-abi3-linux_x86_64.whl
-sudo -E bash deploy/linux/install.sh --role agent --enable-services
-```
-
-配置会以 `aisoc:aisoc`、`0600` 安装到 `/etc/aisoc/agent.json`，与 Agent 的私有配置门禁一致；默认 Agent state 位于 `/var/lib/aisoc-agent`。
-
-不要把 `deploy/agent.example.json` 当成真实身份配置；它只用于字段示例。
-
-## 非 systemd 系统
-
-如果 `/proc/1/comm` 不是 `systemd`，安装器不会假设 `systemctl` 可用。可使用现有 init/supervisor 运行：
-
-```bash
-/opt/aisoc/.venv/bin/aisoc-api
-/opt/aisoc/.venv/bin/aisoc-ingest
-/opt/aisoc/.venv/bin/aisoc-agent run --config /etc/aisoc/agent.json
-```
-
-按 role 只启动需要的进程。
-
-## systemd
-
-仓库提供：
-
-```text
-deploy/systemd/aisoc-api.service
-deploy/systemd/aisoc-ingest.service
-deploy/systemd/aisoc-agent.service
-```
-
-安装后可检查：
-
-```bash
-systemctl status aisoc-api.service
-systemctl status aisoc-ingest.service
-systemctl status aisoc-agent.service
-journalctl -u aisoc-agent.service
-```
-
-## 能力探测
-
-```bash
-/opt/aisoc/.venv/bin/aisoc-probe-platform --pretty
-```
-
-探测结果用于决定 collector 级别和降级策略。缺失 auditd/eBPF 或 systemd 不应使整个 Agent 无条件退出；只有被明确配置为必需的能力失败时才应阻断相关功能。
-
-## IOC feed
-
-可选本地 IOC feed 需要同时配置路径与固定 SHA-256：
-
-```bash
-export AISOC_DETECTION_IOC_FEED_PATH=/etc/aisoc/ioc/feed.json
-export AISOC_DETECTION_IOC_FEED_SHA256='<sha256>'
-```
-
-安装器会把这两个值写入 `/etc/aisoc/aisoc.env`。Feed 本身应由部署系统以只读、非链接、非 group/world-writable 方式下发。
-
-## 目录与权限
-
-默认目录：
-
-```text
-/opt/aisoc                  application + virtualenv
-/etc/aisoc                 configuration
-/var/lib/aisoc             control-plane state/evidence
-/var/lib/aisoc-agent       Agent local state
-```
-
-不要把模型 API key、CA private key、quarantine key 或 webhook secret 提交进仓库。生产环境应由 secret manager 或受限配置管理系统注入。
-
-## 当前限制
-
-仓库当前只实现 development authentication，并在 `AISOC_ENVIRONMENT=production` 时 fail closed。正式生产部署前必须补齐生产认证，并完成目标发行版固定版本的 VM 级安装/升级/卸载、collector 降级、SELinux/AppArmor、文件权限、响应回滚和高负载验证。
+- P1 central repository cutover、SQLx migration 的真实 PostgreSQL integration execution，以及稳定 `Cargo.lock`。
+- P2 多发行版 VM 上的真实 mTLS enrollment、journald/audit/process/network collector 验证。
+- P5 Web Guard TLS/H2/走私差异测试、性能基线和直接 Ingest 事件链路。
+- P11 Agent Action Runner 端到端审批、执行、TTL、rollback 验证。
+- P13 SELinux/AppArmor、fuzz/DAST、备份恢复、RPO/RTO、灾难演练。
+- P14 真实业务 shadow/canary/block 试点和 Go/No-Go 签字。

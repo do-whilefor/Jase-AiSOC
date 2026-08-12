@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import gzip
 import os
 import ssl
@@ -204,18 +205,13 @@ async def test_ingest_mtls_heartbeat_batch_and_clone_rejection(tmp_path: Path) -
     client_context = _client_ssl_context(client_cert_path, client_key_path, ca.ca_certificate_pem)
 
     try:
-        async with httpx.AsyncClient(
-            verify=client_context,
-            timeout=10.0,
-            trust_env=False,
-            follow_redirects=False,
-        ) as wrong_host_client:
-            with pytest.raises(httpx.ConnectError):
-                await wrong_host_client.post(
-                    f"https://127.0.0.2:{port}/v1/agent/heartbeat",
-                    content=b"{}",
-                    headers={"Content-Type": "application/json"},
-                )
+        with pytest.raises(ssl.SSLCertVerificationError):
+            await asyncio.open_connection(
+                host="127.0.0.1",
+                port=port,
+                ssl=client_context,
+                server_hostname="127.0.0.2",
+            )
 
         async with httpx.AsyncClient(
             verify=client_context,

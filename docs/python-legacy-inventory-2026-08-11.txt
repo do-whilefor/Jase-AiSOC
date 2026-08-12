@@ -1,0 +1,317 @@
+AI-SOC V4 Python Legacy / Migration Inventory — 2026-08-11
+
+Interpretation: existence of these files does NOT mean the current production entrypoints invoke Python. The Rust-first production gate separately checks Dockerfiles, Compose, systemd and Make runtime targets. This inventory records remaining migration debt and regression assets.
+
+Summary:
+  migrations: 18 files, 3808 LOC
+  scripts: 6 files, 942 LOC
+  src/aisoc/agent_core: 21 files, 9071 LOC
+  src/aisoc/ai_review: 12 files, 3363 LOC
+  src/aisoc/api_server: 22 files, 2238 LOC
+  src/aisoc/config: 2 files, 602 LOC
+  src/aisoc/detection_engine: 13 files, 2121 LOC
+  src/aisoc/domain: 13 files, 5338 LOC
+  src/aisoc/enrich: 3 files, 386 LOC
+  src/aisoc/incident_engine: 4 files, 1443 LOC
+  src/aisoc/ingest_gateway: 3 files, 482 LOC
+  src/aisoc/malware_engine: 9 files, 1612 LOC
+  src/aisoc/normalize: 12 files, 2019 LOC
+  src/aisoc/notification_engine: 4 files, 596 LOC
+  src/aisoc/observability: 4 files, 284 LOC
+  src/aisoc/platform: 4 files, 545 LOC
+  src/aisoc/process: 2 files, 106 LOC
+  src/aisoc/response_engine: 7 files, 2047 LOC
+  src/aisoc/root: 4 files, 431 LOC
+  src/aisoc/storage: 19 files, 12681 LOC
+  src/aisoc/trace_engine: 4 files, 1245 LOC
+  tests: 101 files, 23723 LOC
+  TOTAL: 287 files, 75083 LOC
+
+Per-file inventory:
+src/aisoc/__init__.py	3 LOC	legacy functional baseline (root); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/_rustcore.py	246 LOC	legacy functional baseline (root); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/__init__.py	227 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/__main__.py	112 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/artifact_builder.py	145 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/auditd.py	231 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/auditd_collector.py	728 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/contracts.py	249 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/downloader.py	153 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/enrollment.py	49 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/file_tail.py	250 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/identity.py	747 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/installer.py	957 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/installer_pipeline.py	63 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/journald_collector.py	547 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/process.py	750 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/queue.py	1112 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/releases.py	639 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/runtime.py	644 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/service_log_collector.py	387 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/supervisor.py	537 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/suricata_collector.py	381 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/agent_core/transport.py	163 LOC	legacy functional baseline (agent_core); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ai_review/__init__.py	32 LOC	legacy functional baseline (ai_review); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ai_review/evidence.py	88 LOC	legacy functional baseline (ai_review); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ai_review/evidence_verifier.py	293 LOC	legacy functional baseline (ai_review); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ai_review/gate.py	109 LOC	legacy functional baseline (ai_review); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ai_review/orchestrator.py	1078 LOC	legacy functional baseline (ai_review); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ai_review/prompting.py	167 LOC	legacy functional baseline (ai_review); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ai_review/providers/__init__.py	36 LOC	legacy functional baseline (ai_review); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ai_review/providers/base.py	35 LOC	legacy functional baseline (ai_review); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ai_review/providers/client.py	109 LOC	legacy functional baseline (ai_review); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ai_review/providers/openai_compatible.py	598 LOC	legacy functional baseline (ai_review); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ai_review/runtime.py	152 LOC	legacy functional baseline (ai_review); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ai_review/tool_gateway.py	666 LOC	legacy functional baseline (ai_review); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/__init__.py	5 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/__main__.py	20 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/app.py	230 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/auth.py	90 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/dependencies.py	65 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/error_handlers.py	105 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/__init__.py	1 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/agents.py	83 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/console.py	196 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/detections.py	58 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/events.py	91 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/freshness.py	128 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/health.py	44 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/hosts.py	37 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/incidents.py	342 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/malware.py	273 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/operators.py	69 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/responses.py	173 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/rules.py	67 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/tenants.py	36 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/routes/traces.py	110 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/api_server/tenant_tokens.py	15 LOC	legacy functional baseline (api_server); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/config/__init__.py	5 LOC	legacy functional baseline (config); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/config/settings.py	597 LOC	legacy functional baseline (config); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/credentials.py	60 LOC	legacy functional baseline (root); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/__init__.py	44 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/base.py	118 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/engine.py	68 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/governance.py	294 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/lifecycle.py	210 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/rule_registry.py	51 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/rules/__init__.py	3 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/rules/host_behavior.py	523 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/rules/ioc_match.py	100 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/rules/ssh_bruteforce.py	102 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/rules/web_recon_scan.py	162 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/rules/web_request_anomalies.py	202 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/detection_engine/worker.py	244 LOC	legacy functional baseline (detection_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/__init__.py	381 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/ai_review.py	663 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/console.py	1588 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/detection.py	118 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/identifiers.py	40 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/incident.py	401 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/malware.py	474 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/resources.py	144 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/response.py	569 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/rule_lifecycle.py	192 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/schema_export.py	166 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/security_event.py	153 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/domain/trace.py	449 LOC	legacy functional baseline (domain); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/enrich/__init__.py	14 LOC	legacy functional baseline (enrich); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/enrich/enrichment.py	120 LOC	legacy functional baseline (enrich); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/enrich/ioc.py	252 LOC	legacy functional baseline (enrich); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/errors.py	122 LOC	legacy functional baseline (root); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/incident_engine/__init__.py	31 LOC	legacy functional baseline (incident_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/incident_engine/correlator.py	811 LOC	legacy functional baseline (incident_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/incident_engine/lifecycle.py	382 LOC	legacy functional baseline (incident_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/incident_engine/worker.py	219 LOC	legacy functional baseline (incident_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ingest_gateway/__init__.py	15 LOC	legacy functional baseline (ingest_gateway); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ingest_gateway/__main__.py	31 LOC	legacy functional baseline (ingest_gateway); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/ingest_gateway/server.py	436 LOC	legacy functional baseline (ingest_gateway); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/malware_engine/__init__.py	30 LOC	legacy functional baseline (malware_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/malware_engine/__main__.py	105 LOC	legacy functional baseline (malware_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/malware_engine/clamav_scanner.py	230 LOC	legacy functional baseline (malware_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/malware_engine/orchestrator.py	366 LOC	legacy functional baseline (malware_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/malware_engine/sandbox.py	91 LOC	legacy functional baseline (malware_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/malware_engine/scanners.py	40 LOC	legacy functional baseline (malware_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/malware_engine/static.py	417 LOC	legacy functional baseline (malware_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/malware_engine/worker.py	139 LOC	legacy functional baseline (malware_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/malware_engine/yara_x_scanner.py	194 LOC	legacy functional baseline (malware_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/normalize/__init__.py	40 LOC	legacy functional baseline (normalize); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/normalize/agent_normalizer.py	54 LOC	legacy functional baseline (normalize); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/normalize/auditd_normalizer.py	482 LOC	legacy functional baseline (normalize); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/normalize/base.py	116 LOC	legacy functional baseline (normalize); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/normalize/falco_normalizer.py	228 LOC	legacy functional baseline (normalize); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/normalize/journald_normalizer.py	206 LOC	legacy functional baseline (normalize); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/normalize/normalizer_registry.py	51 LOC	legacy functional baseline (normalize); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/normalize/service_log_normalizer.py	176 LOC	legacy functional baseline (normalize); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/normalize/stub_normalizers.py	58 LOC	legacy functional baseline (normalize); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/normalize/suricata_normalizer.py	221 LOC	legacy functional baseline (normalize); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/normalize/watermark.py	62 LOC	legacy functional baseline (normalize); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/normalize/worker.py	325 LOC	legacy functional baseline (normalize); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/notification_engine/__init__.py	23 LOC	legacy functional baseline (notification_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/notification_engine/__main__.py	56 LOC	legacy functional baseline (notification_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/notification_engine/webhook.py	365 LOC	legacy functional baseline (notification_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/notification_engine/worker.py	152 LOC	legacy functional baseline (notification_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/observability/__init__.py	6 LOC	legacy functional baseline (observability); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/observability/freshness.py	179 LOC	legacy functional baseline (observability); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/observability/logging.py	76 LOC	legacy functional baseline (observability); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/observability/metrics.py	23 LOC	legacy functional baseline (observability); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/platform/__init__.py	29 LOC	legacy functional baseline (platform); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/platform/__main__.py	41 LOC	legacy functional baseline (platform); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/platform/contracts.py	142 LOC	legacy functional baseline (platform); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/platform/linux.py	333 LOC	legacy functional baseline (platform); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/process/__init__.py	3 LOC	legacy functional baseline (process); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/process/__main__.py	103 LOC	legacy functional baseline (process); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/response_engine/__init__.py	55 LOC	legacy functional baseline (response_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/response_engine/__main__.py	76 LOC	legacy functional baseline (response_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/response_engine/adapters.py	305 LOC	legacy functional baseline (response_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/response_engine/native.py	1059 LOC	legacy functional baseline (response_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/response_engine/policy.py	250 LOC	legacy functional baseline (response_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/response_engine/runner.py	154 LOC	legacy functional baseline (response_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/response_engine/worker.py	148 LOC	legacy functional baseline (response_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/__init__.py	15 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/_safe_open.py	113 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/agent_identity.py	613 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/ai_review_repository.py	831 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/console_repository.py	2665 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/database.py	45 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/detection_repository.py	196 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/event_repository.py	288 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/incident_repository.py	877 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/malware_repository.py	716 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/models.py	3070 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/notification_repository.py	382 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/object_store.py	110 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/operator_repository.py	165 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/quarantine.py	184 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/repositories.py	239 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/response_repository.py	1110 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/rule_lifecycle_repository.py	517 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/storage/trace_repository.py	545 LOC	legacy functional baseline (storage); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/trace_engine/__init__.py	17 LOC	legacy functional baseline (trace_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/trace_engine/builder.py	1132 LOC	legacy functional baseline (trace_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/trace_engine/export.py	34 LOC	legacy functional baseline (trace_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+src/aisoc/trace_engine/query.py	62 LOC	legacy functional baseline (trace_engine); retained for migration/differential acceptance, not an approved Rust-first production runtime entrypoint
+tests/__init__.py	1 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/__init__.py	1 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/_helpers.py	281 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/conftest.py	8 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_agent_identity.py	266 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_ai_review_persistence.py	505 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_detection_persistence.py	214 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_freshness.py	347 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_incident_persistence.py	224 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_ingest_mtls.py	298 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_malware_persistence.py	210 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_notification_persistence.py	137 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_p1_api.py	118 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_pipeline_e2e.py	262 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_response_persistence.py	372 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_rule_lifecycle_persistence.py	263 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/integration/test_trace_persistence.py	262 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/replay/build_datasets.py	612 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/smoke/linux_agent_supervisor_smoke.py	406 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/smoke/linux_ingest_e2e_smoke.py	284 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/test_p0_baseline.py	100 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/__init__.py	1 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/detection/__init__.py	1 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/detection/_helpers.py	137 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/detection/test_engine.py	98 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/detection/test_host_behavior.py	397 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/detection/test_ioc_match.py	50 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/detection/test_rule_governance.py	67 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/detection/test_rule_lifecycle.py	202 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/detection/test_ssh_bruteforce.py	99 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/detection/test_web_recon_scan.py	119 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/detection/test_web_request_anomalies.py	83 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/normalize/__init__.py	0 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/normalize/test_auditd_normalizer.py	298 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/normalize/test_falco_normalizer.py	124 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/normalize/test_normalize.py	678 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_agent_artifact.py	94 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_agent_contracts.py	125 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_agent_identity.py	328 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_agent_installer.py	718 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_agent_process.py	243 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_agent_queue.py	314 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_agent_releases.py	483 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_agent_runtime.py	502 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_agent_schemas.py	36 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_agent_supervisor.py	208 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_ai_review_gate.py	239 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_ai_review_orchestrator.py	373 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_ai_review_providers.py	509 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_ai_review_repository.py	371 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_ai_review_runtime.py	152 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_ai_review_tool_gateway.py	293 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_ai_review_verification.py	753 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_api_basics.py	253 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_auditd_aggregator.py	90 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_auditd_collector.py	305 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_clamav_scanner.py	201 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_config.py	255 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_console_api.py	606 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_console_repository.py	1167 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_detection_worker.py	373 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_downloader.py	282 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_freshness_monitor.py	45 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_incident_correlator.py	233 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_incident_lifecycle.py	263 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_incident_repository.py	351 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_incident_worker.py	194 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_ioc_enricher.py	82 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_linux_platform.py	114 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_malware_api.py	162 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_malware_orchestrator.py	200 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_malware_quarantine.py	106 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_malware_sandbox.py	114 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_malware_static.py	95 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_malware_worker.py	141 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_normalize_worker.py	199 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_notification_repository.py	232 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_notification_webhook.py	201 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_notification_worker.py	164 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_object_store.py	128 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_operator_repository.py	78 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_platform_cli.py	19 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_platform_contracts.py	70 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_response_adapters.py	360 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_response_api.py	291 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_response_native.py	385 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_response_policy.py	240 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_response_rbac.py	63 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_response_repository.py	315 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_response_worker.py	248 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_review_route_security.py	41 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_rule_lifecycle_api.py	236 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_rule_lifecycle_repository.py	324 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_rust_core.py	84 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_security_event.py	53 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_tenant_tokens.py	23 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_trace_api.py	101 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_trace_builder.py	357 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_trace_repository.py	165 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_transport.py	294 LOC	legacy/regression test; retained to compare behavior during Rust migration
+tests/unit/test_yara_x_scanner.py	154 LOC	legacy/regression test; retained to compare behavior during Rust migration
+migrations/env.py	62 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260803_0001_p1_core_tables.py	157 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260803_0002_tenant_credentials.py	57 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260803_0003_agent_identity.py	203 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260804_0004_agent_events.py	106 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260804_0005_normalize_pipeline.py	254 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260804_0006_detection_engine.py	84 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260808_0007_detection_dedupe_scope.py	53 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260809_0008_p6_incident_engine.py	630 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260809_0009_p7_ai_review.py	281 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260809_0010_p8_claim_verification.py	334 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260809_0011_p9_malware_analysis.py	252 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260809_0012_p10_attack_trace.py	423 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260809_0013_p11_response_control.py	346 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260809_0014_p11_notification_delivery.py	143 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260809_0015_p11_agent_version_inventory.py	38 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260809_0016_p11_rule_lifecycle.py	306 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+migrations/versions/20260809_0017_fk_deferrable.py	79 LOC	legacy Alembic/Python migration history; production database migration path is native Rust SQLx
+scripts/bootstrap_agent_enrollment.py	153 LOC	migration-period operator/build tooling; still Python and should be replaced by aisocctl/native release tooling before final V4 closure
+scripts/build_agent_artifact.py	105 LOC	migration-period operator/build tooling; still Python and should be replaced by aisocctl/native release tooling before final V4 closure
+scripts/check-central-repository.py	114 LOC	development/CI verification script only; not production runtime business logic
+scripts/check-sqlx-migrations.py	107 LOC	development/CI verification script only; not production runtime business logic
+scripts/check_v4_contract_schemas.py	293 LOC	development/CI verification script only; not production runtime business logic
+scripts/replay_detection.py	170 LOC	migration differential replay baseline; authoritative V4 replay gate is the Rust aisoc-detection integration test

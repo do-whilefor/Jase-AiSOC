@@ -712,9 +712,10 @@ class AttackTraceBuilder:
                     )
                 if followup is not None:
                     ids = tuple(sorted(set(evidence_ids)))
+                    step_material = f"{source_host}|{target_host}|{session_key}"
                     steps.append(
                         TraceStep(
-                            step_id=f"tst_{self._digest(f'{source_host}|{target_host}|{session_key}')[:24]}",
+                            step_id=f"tst_{self._digest(step_material)[:24]}",
                             kind=TraceStepKind.LATERAL_MOVEMENT,
                             event_time=followup.event.event_time,
                             source_host_id=source_host,

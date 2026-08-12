@@ -1,3 +1,8 @@
+#![forbid(unsafe_code)]
+
+#[cfg(not(target_os = "linux"))]
+compile_error!("aisoc-linux targets Linux only");
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs::{self, File};
@@ -91,6 +96,8 @@ impl CollectorState {
 pub enum CapabilityLevel {
     L0,
     L1,
+    L2,
+    L3,
 }
 
 impl CapabilityLevel {
@@ -98,6 +105,8 @@ impl CapabilityLevel {
         match self {
             Self::L0 => "L0",
             Self::L1 => "L1",
+            Self::L2 => "L2",
+            Self::L3 => "L3",
         }
     }
 }

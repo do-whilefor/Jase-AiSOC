@@ -1,0 +1,21 @@
+[package]
+name = "aisoc-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Rust Axum tenant-scoped AI-SOC control-plane API"
+publish = false
+
+[dependencies]
+aisoc-contracts = { path = "../aisoc-contracts" }
+aisoc-core = { path = "../aisoc-core" }
+aisoc-storage = { path = "../aisoc-storage" }
+axum = "=0.8.3"
+reqwest = { version = "=0.12.15", default-features = false, features = ["json", "rustls-tls"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "=1.44.1", features = ["macros", "net", "rt-multi-thread", "signal"] }
+tracing.workspace = true
+tracing-subscriber = { version = "=0.3.19", features = ["env-filter", "fmt", "json"] }
+uuid.workspace = true

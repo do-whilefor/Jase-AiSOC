@@ -5,9 +5,9 @@
 | 阶段 | 目标 | 关键前置/门禁 | 状态 |
 |---|---|---|---|
 | P0 | 架构、威胁、Schema、部署和工程基线 | 人工架构/安全评审，无阻塞项 | 进行中 |
-| P1 | Python 核心平台、迁移、对象存储抽象、健康页 | P0 Accepted；锁定安装与全链路测试 | 进行中（本地门禁已验证，待 P0/CI） |
-| P2 | Linux Agent、能力探测、缓存、mTLS、制品 | P0/P1 契约；跨发行版安装/采集/降级 | 进行中（实验：探测、身份、进程 runtime、有界候选健康门禁、本地 tar 安装；本轮新增 mTLS Ingest 网关 + Agent 传输 + 单活租约续期，Docker 级闭环已实现并单元测试） |
-| P3 | gRPC 接入、JetStream、标准化、DLQ/重放 | P1 Schema + P2 批次；幂等/乱序/非法数据 | 进行中（base 管道已实现并修复实际 watermark/迟到语义；FreshnessMonitor 后台任务 + `/api/v1/freshness`(+`/metrics`) 已实现并经真实 PostgreSQL 集成测试验证；DLQ 重放消费者已实现并接入 normalize worker 循环；资产富化 Enricher 已接入 normalize 管道；stream profile/NATS 仍未完成） |
+| P1 | Rust 平台与工程治理、SQLx/PostgreSQL、健康与发布基线 | P0 契约；Cargo.lock、Rust CI、SQLx、SBOM/签名 | 进行中（原生 SQLx migration、aisoc-db、production DB readiness、release/SBOM 已接入；Cargo.lock 与真实 Rust 1.82 编译门禁未关闭） |
+| P2 | Rust Linux Agent、能力探测、本地队列、mTLS、制品 | P0/P1 契约；跨发行版安装/采集/降级 | 进行中（Rust Agent/Web Guard/Ingest 入口已形成生产路径；真实 Ubuntu/Debian/Rocky 安装升级矩阵、DEB/RPM 与 L1/L2 降级验收仍未关闭；旧 Python Agent 仅保留迁移对照） |
+| P3 | Rust Ingest、raw evidence、Normalize、DLQ/重放、乱序与幂等 | P1 Schema + P2 批次；重复/乱序/非法数据与故障恢复 | 进行中（PostgreSQL central repository、startup backfill、identity binding、watermark、DLQ lease/replay 已接入 Rust base profile；JetStream/Object Store、late/gap 故障注入、enrichment/freshness 与真实 PostgreSQL/Cargo 验收仍未关闭） |
 | P4 | 网络/Web/SSH 检测和状态分层 | P3 事件；尝试与成功不混淆 | 进行中（扫描、真实 sshd 日志、Nginx/Apache、注入/异常方法、严格回放和 host/entity/rule-version 去重修复已实现；九条规则的 version-bound 治理目录、Ed25519 tenant-scoped Draft→Shadow→Canary→Released/rollback/deprecate/upgrade 持久执行和只读运营投影已实现，但独立质量测量及真实 PostgreSQL/双租户 rollout/rollback 观察未完成） |
 | P5 | eBPF/audit/Falco 与主机行为链 | P2/P3；至少三类发行版 L2 与 L1 降级 | 进行中（audit.log polling Collector、持久 sequence/cursor+pending serial、Falco/audit normalizer、DB 回看重建、四类行为链与 5 组主机回放已实现；原生 Linux auditd/Falco、eBPF、高 EPS PostgreSQL 和 VM 门禁未完成） |
 | P6 | Incident、证据、时间线与实体边 | P4/P5 告警；判断可回到原文，迟到可修订 | 进行中（确定性聚合、10k→1 Incident 缩减、版本化 evidence/Claim/timeline/entity/edge、查询引用、worker/API 及 merge/split/close/feedback 已完成非 Docker 实现；真实 PostgreSQL、双租户与 Linux VM 攻击链门禁未运行） |

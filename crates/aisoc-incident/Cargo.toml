@@ -1,0 +1,12 @@
+[package]
+name = "aisoc-incident"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Detection correlation, incident revisions, and evidence-bound state aggregation"
+publish = false
+
+[dependencies]
+aisoc-contracts = { path = "../aisoc-contracts" }
+uuid.workspace = true

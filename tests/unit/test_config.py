@@ -9,9 +9,16 @@ from pydantic import SecretStr, ValidationError
 from aisoc.config import Settings, get_settings
 
 
-def test_development_settings_require_async_postgresql() -> None:
-    with pytest.raises(ValidationError, match=r"postgresql\+asyncpg"):
+def test_development_settings_require_postgresql() -> None:
+    with pytest.raises(ValidationError, match="PostgreSQL"):
         Settings(database_url="sqlite+aiosqlite:///test.db")
+
+
+def test_rust_postgresql_dsn_is_normalized_for_legacy_asyncpg() -> None:
+    settings = Settings(database_url="postgresql://aisoc:secret@127.0.0.1:5432/aisoc")
+    assert settings.database_url == (
+        "postgresql+asyncpg://aisoc:secret@127.0.0.1:5432/aisoc"
+    )
 
 
 def test_short_development_tokens_are_rejected() -> None:

@@ -1,0 +1,20 @@
+[package]
+name = "aisoc-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Rust Linux endpoint agent core, local queue, and capability reporting"
+publish = false
+
+[dependencies]
+aisoc-contracts = { path = "../aisoc-contracts" }
+aisoc-core = { path = "../aisoc-core" }
+aisoc-linux = { path = "../aisoc-linux" }
+chrono.workspace = true
+reqwest = { version = "=0.12.15", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true

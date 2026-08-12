@@ -14,5 +14,6 @@
     }
   ],
   "license": "CC0-1.0",
-  "events_sha256": "8b34a18b16ba106360217aa51d91ec959e31f230ad048ef227f5d0afe0bfdf63"
+  "events_sha256": "8b34a18b16ba106360217aa51d91ec959e31f230ad048ef227f5d0afe0bfdf63",
+  "canonical_events_sha256": "f22768ac960d68ca9e4d0524fb1927e675bd08b9da7ddde304c2bdcb49fc6c5c"
 }

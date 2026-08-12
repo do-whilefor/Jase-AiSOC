@@ -1,0 +1,306 @@
+$ PYTHONPATH=src python3 -m pytest -q
+
+==================================== ERRORS ====================================
+__________ ERROR collecting tests/integration/test_agent_identity.py ___________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/integration/test_agent_identity.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_agent_identity.py:20: in <module>
+    from aisoc.api_server import create_app
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+_____________ ERROR collecting tests/integration/test_freshness.py _____________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/integration/test_freshness.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_freshness.py:12: in <module>
+    from aisoc.api_server import create_app
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+____________ ERROR collecting tests/integration/test_ingest_mtls.py ____________
+tests/integration/test_ingest_mtls.py:32: in <module>
+    from aisoc.ingest_gateway.server import IngestServer
+src/aisoc/ingest_gateway/__init__.py:3: in <module>
+    from aisoc.ingest_gateway.server import (
+src/aisoc/ingest_gateway/server.py:52: in <module>
+    _IDENTITY_KEY = web.RequestKey("identity", AgentCertificateIdentity)
+                    ^^^^^^^^^^^^^^
+E   AttributeError: module 'aiohttp.web' has no attribute 'RequestKey'. Did you mean: 'Request'?
+______________ ERROR collecting tests/integration/test_p1_api.py _______________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/integration/test_p1_api.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_p1_api.py:11: in <module>
+    from aisoc.api_server import create_app
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+___________ ERROR collecting tests/integration/test_pipeline_e2e.py ____________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/integration/test_pipeline_e2e.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_pipeline_e2e.py:20: in <module>
+    from aisoc.api_server import create_app
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+________________ ERROR collecting tests/unit/test_api_basics.py ________________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/unit/test_api_basics.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_api_basics.py:10: in <module>
+    from aisoc.api_server import create_app
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+_______________ ERROR collecting tests/unit/test_console_api.py ________________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/unit/test_console_api.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_console_api.py:13: in <module>
+    from aisoc.api_server import create_app
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+____________ ERROR collecting tests/unit/test_freshness_monitor.py _____________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/unit/test_freshness_monitor.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_freshness_monitor.py:8: in <module>
+    from aisoc.observability.freshness import classify_freshness
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+_______________ ERROR collecting tests/unit/test_malware_api.py ________________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/unit/test_malware_api.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_malware_api.py:14: in <module>
+    from aisoc.api_server import create_app
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+_______________ ERROR collecting tests/unit/test_response_api.py _______________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/unit/test_response_api.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_response_api.py:12: in <module>
+    from aisoc.api_server import create_app
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+______________ ERROR collecting tests/unit/test_response_rbac.py _______________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/unit/test_response_rbac.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_response_rbac.py:11: in <module>
+    from aisoc.api_server.auth import RequestPrincipal, require_tenant_principal
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+__________ ERROR collecting tests/unit/test_review_route_security.py ___________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/unit/test_review_route_security.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_review_route_security.py:5: in <module>
+    from aisoc.api_server.routes.incidents import _review_lock_key
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+____________ ERROR collecting tests/unit/test_rule_lifecycle_api.py ____________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/unit/test_rule_lifecycle_api.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_rule_lifecycle_api.py:13: in <module>
+    from aisoc.api_server import create_app
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+______________ ERROR collecting tests/unit/test_tenant_tokens.py _______________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/unit/test_tenant_tokens.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_tenant_tokens.py:3: in <module>
+    from aisoc.api_server.tenant_tokens import (
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+________________ ERROR collecting tests/unit/test_trace_api.py _________________
+ImportError while importing test module '/mnt/data/aisoc_work/Jase-AiSOC_V4_Rust_Migration_06_p3_central_replay/tests/unit/test_trace_api.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_trace_api.py:12: in <module>
+    from aisoc.api_server import create_app
+src/aisoc/api_server/__init__.py:3: in <module>
+    from aisoc.api_server.app import create_app
+src/aisoc/api_server/app.py:17: in <module>
+    from aisoc.api_server.error_handlers import install_error_handlers
+src/aisoc/api_server/error_handlers.py:11: in <module>
+    from aisoc.observability import get_logger
+src/aisoc/observability/__init__.py:3: in <module>
+    from aisoc.observability.logging import bind_trace_id, configure_logging, get_logger
+src/aisoc/observability/logging.py:11: in <module>
+    import structlog
+E   ModuleNotFoundError: No module named 'structlog'
+=========================== short test summary info ============================
+SKIPPED [1] tests/unit/test_yara_x_scanner.py:17: could not import 'yara_x': No module named 'yara_x'
+ERROR tests/integration/test_agent_identity.py
+ERROR tests/integration/test_freshness.py
+ERROR tests/integration/test_ingest_mtls.py - AttributeError: module 'aiohttp.web' has no attribute 'RequestKey'. Did you mean: 'Request'?
+ERROR tests/integration/test_p1_api.py
+ERROR tests/integration/test_pipeline_e2e.py
+ERROR tests/unit/test_api_basics.py
+ERROR tests/unit/test_console_api.py
+ERROR tests/unit/test_freshness_monitor.py
+ERROR tests/unit/test_malware_api.py
+ERROR tests/unit/test_response_api.py
+ERROR tests/unit/test_response_rbac.py
+ERROR tests/unit/test_review_route_security.py
+ERROR tests/unit/test_rule_lifecycle_api.py
+ERROR tests/unit/test_tenant_tokens.py
+ERROR tests/unit/test_trace_api.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 15 errors during collection !!!!!!!!!!!!!!!!!!!
+1 skipped, 15 errors in 2.50s
+rc=2
