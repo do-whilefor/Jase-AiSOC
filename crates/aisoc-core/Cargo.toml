@@ -13,4 +13,4 @@ serde_json.workspace = true
 aisoc-linux = { path = "../aisoc-linux" }
 hex = "0.4"
 libc = "0.2"
-sha2 = "0.10"
+sha2 = "0.11"
