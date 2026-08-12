@@ -13,4 +13,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 aisoc-core = { path = "../aisoc-core" }
-pyo3 = { version = "0.21", features = ["abi3-py312", "extension-module"] }
+pyo3 = { version = "0.29", features = ["abi3-py312", "extension-module"] }
