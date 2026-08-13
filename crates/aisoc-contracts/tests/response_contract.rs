@@ -1,6 +1,9 @@
 use aisoc_contracts::{
-    compute_response_action_digest, validate_response_contract, ResponseAction,
-    ResponseActionType, ResponseCapability, ResponseContractDecision, ResponseTier,
+    compute_custody_record_hash, compute_response_action_digest,
+    validate_response_authorization_binding, validate_response_contract, CustodyRecord,
+    CustodyState, EvidenceAccessContext, EvidenceCustodyChain, EvidenceRef, Incident,
+    IntegrityState, ResponseAction, ResponseActionType, ResponseAuthorizationBindingDecision,
+    ResponseAuthorizationContext, ResponseCapability, ResponseContractDecision, ResponseTier,
 };
 
 fn r3_action() -> ResponseAction {
@@ -9,6 +12,7 @@ fn r3_action() -> ResponseAction {
         "action_id": "action_12345678",
         "tenant_id": "ten_12345678",
         "incident_id": "inc_12345678",
+        "incident_revision": 1,
         "policy_id": "policy_12345678",
         "policy_version": "policy-v1",
         "action_type": "terminate_process",
@@ -69,6 +73,193 @@ fn bind_approval_digest(action: &mut ResponseAction) {
     }
 }
 
+fn response_authorization(action: &ResponseAction) -> ResponseAuthorizationContext {
+    serde_json::from_value(serde_json::json!({
+        "schema_version": "1.0.0",
+        "tenant_id": action.tenant_id.clone(),
+        "action_id": action.action_id.clone(),
+        "incident_id": action.incident_id.clone(),
+        "incident_revision": action.incident_revision,
+        "policy_id": action.policy_id.clone(),
+        "policy_version": action.policy_version.clone(),
+        "action_digest": action.canonical_digest.clone(),
+        "authorized_approvals": action.approval.attestations.clone(),
+        "authorized_at": "2026-08-12T10:03:00Z"
+    }))
+    .expect("server-resolved response authorization")
+}
+
+fn response_incident() -> Incident {
+    serde_json::from_value(serde_json::json!({
+        "schema_version": "1.0.0",
+        "incident_id": "inc_12345678",
+        "tenant_id": "ten_12345678",
+        "revision": 1,
+        "revision_reason": "created",
+        "previous_revision": null,
+        "status": "investigating",
+        "severity": "critical",
+        "security_state": "observed",
+        "risk_score": 90,
+        "assurance": "unknown",
+        "title": "verified process response scope",
+        "attack_families": ["web_to_process"],
+        "detections": ["det_12345678"],
+        "entities": [],
+        "timeline": [],
+        "evidence_refs": [
+            {
+                "schema_version": "1.0.0",
+                "evidence_id": "evd_12345678",
+                "tenant_id": "ten_12345678",
+                "kind": "raw_event",
+                "source": "agent",
+                "source_version": "aisoc-agent-v1",
+                "raw_ref": "raw_12345678",
+                "locator": {"object_key": "opaque/sha256/object", "store_id": "raw-primary"},
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size_bytes": 64,
+                "collected_at": "2026-08-12T09:59:00Z",
+                "classification": "confidential",
+                "integrity_state": "verified",
+                "custody_state": "sealed"
+            },
+            {
+                "schema_version": "1.0.0",
+                "evidence_id": "evd_secondary8765",
+                "tenant_id": "ten_12345678",
+                "kind": "raw_event",
+                "source": "agent",
+                "source_version": "aisoc-agent-v1",
+                "raw_ref": "raw_secondary8765",
+                "locator": {"object_key": "opaque/sha256/secondary", "store_id": "raw-primary"},
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size_bytes": 32,
+                "collected_at": "2026-08-12T09:58:30Z",
+                "classification": "confidential",
+                "integrity_state": "verified",
+                "custody_state": "sealed"
+            }
+        ],
+        "claim_ids": [],
+        "created_at": "2026-08-12T09:58:00Z",
+        "revised_at": "2026-08-12T09:59:00Z"
+    }))
+    .expect("authoritative response incident revision")
+}
+
+fn response_evidence_access() -> EvidenceAccessContext {
+    serde_json::from_value(serde_json::json!({
+        "schema_version": "1.0.0",
+        "tenant_id": "ten_12345678",
+        "incident_id": "inc_12345678",
+        "maximum_classification": "restricted",
+        "permitted_evidence": ["evd_12345678"]
+    }))
+    .expect("server-resolved response evidence access")
+}
+
+fn response_custody_record(
+    evidence: &EvidenceRef,
+    sequence: u64,
+    custody_state: CustodyState,
+    integrity_state: IntegrityState,
+    previous_record_hash: Option<aisoc_contracts::Sha256Digest>,
+) -> CustodyRecord {
+    let mut record: CustodyRecord = serde_json::from_value(serde_json::json!({
+        "schema_version": "1.0.0",
+        "tenant_id": evidence.tenant_id,
+        "evidence_id": evidence.evidence_id,
+        "evidence_sha256": evidence.sha256,
+        "sequence": sequence,
+        "custody_state": custody_state,
+        "integrity_state": integrity_state,
+        "occurred_at": evidence.collected_at,
+        "actor": {
+            "actor_type": "service",
+            "service_identity_id": "identity_12345678"
+        },
+        "operation": "evidence_lifecycle_transition",
+        "source_version": "aisoc-evidence-v1",
+        "previous_record_hash": previous_record_hash,
+        "record_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }))
+    .expect("response custody record");
+    record.record_hash = compute_custody_record_hash(&record).expect("custody record digest");
+    record
+}
+
+fn response_custody_chain(evidence: &EvidenceRef) -> EvidenceCustodyChain {
+    let first = response_custody_record(
+        evidence,
+        1,
+        CustodyState::Collected,
+        IntegrityState::Pending,
+        None,
+    );
+    let records = if evidence.custody_state == CustodyState::Collected
+        && evidence.integrity_state == IntegrityState::Pending
+    {
+        vec![first]
+    } else {
+        let second = response_custody_record(
+            evidence,
+            2,
+            evidence.custody_state,
+            evidence.integrity_state,
+            Some(first.record_hash.clone()),
+        );
+        vec![first, second]
+    };
+    EvidenceCustodyChain {
+        schema_version: evidence.schema_version.clone(),
+        tenant_id: evidence.tenant_id.clone(),
+        evidence_id: evidence.evidence_id.clone(),
+        evidence_sha256: evidence.sha256.clone(),
+        records,
+    }
+}
+
+fn response_custody_chains(incident: &Incident) -> Vec<EvidenceCustodyChain> {
+    incident
+        .evidence_refs
+        .iter()
+        .map(response_custody_chain)
+        .collect()
+}
+
+fn validate_response_binding(
+    action: &ResponseAction,
+    authorization: &ResponseAuthorizationContext,
+    incident: &Incident,
+    evidence_access: &EvidenceAccessContext,
+) -> ResponseAuthorizationBindingDecision {
+    let custody_chains = response_custody_chains(incident);
+    validate_response_authorization_binding(
+        action,
+        authorization,
+        incident,
+        evidence_access,
+        &custody_chains,
+    )
+}
+
+fn validate_response_binding_with_custody(
+    action: &ResponseAction,
+    authorization: &ResponseAuthorizationContext,
+    incident: &Incident,
+    evidence_access: &EvidenceAccessContext,
+    custody_chains: &[EvidenceCustodyChain],
+) -> ResponseAuthorizationBindingDecision {
+    validate_response_authorization_binding(
+        action,
+        authorization,
+        incident,
+        evidence_access,
+        custody_chains,
+    )
+}
+
 fn r2_action() -> ResponseAction {
     let mut action = r3_action();
     action.action_type = ResponseActionType::TemporaryIpBlock;
@@ -122,6 +313,17 @@ fn response_rejects_an_unsupported_schema_version() {
     assert_eq!(
         validate_response_contract(&action),
         ResponseContractDecision::UnsupportedSchemaVersion
+    );
+}
+
+#[test]
+fn response_rejects_a_zero_incident_revision() {
+    let mut action = r3_action();
+    action.incident_revision = 0;
+
+    assert_eq!(
+        validate_response_contract(&action),
+        ResponseContractDecision::InvalidIncidentRevision
     );
 }
 
@@ -567,5 +769,571 @@ fn r3_recovery_must_not_be_marked_as_automatic_rollback() {
     assert_eq!(
         validate_response_contract(&action),
         ResponseContractDecision::InconsistentRollbackConfiguration
+    );
+}
+
+#[test]
+fn response_authorization_binding_accepts_a_closed_policy_incident_and_evidence_graph() {
+    let action = r3_action();
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &response_authorization(&action),
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::Allowed
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_an_invalid_action_contract() {
+    let mut action = r3_action();
+    let authorization = response_authorization(&action);
+    action.incident_revision = 0;
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::ActionContractRejected
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_an_unsupported_authorization_schema() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.schema_version = serde_json::from_value(serde_json::json!("2.0.0"))
+        .expect("future authorization schema version");
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::UnsupportedAuthorizationSchemaVersion
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_a_zero_authorized_incident_revision() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.incident_revision = 0;
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::InvalidAuthorizationIncidentRevision
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_an_invalid_authorized_policy_version() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.policy_version = "policy-v1\r\nforged".to_owned();
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::InvalidAuthorizationPolicyVersion
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_too_many_authoritative_approvals() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.authorized_approvals =
+        vec![authorization.authorized_approvals[0].clone(); 17];
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::AuthorizationApprovalLimitExceeded
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_a_duplicate_authoritative_approval_id() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization
+        .authorized_approvals
+        .push(authorization.authorized_approvals[0].clone());
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::DuplicateAuthorizedApprovalId
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_authorization_tenant_substitution() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.tenant_id = serde_json::from_value(serde_json::json!("ten_87654321"))
+        .expect("other tenant");
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::AuthorizationTenantMismatch
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_action_substitution() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.action_id = serde_json::from_value(serde_json::json!("action_87654321"))
+        .expect("other action");
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::AuthorizationActionMismatch
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_authorized_incident_substitution() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.incident_id = serde_json::from_value(serde_json::json!("inc_87654321"))
+        .expect("other incident");
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::AuthorizationIncidentMismatch
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_authorized_revision_substitution() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.incident_revision = 2;
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::AuthorizationIncidentRevisionMismatch
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_authorized_policy_substitution() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.policy_id = serde_json::from_value(serde_json::json!("policy_87654321"))
+        .expect("other policy");
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::AuthorizationPolicyMismatch
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_an_authorized_digest_substitution() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.action_digest = serde_json::from_value(serde_json::json!(
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    ))
+    .expect("other digest");
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::AuthorizationDigestMismatch
+    );
+}
+
+#[test]
+fn response_authorization_binding_requires_the_exact_authoritative_approval_set() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.authorized_approvals.pop();
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::AuthorizationApprovalSetMismatch
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_authorization_outside_action_validity() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.authorized_at = serde_json::from_value(serde_json::json!(
+        "2026-08-12T09:59:59Z"
+    ))
+    .expect("authorization before request");
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::AuthorizationOutsideValidityWindow
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_authorization_before_the_last_approval() {
+    let action = r3_action();
+    let mut authorization = response_authorization(&action);
+    authorization.authorized_at = serde_json::from_value(serde_json::json!(
+        "2026-08-12T10:01:30Z"
+    ))
+    .expect("authorization before second approval");
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::AuthorizationBeforeApproval
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_an_invalid_authoritative_incident() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let mut incident = response_incident();
+    incident.detections.clear();
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &incident,
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::IncidentContractRejected
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_an_authoritative_incident_substitution() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let mut incident = response_incident();
+    incident.incident_id = serde_json::from_value(serde_json::json!("inc_87654321"))
+        .expect("other authoritative incident");
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &incident,
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::IncidentBindingMismatch
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_an_incident_revision_after_the_request() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let mut incident = response_incident();
+    incident.revised_at = serde_json::from_value(serde_json::json!(
+        "2026-08-12T10:00:01Z"
+    ))
+    .expect("incident revision after request");
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &incident,
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::IncidentRevisedAfterRequest
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_an_invalid_evidence_access_context() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let mut access = response_evidence_access();
+    access.permitted_evidence.push(access.permitted_evidence[0].clone());
+
+    assert_eq!(
+        validate_response_binding(&action, &authorization, &response_incident(), &access),
+        ResponseAuthorizationBindingDecision::EvidenceAccessContextRejected
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_evidence_access_tenant_substitution() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let mut access = response_evidence_access();
+    access.tenant_id = serde_json::from_value(serde_json::json!("ten_87654321"))
+        .expect("other evidence access tenant");
+
+    assert_eq!(
+        validate_response_binding(&action, &authorization, &response_incident(), &access),
+        ResponseAuthorizationBindingDecision::EvidenceAccessContextMismatch
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_foreign_evidence_in_the_access_context() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let mut access = response_evidence_access();
+    access.permitted_evidence.push(
+        serde_json::from_value(serde_json::json!("evd_87654321"))
+            .expect("foreign evidence id"),
+    );
+
+    assert_eq!(
+        validate_response_binding(&action, &authorization, &response_incident(), &access),
+        ResponseAuthorizationBindingDecision::EvidenceAccessContextContainsForeignEvidence
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_an_oversized_custody_chain_set() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let incident = response_incident();
+    let chain = response_custody_chain(&incident.evidence_refs[0]);
+    let custody_chains = vec![chain; 513];
+
+    assert_eq!(
+        validate_response_binding_with_custody(
+            &action,
+            &authorization,
+            &incident,
+            &response_evidence_access(),
+            &custody_chains,
+        ),
+        ResponseAuthorizationBindingDecision::CustodyChainSetLimitExceeded
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_duplicate_custody_chain_ids() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let incident = response_incident();
+    let chain = response_custody_chain(&incident.evidence_refs[0]);
+
+    assert_eq!(
+        validate_response_binding_with_custody(
+            &action,
+            &authorization,
+            &incident,
+            &response_evidence_access(),
+            &[chain.clone(), chain],
+        ),
+        ResponseAuthorizationBindingDecision::DuplicateCustodyChainEvidenceId
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_a_custody_chain_outside_the_incident() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let incident = response_incident();
+    let mut foreign_evidence = incident.evidence_refs[0].clone();
+    foreign_evidence.evidence_id =
+        serde_json::from_value(serde_json::json!("evd_87654321"))
+            .expect("foreign custody evidence id");
+    let foreign_chain = response_custody_chain(&foreign_evidence);
+
+    assert_eq!(
+        validate_response_binding_with_custody(
+            &action,
+            &authorization,
+            &incident,
+            &response_evidence_access(),
+            &[foreign_chain],
+        ),
+        ResponseAuthorizationBindingDecision::CustodyChainContainsForeignEvidence
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_a_tampered_custody_chain_set_member() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let incident = response_incident();
+    let supporting_chain = response_custody_chain(&incident.evidence_refs[0]);
+    let mut unreferenced_chain = response_custody_chain(&incident.evidence_refs[1]);
+    unreferenced_chain.records[1].operation.clear();
+
+    assert_eq!(
+        validate_response_binding_with_custody(
+            &action,
+            &authorization,
+            &incident,
+            &response_evidence_access(),
+            &[supporting_chain, unreferenced_chain],
+        ),
+        ResponseAuthorizationBindingDecision::CustodyChainRejected
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_missing_supporting_evidence_custody() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let incident = response_incident();
+
+    assert_eq!(
+        validate_response_binding_with_custody(
+            &action,
+            &authorization,
+            &incident,
+            &response_evidence_access(),
+            &[],
+        ),
+        ResponseAuthorizationBindingDecision::SupportingEvidenceUnauthorized
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_a_tampered_supporting_chain_during_set_validation() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let incident = response_incident();
+    let mut chain = response_custody_chain(&incident.evidence_refs[0]);
+    chain.records[1].operation.clear();
+
+    assert_eq!(
+        validate_response_binding_with_custody(
+            &action,
+            &authorization,
+            &incident,
+            &response_evidence_access(),
+            &[chain],
+        ),
+        ResponseAuthorizationBindingDecision::CustodyChainRejected
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_supporting_evidence_outside_the_incident() {
+    let mut action = r3_action();
+    action.supporting_evidence_ids = serde_json::from_value(serde_json::json!([
+        "evd_87654321"
+    ]))
+    .expect("other supporting evidence");
+    bind_approval_digest(&mut action);
+    let authorization = response_authorization(&action);
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &response_incident(),
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::SupportingEvidenceMissing
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_supporting_evidence_collected_after_the_request() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let mut incident = response_incident();
+    incident.evidence_refs[0].collected_at = serde_json::from_value(serde_json::json!(
+        "2026-08-12T10:00:01Z"
+    ))
+    .expect("future supporting evidence collection");
+    incident.revised_at = incident.evidence_refs[0].collected_at.clone();
+
+    assert_eq!(
+        validate_response_binding(
+            &action,
+            &authorization,
+            &incident,
+            &response_evidence_access(),
+        ),
+        ResponseAuthorizationBindingDecision::SupportingEvidenceCollectedAfterRequest
+    );
+}
+
+#[test]
+fn response_authorization_binding_rejects_unusable_supporting_evidence() {
+    let action = r3_action();
+    let authorization = response_authorization(&action);
+    let mut access = response_evidence_access();
+    access.maximum_classification = serde_json::from_value(serde_json::json!("internal"))
+        .expect("insufficient evidence clearance");
+
+    assert_eq!(
+        validate_response_binding(&action, &authorization, &response_incident(), &access),
+        ResponseAuthorizationBindingDecision::SupportingEvidenceUnauthorized
     );
 }

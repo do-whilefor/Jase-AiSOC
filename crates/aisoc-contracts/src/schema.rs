@@ -3,9 +3,9 @@ use schemars::schema::RootSchema;
 use crate::{
     AgentEnvelope, AgentPayload, AuditEvent, AuthenticatedAgentContext,
     AuthenticatedRequestContext, AuthoritativeObjectScope, Claim, ClientObjectScope, Detection,
-    ErrorEnvelope, EvidenceAccessContext, EvidencePackage, EvidenceRef, Incident, ModelAssessment,
-    ResponseAction, SecurityEvent, WebIngressContext, WebRequestEnvelope, WebSecurityEvent,
-    WebRouteFailPolicy,
+    ErrorEnvelope, EvidenceAccessContext, EvidenceCustodyChain, EvidencePackage, EvidenceRef,
+    Incident, ModelAssessment, ResponseAction, ResponseAuthorizationContext, SecurityEvent,
+    WebIngressContext, WebRequestEnvelope, WebRouteFailPolicy, WebSecurityEvent,
 };
 
 pub const SCHEMA_FILENAMES: &[&str] = &[
@@ -22,15 +22,35 @@ pub const SCHEMA_FILENAMES: &[&str] = &[
     "evidence-package-v1.schema.json",
     "evidence-ref-v1.schema.json",
     "evidence-access-context-v1.schema.json",
+    "evidence-custody-chain-v1.schema.json",
     "incident-v1.schema.json",
     "model-assessment-v1.schema.json",
     "response-action-v1.schema.json",
+    "response-authorization-context-v1.schema.json",
     "security-event-v1.schema.json",
     "web-ingress-context-v1.schema.json",
     "web-request-envelope-v1.schema.json",
     "web-route-fail-policy-v1.schema.json",
     "web-security-event-v1.schema.json",
 ];
+
+pub fn is_safe_schema_filename(filename: &str) -> bool {
+    let Some(contract_name) = filename.strip_suffix("-v1.schema.json") else {
+        return false;
+    };
+    !contract_name.is_empty()
+        && contract_name
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        && contract_name
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphanumeric)
+        && contract_name
+            .as_bytes()
+            .last()
+            .is_some_and(u8::is_ascii_alphanumeric)
+}
 
 pub fn generated_schemas() -> Vec<(&'static str, RootSchema)> {
     vec![
@@ -62,9 +82,17 @@ pub fn generated_schemas() -> Vec<(&'static str, RootSchema)> {
             "evidence-access-context-v1.schema.json",
             schemars::schema_for!(EvidenceAccessContext),
         ),
+        (
+            "evidence-custody-chain-v1.schema.json",
+            schemars::schema_for!(EvidenceCustodyChain),
+        ),
         ("incident-v1.schema.json", schemars::schema_for!(Incident)),
         ("model-assessment-v1.schema.json", schemars::schema_for!(ModelAssessment)),
         ("response-action-v1.schema.json", schemars::schema_for!(ResponseAction)),
+        (
+            "response-authorization-context-v1.schema.json",
+            schemars::schema_for!(ResponseAuthorizationContext),
+        ),
         ("security-event-v1.schema.json", schemars::schema_for!(SecurityEvent)),
         (
             "web-ingress-context-v1.schema.json",

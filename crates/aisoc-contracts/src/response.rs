@@ -8,9 +8,9 @@ use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    ActionId, ApprovalId, EvidenceId, HostId, IncidentId, PolicyId, RouteId, SchemaVersion,
-    SchemaVersionDecision, ServiceId, Severity, Sha256Digest, TenantId, TenantScoped, Timestamp,
-    UserId, validate_current_schema,
+    validate_current_schema, ActionId, ApprovalId, EvidenceAccessContext, EvidenceId, HostId,
+    Incident, IncidentId, PolicyId, RouteId, SchemaVersion, SchemaVersionDecision, ServiceId,
+    Severity, Sha256Digest, TenantId, TenantScoped, Timestamp, UserId,
 };
 
 pub const MAX_RESPONSE_VALIDITY_SECONDS: u64 = 86_400;
@@ -238,6 +238,8 @@ pub struct ResponseAction {
     pub action_id: ActionId,
     pub tenant_id: TenantId,
     pub incident_id: IncidentId,
+    #[schemars(range(min = 1))]
+    pub incident_revision: u64,
     pub policy_id: PolicyId,
     #[schemars(length(min = 1, max = 128))]
     pub policy_version: String,
@@ -259,12 +261,40 @@ pub struct ResponseAction {
     pub supporting_evidence_ids: Vec<EvidenceId>,
 }
 
+/// Policy/Approval authority resolved by the server-side repository and
+/// delivered to the Runner through the authenticated response queue. Client,
+/// model, and action payload fields must never be used to construct it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ResponseAuthorizationContext {
+    pub schema_version: SchemaVersion,
+    pub tenant_id: TenantId,
+    pub action_id: ActionId,
+    pub incident_id: IncidentId,
+    #[schemars(range(min = 1))]
+    pub incident_revision: u64,
+    pub policy_id: PolicyId,
+    #[schemars(length(min = 1, max = 128))]
+    pub policy_version: String,
+    pub action_digest: Sha256Digest,
+    #[schemars(length(max = 16))]
+    pub authorized_approvals: Vec<ApprovalAttestation>,
+    pub authorized_at: Timestamp,
+}
+
+impl TenantScoped for ResponseAuthorizationContext {
+    fn tenant_id(&self) -> &TenantId {
+        &self.tenant_id
+    }
+}
+
 #[derive(Serialize)]
 struct ResponseActionDigestInput<'a> {
     schema_version: &'a SchemaVersion,
     action_id: &'a ActionId,
     tenant_id: &'a TenantId,
     incident_id: &'a IncidentId,
+    incident_revision: u64,
     policy_id: &'a PolicyId,
     policy_version: &'a str,
     action_type: ResponseActionType,
@@ -318,6 +348,7 @@ pub fn compute_response_action_digest(
         action_id: &action.action_id,
         tenant_id: &action.tenant_id,
         incident_id: &action.incident_id,
+        incident_revision: action.incident_revision,
         policy_id: &action.policy_id,
         policy_version: &action.policy_version,
         action_type: action.action_type,
@@ -353,6 +384,7 @@ impl TenantScoped for ResponseAction {
 pub enum ResponseContractDecision {
     Allowed,
     UnsupportedSchemaVersion,
+    InvalidIncidentRevision,
     TierActionMismatch,
     RequiredCapabilityMismatch,
     TargetTypeMismatch,
@@ -391,6 +423,9 @@ pub enum ResponseContractDecision {
 pub fn validate_response_contract(action: &ResponseAction) -> ResponseContractDecision {
     if validate_current_schema(&action.schema_version) != SchemaVersionDecision::Current {
         return ResponseContractDecision::UnsupportedSchemaVersion;
+    }
+    if action.incident_revision == 0 {
+        return ResponseContractDecision::InvalidIncidentRevision;
     }
     let expected_tier = match action.action_type {
         ResponseActionType::InvestigationRecommendation
@@ -663,6 +698,200 @@ pub fn validate_response_contract(action: &ResponseAction) -> ResponseContractDe
         _ => return ResponseContractDecision::CanonicalDigestMismatch,
     }
     ResponseContractDecision::Allowed
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponseAuthorizationBindingDecision {
+    Allowed,
+    ActionContractRejected,
+    UnsupportedAuthorizationSchemaVersion,
+    InvalidAuthorizationIncidentRevision,
+    InvalidAuthorizationPolicyVersion,
+    AuthorizationApprovalLimitExceeded,
+    DuplicateAuthorizedApprovalId,
+    AuthorizationTenantMismatch,
+    AuthorizationActionMismatch,
+    AuthorizationIncidentMismatch,
+    AuthorizationIncidentRevisionMismatch,
+    AuthorizationPolicyMismatch,
+    AuthorizationDigestMismatch,
+    AuthorizationApprovalSetMismatch,
+    AuthorizationOutsideValidityWindow,
+    AuthorizationBeforeApproval,
+    IncidentContractRejected,
+    IncidentBindingMismatch,
+    IncidentRevisedAfterRequest,
+    EvidenceAccessContextRejected,
+    EvidenceAccessContextMismatch,
+    EvidenceAccessContextContainsForeignEvidence,
+    CustodyChainSetLimitExceeded,
+    DuplicateCustodyChainEvidenceId,
+    CustodyChainContainsForeignEvidence,
+    CustodyChainRejected,
+    SupportingEvidenceMissing,
+    SupportingEvidenceCollectedAfterRequest,
+    SupportingEvidenceUnauthorized,
+}
+
+/// Closes the Policy/Approval -> Runner relationship against an authoritative
+/// Incident revision and its server-authorized Evidence membership. This is a
+/// boundary contract only; Policy evaluation, queue authentication, target
+/// revalidation, execution, rollback, and post-check remain service concerns.
+pub fn validate_response_authorization_binding(
+    action: &ResponseAction,
+    authorization: &ResponseAuthorizationContext,
+    incident: &Incident,
+    evidence_access_context: &EvidenceAccessContext,
+    custody_chains: &[crate::EvidenceCustodyChain],
+) -> ResponseAuthorizationBindingDecision {
+    if validate_response_contract(action) != ResponseContractDecision::Allowed {
+        return ResponseAuthorizationBindingDecision::ActionContractRejected;
+    }
+    if validate_current_schema(&authorization.schema_version) != SchemaVersionDecision::Current {
+        return ResponseAuthorizationBindingDecision::UnsupportedAuthorizationSchemaVersion;
+    }
+    if authorization.incident_revision == 0 {
+        return ResponseAuthorizationBindingDecision::InvalidAuthorizationIncidentRevision;
+    }
+    if !crate::common::valid_contract_token(&authorization.policy_version, 128) {
+        return ResponseAuthorizationBindingDecision::InvalidAuthorizationPolicyVersion;
+    }
+    if authorization.authorized_approvals.len() > 16 {
+        return ResponseAuthorizationBindingDecision::AuthorizationApprovalLimitExceeded;
+    }
+    if crate::contains_duplicate(
+        authorization
+            .authorized_approvals
+            .iter()
+            .map(|attestation| &attestation.approval_id),
+    ) {
+        return ResponseAuthorizationBindingDecision::DuplicateAuthorizedApprovalId;
+    }
+    if authorization.tenant_id != action.tenant_id {
+        return ResponseAuthorizationBindingDecision::AuthorizationTenantMismatch;
+    }
+    if authorization.action_id != action.action_id {
+        return ResponseAuthorizationBindingDecision::AuthorizationActionMismatch;
+    }
+    if authorization.incident_id != action.incident_id {
+        return ResponseAuthorizationBindingDecision::AuthorizationIncidentMismatch;
+    }
+    if authorization.incident_revision != action.incident_revision {
+        return ResponseAuthorizationBindingDecision::AuthorizationIncidentRevisionMismatch;
+    }
+    if authorization.policy_id != action.policy_id
+        || authorization.policy_version != action.policy_version
+    {
+        return ResponseAuthorizationBindingDecision::AuthorizationPolicyMismatch;
+    }
+    if authorization.action_digest != action.canonical_digest {
+        return ResponseAuthorizationBindingDecision::AuthorizationDigestMismatch;
+    }
+    if action.approval.attestations.len() != authorization.authorized_approvals.len()
+        || action
+            .approval
+            .attestations
+            .iter()
+            .any(|attestation| !authorization.authorized_approvals.contains(attestation))
+    {
+        return ResponseAuthorizationBindingDecision::AuthorizationApprovalSetMismatch;
+    }
+    if action.requested_at.is_after(&authorization.authorized_at)
+        || !authorization.authorized_at.is_before(&action.expires_at)
+    {
+        return ResponseAuthorizationBindingDecision::AuthorizationOutsideValidityWindow;
+    }
+    if authorization
+        .authorized_approvals
+        .iter()
+        .any(|attestation| authorization.authorized_at.is_before(&attestation.decided_at))
+    {
+        return ResponseAuthorizationBindingDecision::AuthorizationBeforeApproval;
+    }
+    if crate::validate_incident_contract(incident) != crate::IncidentContractDecision::Accepted {
+        return ResponseAuthorizationBindingDecision::IncidentContractRejected;
+    }
+    if incident.tenant_id != action.tenant_id
+        || incident.incident_id != action.incident_id
+        || incident.revision != action.incident_revision
+    {
+        return ResponseAuthorizationBindingDecision::IncidentBindingMismatch;
+    }
+    if crate::validate_evidence_access_context(evidence_access_context)
+        != crate::EvidenceAccessContextDecision::Accepted
+    {
+        return ResponseAuthorizationBindingDecision::EvidenceAccessContextRejected;
+    }
+    if evidence_access_context.tenant_id != action.tenant_id
+        || evidence_access_context.incident_id != action.incident_id
+    {
+        return ResponseAuthorizationBindingDecision::EvidenceAccessContextMismatch;
+    }
+    if evidence_access_context
+        .permitted_evidence
+        .iter()
+        .any(|evidence_id| {
+            !incident
+                .evidence_refs
+                .iter()
+                .any(|evidence| &evidence.evidence_id == evidence_id)
+        })
+    {
+        return ResponseAuthorizationBindingDecision::EvidenceAccessContextContainsForeignEvidence;
+    }
+    if custody_chains.len() > 512 {
+        return ResponseAuthorizationBindingDecision::CustodyChainSetLimitExceeded;
+    }
+    if crate::contains_duplicate(custody_chains.iter().map(|chain| &chain.evidence_id)) {
+        return ResponseAuthorizationBindingDecision::DuplicateCustodyChainEvidenceId;
+    }
+    if custody_chains.iter().any(|chain| {
+        chain.tenant_id != incident.tenant_id
+            || !incident
+                .evidence_refs
+                .iter()
+                .any(|evidence| evidence.evidence_id == chain.evidence_id)
+    }) {
+        return ResponseAuthorizationBindingDecision::CustodyChainContainsForeignEvidence;
+    }
+    if custody_chains.iter().any(|chain| {
+        let Some(evidence) = incident
+            .evidence_refs
+            .iter()
+            .find(|evidence| evidence.evidence_id == chain.evidence_id)
+        else {
+            return true;
+        };
+        crate::validate_evidence_custody_chain(evidence, chain)
+            != crate::EvidenceCustodyChainDecision::Accepted
+    }) {
+        return ResponseAuthorizationBindingDecision::CustodyChainRejected;
+    }
+    for evidence_id in &action.supporting_evidence_ids {
+        let Some(evidence) = incident
+            .evidence_refs
+            .iter()
+            .find(|evidence| &evidence.evidence_id == evidence_id)
+        else {
+            return ResponseAuthorizationBindingDecision::SupportingEvidenceMissing;
+        };
+        if evidence.collected_at.is_after(&action.requested_at) {
+            return ResponseAuthorizationBindingDecision::SupportingEvidenceCollectedAfterRequest;
+        }
+        let custody_chain = custody_chains
+            .iter()
+            .find(|chain| chain.evidence_id == evidence.evidence_id);
+        if crate::authorize_evidence_use(evidence, evidence_access_context, custody_chain)
+            != crate::EvidenceUseDecision::Allowed
+        {
+            return ResponseAuthorizationBindingDecision::SupportingEvidenceUnauthorized;
+        }
+    }
+    if incident.revised_at.is_after(&action.requested_at) {
+        return ResponseAuthorizationBindingDecision::IncidentRevisedAfterRequest;
+    }
+    ResponseAuthorizationBindingDecision::Allowed
 }
 
 fn bounded_non_empty(value: &str, maximum_bytes: usize) -> bool {

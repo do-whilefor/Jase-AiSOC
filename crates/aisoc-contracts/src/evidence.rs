@@ -3,11 +3,15 @@ use std::str::FromStr;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::{
     validate_current_schema, DataClassification, EvidenceId, IncidentId, RawRefId, SchemaVersion,
-    SchemaVersionDecision, Sha256Digest, StoreId, TenantId, TenantScoped, Timestamp,
+    SchemaVersionDecision, ServiceIdentityId, Sha256Digest, StoreId, TenantId, TenantScoped,
+    Timestamp, UserId,
 };
+
+pub const MAX_CUSTODY_RECORDS: usize = 4096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -57,15 +61,298 @@ pub enum CustodyState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "actor_type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CustodyActor {
+    User { user_id: UserId },
+    Service {
+        service_identity_id: ServiceIdentityId,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CustodyRecord {
-    pub state: CustodyState,
+    pub schema_version: SchemaVersion,
+    pub tenant_id: TenantId,
+    pub evidence_id: EvidenceId,
+    pub evidence_sha256: Sha256Digest,
+    #[schemars(range(min = 1))]
+    pub sequence: u64,
+    pub custody_state: CustodyState,
+    pub integrity_state: IntegrityState,
     pub occurred_at: Timestamp,
-    #[schemars(length(min = 1, max = 256))]
-    pub actor: String,
+    pub actor: CustodyActor,
     #[schemars(length(min = 1, max = 128))]
     pub operation: String,
-    pub previous_sha256: Option<Sha256Digest>,
+    #[schemars(length(min = 1, max = 128))]
+    pub source_version: String,
+    pub previous_record_hash: Option<Sha256Digest>,
+    pub record_hash: Sha256Digest,
+}
+
+impl TenantScoped for CustodyRecord {
+    fn tenant_id(&self) -> &TenantId {
+        &self.tenant_id
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EvidenceCustodyChain {
+    pub schema_version: SchemaVersion,
+    pub tenant_id: TenantId,
+    pub evidence_id: EvidenceId,
+    pub evidence_sha256: Sha256Digest,
+    #[schemars(length(min = 1, max = 4096))]
+    pub records: Vec<CustodyRecord>,
+}
+
+impl TenantScoped for EvidenceCustodyChain {
+    fn tenant_id(&self) -> &TenantId {
+        &self.tenant_id
+    }
+}
+
+#[derive(Serialize)]
+struct CustodyRecordHashInput<'a> {
+    schema_version: &'a SchemaVersion,
+    tenant_id: &'a TenantId,
+    evidence_id: &'a EvidenceId,
+    evidence_sha256: &'a Sha256Digest,
+    sequence: u64,
+    custody_state: CustodyState,
+    integrity_state: IntegrityState,
+    occurred_at: &'a Timestamp,
+    actor: &'a CustodyActor,
+    operation: &'a str,
+    source_version: &'a str,
+    previous_record_hash: Option<&'a Sha256Digest>,
+}
+
+#[derive(Debug)]
+pub enum CustodyDigestError {
+    Serialization(serde_json::Error),
+    DigestInvariant,
+}
+
+impl fmt::Display for CustodyDigestError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Serialization(_) => formatter.write_str("custody record serialization failed"),
+            Self::DigestInvariant => formatter.write_str("custody record SHA-256 invariant failed"),
+        }
+    }
+}
+
+impl std::error::Error for CustodyDigestError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Serialization(error) => Some(error),
+            Self::DigestInvariant => None,
+        }
+    }
+}
+
+/// Computes the hash over the frozen custody field sequence, including the
+/// preceding record hash and excluding only `record_hash` itself.
+pub fn compute_custody_record_hash(
+    record: &CustodyRecord,
+) -> Result<Sha256Digest, CustodyDigestError> {
+    let input = CustodyRecordHashInput {
+        schema_version: &record.schema_version,
+        tenant_id: &record.tenant_id,
+        evidence_id: &record.evidence_id,
+        evidence_sha256: &record.evidence_sha256,
+        sequence: record.sequence,
+        custody_state: record.custody_state,
+        integrity_state: record.integrity_state,
+        occurred_at: &record.occurred_at,
+        actor: &record.actor,
+        operation: &record.operation,
+        source_version: &record.source_version,
+        previous_record_hash: record.previous_record_hash.as_ref(),
+    };
+    let canonical = serde_json::to_vec(&input).map_err(CustodyDigestError::Serialization)?;
+    let digest = Sha256::digest(canonical);
+    let encoded = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    Sha256Digest::try_from(encoded).map_err(|_| CustodyDigestError::DigestInvariant)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CustodyRecordDecision {
+    Accepted,
+    UnsupportedSchemaVersion,
+    InvalidSequenceBinding,
+    EmptyOperation,
+    OperationTooLong,
+    InvalidOperation,
+    EmptySourceVersion,
+    SourceVersionTooLong,
+    InvalidSourceVersion,
+    RecordHashMismatch,
+}
+
+pub fn validate_custody_record(record: &CustodyRecord) -> CustodyRecordDecision {
+    if validate_current_schema(&record.schema_version) != SchemaVersionDecision::Current {
+        return CustodyRecordDecision::UnsupportedSchemaVersion;
+    }
+    if record.sequence == 0
+        || (record.sequence == 1 && record.previous_record_hash.is_some())
+        || (record.sequence > 1 && record.previous_record_hash.is_none())
+    {
+        return CustodyRecordDecision::InvalidSequenceBinding;
+    }
+    if record.operation.trim().is_empty() {
+        return CustodyRecordDecision::EmptyOperation;
+    }
+    if record.operation.len() > 128 {
+        return CustodyRecordDecision::OperationTooLong;
+    }
+    if !crate::common::valid_contract_token(&record.operation, 128) {
+        return CustodyRecordDecision::InvalidOperation;
+    }
+    if record.source_version.trim().is_empty() {
+        return CustodyRecordDecision::EmptySourceVersion;
+    }
+    if record.source_version.len() > 128 {
+        return CustodyRecordDecision::SourceVersionTooLong;
+    }
+    if !valid_version_code(&record.source_version, 128) {
+        return CustodyRecordDecision::InvalidSourceVersion;
+    }
+    match compute_custody_record_hash(record) {
+        Ok(digest) if digest == record.record_hash => CustodyRecordDecision::Accepted,
+        _ => CustodyRecordDecision::RecordHashMismatch,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CustodyTransitionDecision {
+    Accepted,
+    PreviousRecordRejected,
+    CurrentRecordRejected,
+    TenantMismatch,
+    EvidenceMismatch,
+    EvidenceDigestMismatch,
+    SequenceNotAdjacent,
+    PreviousHashMismatch,
+    IntegrityStateRegressed,
+    CustodyStateRegressed,
+}
+
+/// Validates one adjacent append-only transition. Sequence, rather than a
+/// rewindable host clock, is the authority for custody ordering.
+pub fn validate_custody_transition(
+    previous: &CustodyRecord,
+    current: &CustodyRecord,
+) -> CustodyTransitionDecision {
+    if validate_custody_record(previous) != CustodyRecordDecision::Accepted {
+        return CustodyTransitionDecision::PreviousRecordRejected;
+    }
+    if validate_custody_record(current) != CustodyRecordDecision::Accepted {
+        return CustodyTransitionDecision::CurrentRecordRejected;
+    }
+    if previous.tenant_id != current.tenant_id {
+        return CustodyTransitionDecision::TenantMismatch;
+    }
+    if previous.evidence_id != current.evidence_id {
+        return CustodyTransitionDecision::EvidenceMismatch;
+    }
+    if previous.evidence_sha256 != current.evidence_sha256 {
+        return CustodyTransitionDecision::EvidenceDigestMismatch;
+    }
+    if previous.sequence.checked_add(1) != Some(current.sequence) {
+        return CustodyTransitionDecision::SequenceNotAdjacent;
+    }
+    if current.previous_record_hash.as_ref() != Some(&previous.record_hash) {
+        return CustodyTransitionDecision::PreviousHashMismatch;
+    }
+    if !integrity_can_transition(previous.integrity_state, current.integrity_state) {
+        return CustodyTransitionDecision::IntegrityStateRegressed;
+    }
+    if custody_rank(current.custody_state) < custody_rank(previous.custody_state) {
+        return CustodyTransitionDecision::CustodyStateRegressed;
+    }
+    CustodyTransitionDecision::Accepted
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceCustodyChainDecision {
+    Accepted,
+    EvidenceContractRejected,
+    UnsupportedChainSchemaVersion,
+    EmptyChain,
+    ChainLimitExceeded,
+    ChainIdentityMismatch,
+    FirstRecordRejected,
+    FirstRecordStateInvalid,
+    CollectionTimeMismatch,
+    TransitionRejected,
+    LatestStateMismatch,
+}
+
+/// Binds a complete custody chain to the authoritative immutable EvidenceRef.
+/// Persistence must resolve the entire ordered chain by tenant/evidence ID;
+/// client-provided subsets cannot establish current custody or integrity.
+pub fn validate_evidence_custody_chain(
+    evidence: &EvidenceRef,
+    chain: &EvidenceCustodyChain,
+) -> EvidenceCustodyChainDecision {
+    if validate_evidence_ref(evidence) != EvidenceRefDecision::Accepted {
+        return EvidenceCustodyChainDecision::EvidenceContractRejected;
+    }
+    if validate_current_schema(&chain.schema_version) != SchemaVersionDecision::Current {
+        return EvidenceCustodyChainDecision::UnsupportedChainSchemaVersion;
+    }
+    if chain.records.is_empty() {
+        return EvidenceCustodyChainDecision::EmptyChain;
+    }
+    if chain.records.len() > MAX_CUSTODY_RECORDS {
+        return EvidenceCustodyChainDecision::ChainLimitExceeded;
+    }
+    if chain.tenant_id != evidence.tenant_id
+        || chain.evidence_id != evidence.evidence_id
+        || chain.evidence_sha256 != evidence.sha256
+        || chain.records.iter().any(|record| {
+            record.tenant_id != chain.tenant_id
+                || record.evidence_id != chain.evidence_id
+                || record.evidence_sha256 != chain.evidence_sha256
+        })
+    {
+        return EvidenceCustodyChainDecision::ChainIdentityMismatch;
+    }
+    let first = &chain.records[0];
+    if validate_custody_record(first) != CustodyRecordDecision::Accepted {
+        return EvidenceCustodyChainDecision::FirstRecordRejected;
+    }
+    if first.sequence != 1 || first.custody_state != CustodyState::Collected {
+        return EvidenceCustodyChainDecision::FirstRecordStateInvalid;
+    }
+    if !first.occurred_at.is_same_instant(&evidence.collected_at) {
+        return EvidenceCustodyChainDecision::CollectionTimeMismatch;
+    }
+    if chain
+        .records
+        .windows(2)
+        .any(|records| validate_custody_transition(&records[0], &records[1]) != CustodyTransitionDecision::Accepted)
+    {
+        return EvidenceCustodyChainDecision::TransitionRejected;
+    }
+    let Some(latest) = chain.records.last() else {
+        return EvidenceCustodyChainDecision::EmptyChain;
+    };
+    if latest.custody_state != evidence.custody_state
+        || latest.integrity_state != evidence.integrity_state
+    {
+        return EvidenceCustodyChainDecision::LatestStateMismatch;
+    }
+    EvidenceCustodyChainDecision::Accepted
 }
 
 /// An opaque, server-resolved object-store key. It is deliberately not a URL
@@ -247,6 +534,8 @@ pub enum EvidenceUseDecision {
     NotIncidentMember,
     ClassificationDenied,
     EvidenceContractRejected,
+    CustodyChainMissing,
+    CustodyChainRejected,
     EmptyEvidence,
     IntegrityNotVerified,
     CustodyUnavailable,
@@ -264,6 +553,7 @@ pub enum EvidenceLifecycleDecision {
 pub fn authorize_evidence_use(
     evidence: &EvidenceRef,
     context: &EvidenceAccessContext,
+    custody_chain: Option<&EvidenceCustodyChain>,
 ) -> EvidenceUseDecision {
     if validate_current_schema(&context.schema_version) != SchemaVersionDecision::Current {
         return EvidenceUseDecision::UnsupportedContextSchemaVersion;
@@ -276,6 +566,14 @@ pub fn authorize_evidence_use(
     }
     if validate_evidence_ref(evidence) != EvidenceRefDecision::Accepted {
         return EvidenceUseDecision::EvidenceContractRejected;
+    }
+    let Some(custody_chain) = custody_chain else {
+        return EvidenceUseDecision::CustodyChainMissing;
+    };
+    if validate_evidence_custody_chain(evidence, custody_chain)
+        != EvidenceCustodyChainDecision::Accepted
+    {
+        return EvidenceUseDecision::CustodyChainRejected;
     }
     if !context.permitted_evidence.contains(&evidence.evidence_id) {
         return EvidenceUseDecision::NotIncidentMember;
@@ -321,15 +619,22 @@ pub fn validate_evidence_lifecycle_transition(
     if !same_evidence_identity(previous, current) {
         return EvidenceLifecycleDecision::EvidenceIdentityMismatch;
     }
-    let integrity_advanced = previous.integrity_state == current.integrity_state
-        || previous.integrity_state == IntegrityState::Pending;
-    if !integrity_advanced {
+    if !integrity_can_transition(previous.integrity_state, current.integrity_state) {
         return EvidenceLifecycleDecision::IntegrityStateRegressed;
     }
     if custody_rank(current.custody_state) < custody_rank(previous.custody_state) {
         return EvidenceLifecycleDecision::CustodyStateRegressed;
     }
     EvidenceLifecycleDecision::Accepted
+}
+
+fn integrity_can_transition(previous: IntegrityState, current: IntegrityState) -> bool {
+    matches!(
+        (previous, current),
+        (IntegrityState::Pending, _)
+            | (IntegrityState::Verified, IntegrityState::Verified | IntegrityState::Failed)
+            | (IntegrityState::Failed, IntegrityState::Failed)
+    )
 }
 
 fn custody_rank(state: CustodyState) -> u8 {

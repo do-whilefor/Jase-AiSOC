@@ -1,18 +1,24 @@
 use aisoc_contracts::{
-    authorize_evidence_use, compute_agent_payload_digest, validate_agent_binding,
-    validate_claim_contract, validate_detection_contract, validate_evidence_access_context,
-    validate_evidence_lifecycle_transition, validate_evidence_package,
-    validate_evidence_package_binding, validate_evidence_ref, validate_incident_contract,
-    validate_incident_relationships as validate_incident_relationships_with_context,
+    authorize_evidence_use as authorize_evidence_use_with_custody,
+    compute_agent_payload_digest, compute_custody_record_hash,
+    validate_agent_binding, validate_claim_contract, validate_custody_record,
+    validate_custody_transition, validate_detection_contract, validate_evidence_access_context,
+    validate_evidence_custody_chain, validate_evidence_lifecycle_transition,
+    validate_evidence_package, validate_evidence_package_binding, validate_evidence_ref,
+    validate_incident_contract,
+    validate_incident_relationships as validate_incident_relationships_with_custody,
     validate_incident_revision_transition, validate_model_assessment,
-    validate_model_assessment_binding, validate_security_event, verify_claim_evidence,
+    validate_model_assessment_binding, validate_security_event,
+    verify_claim_evidence as verify_claim_evidence_with_custody,
     AgentBindingDecision, AgentEnvelope, Claim, ClaimContractDecision, ClaimVerificationDecision,
-    Detection, DetectionContractDecision, EvidenceAccessContext, EvidenceAccessContextDecision,
-    EvidenceLifecycleDecision, EvidencePackage, EvidencePackageBindingDecision,
-    EvidencePackageDecision, EvidenceRef, EvidenceRefDecision, EvidenceUseDecision, Incident,
-    IncidentContractDecision, IncidentRelationshipDecision, IncidentRevisionTransitionDecision,
-    IntegrityState, ModelAssessment, ModelAssessmentBindingDecision, ModelAssessmentDecision,
-    SecurityEvent, SecurityEventDecision,
+    CustodyRecord, CustodyRecordDecision, CustodyState, CustodyTransitionDecision, Detection,
+    DetectionContractDecision, EvidenceAccessContext, EvidenceAccessContextDecision,
+    EvidenceCustodyChain, EvidenceCustodyChainDecision, EvidenceLifecycleDecision,
+    EvidencePackage, EvidencePackageBindingDecision, EvidencePackageDecision, EvidenceRef,
+    EvidenceRefDecision, EvidenceUseDecision, Incident, IncidentContractDecision,
+    IncidentRelationshipDecision, IncidentRevisionTransitionDecision, IntegrityState,
+    ModelAssessment, ModelAssessmentBindingDecision, ModelAssessmentDecision, SecurityEvent,
+    SecurityEventDecision,
 };
 
 fn evidence(tenant_id: &str, integrity_state: IntegrityState) -> EvidenceRef {
@@ -99,6 +105,169 @@ fn access_context(tenant_id: &str) -> EvidenceAccessContext {
     .expect("evidence access context")
 }
 
+fn custody_record(
+    sequence: u64,
+    custody_state: CustodyState,
+    integrity_state: IntegrityState,
+    occurred_at: &str,
+    previous_record_hash: Option<aisoc_contracts::Sha256Digest>,
+) -> CustodyRecord {
+    let mut record: CustodyRecord = serde_json::from_value(serde_json::json!({
+        "schema_version": "1.0.0",
+        "tenant_id": "ten_12345678",
+        "evidence_id": "evd_12345678",
+        "evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sequence": sequence,
+        "custody_state": custody_state,
+        "integrity_state": integrity_state,
+        "occurred_at": occurred_at,
+        "actor": {
+            "actor_type": "service",
+            "service_identity_id": "identity_12345678"
+        },
+        "operation": "evidence_lifecycle_transition",
+        "source_version": "aisoc-evidence-v1",
+        "previous_record_hash": previous_record_hash,
+        "record_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }))
+    .expect("frozen custody record");
+    record.record_hash = compute_custody_record_hash(&record).expect("custody record digest");
+    record
+}
+
+fn custody_pair() -> (CustodyRecord, CustodyRecord) {
+    let first = custody_record(
+        1,
+        CustodyState::Collected,
+        IntegrityState::Pending,
+        "2026-08-12T10:00:00Z",
+        None,
+    );
+    let second = custody_record(
+        2,
+        CustodyState::Sealed,
+        IntegrityState::Verified,
+        "2026-08-12T10:00:01Z",
+        Some(first.record_hash.clone()),
+    );
+    (first, second)
+}
+
+fn custody_chain() -> EvidenceCustodyChain {
+    let (first, second) = custody_pair();
+    serde_json::from_value(serde_json::json!({
+        "schema_version": "1.0.0",
+        "tenant_id": "ten_12345678",
+        "evidence_id": "evd_12345678",
+        "evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "records": [first, second]
+    }))
+    .expect("complete custody chain")
+}
+
+fn custody_record_for(
+    evidence: &EvidenceRef,
+    sequence: u64,
+    custody_state: CustodyState,
+    integrity_state: IntegrityState,
+    previous_record_hash: Option<aisoc_contracts::Sha256Digest>,
+) -> CustodyRecord {
+    let mut record: CustodyRecord = serde_json::from_value(serde_json::json!({
+        "schema_version": "1.0.0",
+        "tenant_id": evidence.tenant_id,
+        "evidence_id": evidence.evidence_id,
+        "evidence_sha256": evidence.sha256,
+        "sequence": sequence,
+        "custody_state": custody_state,
+        "integrity_state": integrity_state,
+        "occurred_at": evidence.collected_at,
+        "actor": {
+            "actor_type": "service",
+            "service_identity_id": "identity_12345678"
+        },
+        "operation": "evidence_lifecycle_transition",
+        "source_version": "aisoc-evidence-v1",
+        "previous_record_hash": previous_record_hash,
+        "record_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }))
+    .expect("evidence-bound custody record");
+    record.record_hash = compute_custody_record_hash(&record).expect("custody record digest");
+    record
+}
+
+fn custody_chain_for(evidence: &EvidenceRef) -> EvidenceCustodyChain {
+    let first = custody_record_for(
+        evidence,
+        1,
+        CustodyState::Collected,
+        IntegrityState::Pending,
+        None,
+    );
+    let records = if evidence.custody_state == CustodyState::Collected
+        && evidence.integrity_state == IntegrityState::Pending
+    {
+        vec![first]
+    } else {
+        let second = custody_record_for(
+            evidence,
+            2,
+            evidence.custody_state,
+            evidence.integrity_state,
+            Some(first.record_hash.clone()),
+        );
+        vec![first, second]
+    };
+    EvidenceCustodyChain {
+        schema_version: evidence.schema_version.clone(),
+        tenant_id: evidence.tenant_id.clone(),
+        evidence_id: evidence.evidence_id.clone(),
+        evidence_sha256: evidence.sha256.clone(),
+        records,
+    }
+}
+
+fn custody_chains_for(evidence_refs: &[EvidenceRef]) -> Vec<EvidenceCustodyChain> {
+    evidence_refs.iter().map(custody_chain_for).collect()
+}
+
+fn authorize_evidence_use(
+    evidence: &EvidenceRef,
+    context: &EvidenceAccessContext,
+) -> EvidenceUseDecision {
+    let chain = custody_chain_for(evidence);
+    authorize_evidence_use_with_custody(evidence, context, Some(&chain))
+}
+
+fn verify_claim_evidence(
+    claim: &Claim,
+    available_evidence: &[EvidenceRef],
+    access_context: &EvidenceAccessContext,
+) -> ClaimVerificationDecision {
+    let custody_chains = custody_chains_for(available_evidence);
+    verify_claim_evidence_with_custody(
+        claim,
+        available_evidence,
+        access_context,
+        &custody_chains,
+    )
+}
+
+fn validate_incident_relationships_with_context(
+    incident: &Incident,
+    detections: &[Detection],
+    claims: &[Claim],
+    evidence_access_context: &EvidenceAccessContext,
+) -> IncidentRelationshipDecision {
+    let custody_chains = custody_chains_for(&incident.evidence_refs);
+    validate_incident_relationships_with_custody(
+        incident,
+        detections,
+        claims,
+        evidence_access_context,
+        &custody_chains,
+    )
+}
+
 fn validate_incident_relationships(
     incident: &Incident,
     detections: &[Detection],
@@ -132,7 +301,7 @@ fn model_assessment(tenant_id: &str) -> ModelAssessment {
         "schema_version": "1.0.0",
         "model_run_id": "modelrun_12345678",
         "tenant_id": tenant_id,
-        "incident_id": "inc_12345678",
+        "subject": {"subject_type": "incident", "incident_id": "inc_12345678"},
         "provider_id": "provider_12345678",
         "provider_version": "openai-compatible-v1",
         "model_id": "model_12345678",
@@ -427,6 +596,406 @@ fn evidence_reference_contract_and_typed_store_boundary_fail_closed() {
 }
 
 #[test]
+fn custody_record_accepts_a_hash_bound_first_record() {
+    let record = custody_pair().0;
+
+    assert_eq!(
+        validate_custody_record(&record),
+        CustodyRecordDecision::Accepted
+    );
+}
+
+#[test]
+fn custody_record_rejects_an_unsupported_schema_version() {
+    let mut record = custody_pair().0;
+    record.schema_version = serde_json::from_value(serde_json::json!("2.0.0"))
+        .expect("future custody schema version");
+
+    assert_eq!(
+        validate_custody_record(&record),
+        CustodyRecordDecision::UnsupportedSchemaVersion
+    );
+}
+
+#[test]
+fn custody_record_rejects_an_invalid_sequence_link_shape() {
+    let mut record = custody_pair().0;
+    record.sequence = 0;
+
+    assert_eq!(
+        validate_custody_record(&record),
+        CustodyRecordDecision::InvalidSequenceBinding
+    );
+}
+
+#[test]
+fn custody_record_rejects_an_empty_operation() {
+    let mut record = custody_pair().0;
+    record.operation.clear();
+
+    assert_eq!(
+        validate_custody_record(&record),
+        CustodyRecordDecision::EmptyOperation
+    );
+}
+
+#[test]
+fn custody_record_rejects_an_oversized_operation() {
+    let mut record = custody_pair().0;
+    record.operation = "a".repeat(129);
+
+    assert_eq!(
+        validate_custody_record(&record),
+        CustodyRecordDecision::OperationTooLong
+    );
+}
+
+#[test]
+fn custody_record_rejects_an_invalid_operation_token() {
+    let mut record = custody_pair().0;
+    record.operation = "sealed\r\nforged".to_owned();
+
+    assert_eq!(
+        validate_custody_record(&record),
+        CustodyRecordDecision::InvalidOperation
+    );
+}
+
+#[test]
+fn custody_record_rejects_an_empty_source_version() {
+    let mut record = custody_pair().0;
+    record.source_version.clear();
+
+    assert_eq!(
+        validate_custody_record(&record),
+        CustodyRecordDecision::EmptySourceVersion
+    );
+}
+
+#[test]
+fn custody_record_rejects_an_oversized_source_version() {
+    let mut record = custody_pair().0;
+    record.source_version = "a".repeat(129);
+
+    assert_eq!(
+        validate_custody_record(&record),
+        CustodyRecordDecision::SourceVersionTooLong
+    );
+}
+
+#[test]
+fn custody_record_rejects_an_invalid_source_version() {
+    let mut record = custody_pair().0;
+    record.source_version = "aisoc-evidence-v1\r\nforged".to_owned();
+
+    assert_eq!(
+        validate_custody_record(&record),
+        CustodyRecordDecision::InvalidSourceVersion
+    );
+}
+
+#[test]
+fn custody_record_hash_binds_every_frozen_field() {
+    let mut record = custody_pair().0;
+    record.operation = "evidence_archived".to_owned();
+
+    assert_eq!(
+        validate_custody_record(&record),
+        CustodyRecordDecision::RecordHashMismatch
+    );
+}
+
+#[test]
+fn custody_transition_accepts_adjacent_forward_lifecycle_evolution() {
+    let (previous, current) = custody_pair();
+
+    assert_eq!(
+        validate_custody_transition(&previous, &current),
+        CustodyTransitionDecision::Accepted
+    );
+}
+
+#[test]
+fn custody_transition_rejects_an_invalid_previous_record() {
+    let (mut previous, current) = custody_pair();
+    previous.record_hash = serde_json::from_value(serde_json::json!(
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    ))
+    .expect("tampered previous record hash");
+
+    assert_eq!(
+        validate_custody_transition(&previous, &current),
+        CustodyTransitionDecision::PreviousRecordRejected
+    );
+}
+
+#[test]
+fn custody_transition_rejects_an_invalid_current_record() {
+    let (previous, mut current) = custody_pair();
+    current.operation.clear();
+
+    assert_eq!(
+        validate_custody_transition(&previous, &current),
+        CustodyTransitionDecision::CurrentRecordRejected
+    );
+}
+
+#[test]
+fn custody_transition_rejects_tenant_substitution() {
+    let (previous, mut current) = custody_pair();
+    current.tenant_id = serde_json::from_value(serde_json::json!("ten_87654321"))
+        .expect("other custody tenant");
+    current.record_hash = compute_custody_record_hash(&current).expect("rebound record hash");
+
+    assert_eq!(
+        validate_custody_transition(&previous, &current),
+        CustodyTransitionDecision::TenantMismatch
+    );
+}
+
+#[test]
+fn custody_transition_rejects_evidence_substitution() {
+    let (previous, mut current) = custody_pair();
+    current.evidence_id = serde_json::from_value(serde_json::json!("evd_87654321"))
+        .expect("other custody evidence");
+    current.record_hash = compute_custody_record_hash(&current).expect("rebound record hash");
+
+    assert_eq!(
+        validate_custody_transition(&previous, &current),
+        CustodyTransitionDecision::EvidenceMismatch
+    );
+}
+
+#[test]
+fn custody_transition_rejects_evidence_digest_substitution() {
+    let (previous, mut current) = custody_pair();
+    current.evidence_sha256 = serde_json::from_value(serde_json::json!(
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    ))
+    .expect("other evidence digest");
+    current.record_hash = compute_custody_record_hash(&current).expect("rebound record hash");
+
+    assert_eq!(
+        validate_custody_transition(&previous, &current),
+        CustodyTransitionDecision::EvidenceDigestMismatch
+    );
+}
+
+#[test]
+fn custody_transition_rejects_a_sequence_gap() {
+    let (previous, mut current) = custody_pair();
+    current.sequence = 3;
+    current.record_hash = compute_custody_record_hash(&current).expect("rebound record hash");
+
+    assert_eq!(
+        validate_custody_transition(&previous, &current),
+        CustodyTransitionDecision::SequenceNotAdjacent
+    );
+}
+
+#[test]
+fn custody_transition_rejects_a_wrong_previous_hash() {
+    let (previous, mut current) = custody_pair();
+    current.previous_record_hash = serde_json::from_value(serde_json::json!(
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    ))
+    .expect("wrong custody link");
+    current.record_hash = compute_custody_record_hash(&current).expect("rebound record hash");
+
+    assert_eq!(
+        validate_custody_transition(&previous, &current),
+        CustodyTransitionDecision::PreviousHashMismatch
+    );
+}
+
+#[test]
+fn custody_transition_rejects_integrity_regression() {
+    let (mut previous, mut current) = custody_pair();
+    previous.integrity_state = IntegrityState::Verified;
+    previous.record_hash = compute_custody_record_hash(&previous).expect("rebound previous hash");
+    current.integrity_state = IntegrityState::Pending;
+    current.previous_record_hash = Some(previous.record_hash.clone());
+    current.record_hash = compute_custody_record_hash(&current).expect("rebound current hash");
+
+    assert_eq!(
+        validate_custody_transition(&previous, &current),
+        CustodyTransitionDecision::IntegrityStateRegressed
+    );
+}
+
+#[test]
+fn custody_transition_rejects_custody_regression() {
+    let (mut previous, mut current) = custody_pair();
+    previous.custody_state = CustodyState::Archived;
+    previous.record_hash = compute_custody_record_hash(&previous).expect("rebound previous hash");
+    current.custody_state = CustodyState::Sealed;
+    current.previous_record_hash = Some(previous.record_hash.clone());
+    current.record_hash = compute_custody_record_hash(&current).expect("rebound current hash");
+
+    assert_eq!(
+        validate_custody_transition(&previous, &current),
+        CustodyTransitionDecision::CustodyStateRegressed
+    );
+}
+
+#[test]
+fn evidence_custody_chain_accepts_a_complete_chain_bound_to_the_evidence() {
+    assert_eq!(
+        validate_evidence_custody_chain(
+            &evidence("ten_12345678", IntegrityState::Verified),
+            &custody_chain(),
+        ),
+        EvidenceCustodyChainDecision::Accepted
+    );
+}
+
+#[test]
+fn evidence_custody_chain_rejects_an_invalid_evidence_contract() {
+    let mut invalid = evidence("ten_12345678", IntegrityState::Verified);
+    invalid.source_version.clear();
+
+    assert_eq!(
+        validate_evidence_custody_chain(&invalid, &custody_chain()),
+        EvidenceCustodyChainDecision::EvidenceContractRejected
+    );
+}
+
+#[test]
+fn evidence_custody_chain_rejects_an_unsupported_chain_schema() {
+    let mut chain = custody_chain();
+    chain.schema_version = serde_json::from_value(serde_json::json!("2.0.0"))
+        .expect("future chain schema");
+
+    assert_eq!(
+        validate_evidence_custody_chain(
+            &evidence("ten_12345678", IntegrityState::Verified),
+            &chain,
+        ),
+        EvidenceCustodyChainDecision::UnsupportedChainSchemaVersion
+    );
+}
+
+#[test]
+fn evidence_custody_chain_rejects_an_empty_chain() {
+    let mut chain = custody_chain();
+    chain.records.clear();
+
+    assert_eq!(
+        validate_evidence_custody_chain(
+            &evidence("ten_12345678", IntegrityState::Verified),
+            &chain,
+        ),
+        EvidenceCustodyChainDecision::EmptyChain
+    );
+}
+
+#[test]
+fn evidence_custody_chain_rejects_an_oversized_chain() {
+    let mut chain = custody_chain();
+    chain.records = vec![chain.records[0].clone(); 4097];
+
+    assert_eq!(
+        validate_evidence_custody_chain(
+            &evidence("ten_12345678", IntegrityState::Verified),
+            &chain,
+        ),
+        EvidenceCustodyChainDecision::ChainLimitExceeded
+    );
+}
+
+#[test]
+fn evidence_custody_chain_rejects_identity_substitution() {
+    let mut chain = custody_chain();
+    chain.tenant_id = serde_json::from_value(serde_json::json!("ten_87654321"))
+        .expect("other chain tenant");
+
+    assert_eq!(
+        validate_evidence_custody_chain(
+            &evidence("ten_12345678", IntegrityState::Verified),
+            &chain,
+        ),
+        EvidenceCustodyChainDecision::ChainIdentityMismatch
+    );
+}
+
+#[test]
+fn evidence_custody_chain_rejects_an_invalid_first_record() {
+    let mut chain = custody_chain();
+    chain.records[0].operation.clear();
+
+    assert_eq!(
+        validate_evidence_custody_chain(
+            &evidence("ten_12345678", IntegrityState::Verified),
+            &chain,
+        ),
+        EvidenceCustodyChainDecision::FirstRecordRejected
+    );
+}
+
+#[test]
+fn evidence_custody_chain_requires_collected_as_the_first_state() {
+    let mut chain = custody_chain();
+    chain.records[0].custody_state = CustodyState::Staged;
+    chain.records[0].record_hash =
+        compute_custody_record_hash(&chain.records[0]).expect("rebound first record hash");
+
+    assert_eq!(
+        validate_evidence_custody_chain(
+            &evidence("ten_12345678", IntegrityState::Verified),
+            &chain,
+        ),
+        EvidenceCustodyChainDecision::FirstRecordStateInvalid
+    );
+}
+
+#[test]
+fn evidence_custody_chain_binds_the_collection_instant() {
+    let mut chain = custody_chain();
+    chain.records[0].occurred_at = serde_json::from_value(serde_json::json!(
+        "2026-08-12T10:00:01Z"
+    ))
+    .expect("different collection instant");
+    chain.records[0].record_hash =
+        compute_custody_record_hash(&chain.records[0]).expect("rebound first record hash");
+
+    assert_eq!(
+        validate_evidence_custody_chain(
+            &evidence("ten_12345678", IntegrityState::Verified),
+            &chain,
+        ),
+        EvidenceCustodyChainDecision::CollectionTimeMismatch
+    );
+}
+
+#[test]
+fn evidence_custody_chain_rejects_a_broken_internal_transition() {
+    let mut chain = custody_chain();
+    chain.records[1].sequence = 3;
+    chain.records[1].record_hash =
+        compute_custody_record_hash(&chain.records[1]).expect("rebound second record hash");
+
+    assert_eq!(
+        validate_evidence_custody_chain(
+            &evidence("ten_12345678", IntegrityState::Verified),
+            &chain,
+        ),
+        EvidenceCustodyChainDecision::TransitionRejected
+    );
+}
+
+#[test]
+fn evidence_custody_chain_latest_state_must_match_the_evidence_ref() {
+    let chain = custody_chain();
+    let mut current = evidence("ten_12345678", IntegrityState::Verified);
+    current.custody_state = CustodyState::Archived;
+
+    assert_eq!(
+        validate_evidence_custody_chain(&current, &chain),
+        EvidenceCustodyChainDecision::LatestStateMismatch
+    );
+}
+
+#[test]
 fn evidence_access_context_accepts_a_bounded_unique_member_set() {
     assert_eq!(
         validate_evidence_access_context(&access_context("ten_12345678")),
@@ -470,6 +1039,44 @@ fn evidence_lifecycle_preserves_identity_and_moves_only_forward() {
     assert_eq!(
         validate_evidence_lifecycle_transition(&previous, &current),
         EvidenceLifecycleDecision::CustodyStateRegressed
+    );
+}
+
+#[test]
+fn evidence_integrity_can_fail_after_verification_but_cannot_recover() {
+    let mut verified = evidence("ten_12345678", IntegrityState::Verified);
+    verified.custody_state = CustodyState::Sealed;
+    let mut failed = verified.clone();
+    failed.integrity_state = IntegrityState::Failed;
+
+    assert_eq!(
+        validate_evidence_lifecycle_transition(&verified, &failed),
+        EvidenceLifecycleDecision::Accepted
+    );
+    assert_eq!(
+        validate_evidence_lifecycle_transition(&failed, &verified),
+        EvidenceLifecycleDecision::IntegrityStateRegressed
+    );
+
+    let (mut previous, mut current) = custody_pair();
+    previous.integrity_state = IntegrityState::Verified;
+    previous.record_hash = compute_custody_record_hash(&previous).expect("verified record hash");
+    current.integrity_state = IntegrityState::Failed;
+    current.previous_record_hash = Some(previous.record_hash.clone());
+    current.record_hash = compute_custody_record_hash(&current).expect("failed record hash");
+    assert_eq!(
+        validate_custody_transition(&previous, &current),
+        CustodyTransitionDecision::Accepted
+    );
+
+    let mut recovered = current.clone();
+    recovered.sequence = 3;
+    recovered.integrity_state = IntegrityState::Verified;
+    recovered.previous_record_hash = Some(current.record_hash.clone());
+    recovered.record_hash = compute_custody_record_hash(&recovered).expect("recovery record hash");
+    assert_eq!(
+        validate_custody_transition(&current, &recovered),
+        CustodyTransitionDecision::IntegrityStateRegressed
     );
 }
 
@@ -614,6 +1221,39 @@ fn evidence_authorization_rejects_an_invalid_evidence_contract() {
 }
 
 #[test]
+fn evidence_authorization_rejects_a_missing_custody_chain() {
+    let evidence = evidence("ten_12345678", IntegrityState::Verified);
+
+    assert_eq!(
+        authorize_evidence_use_with_custody(
+            &evidence,
+            &access_context("ten_12345678"),
+            None,
+        ),
+        EvidenceUseDecision::CustodyChainMissing
+    );
+}
+
+#[test]
+fn evidence_authorization_rejects_a_non_authoritative_custody_chain() {
+    let evidence = evidence("ten_12345678", IntegrityState::Verified);
+    let mut chain = custody_chain_for(&evidence);
+    chain.records[1].record_hash = serde_json::from_value(serde_json::json!(
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    ))
+    .expect("tampered custody record hash");
+
+    assert_eq!(
+        authorize_evidence_use_with_custody(
+            &evidence,
+            &access_context("ten_12345678"),
+            Some(&chain),
+        ),
+        EvidenceUseDecision::CustodyChainRejected
+    );
+}
+
+#[test]
 fn evidence_authorization_rejects_evidence_outside_incident_membership() {
     let mut context = access_context("ten_12345678");
     context.permitted_evidence.clear();
@@ -686,6 +1326,115 @@ fn evidence_authorization_accepts_a_complete_incident_member() {
             &access_context("ten_12345678"),
         ),
         EvidenceUseDecision::Allowed
+    );
+}
+
+#[test]
+fn claim_verification_rejects_an_oversized_custody_chain_set() {
+    let claim = confirmed_claim("ten_12345678");
+    let available = [evidence("ten_12345678", IntegrityState::Verified)];
+    let chain = custody_chain_for(&available[0]);
+    let custody_chains = vec![chain; 513];
+
+    assert_eq!(
+        verify_claim_evidence_with_custody(
+            &claim,
+            &available,
+            &access_context("ten_12345678"),
+            &custody_chains,
+        ),
+        ClaimVerificationDecision::CustodyChainSetLimitExceeded
+    );
+}
+
+#[test]
+fn claim_verification_rejects_duplicate_custody_chain_ids() {
+    let claim = confirmed_claim("ten_12345678");
+    let available = [evidence("ten_12345678", IntegrityState::Verified)];
+    let chain = custody_chain_for(&available[0]);
+
+    assert_eq!(
+        verify_claim_evidence_with_custody(
+            &claim,
+            &available,
+            &access_context("ten_12345678"),
+            &[chain.clone(), chain],
+        ),
+        ClaimVerificationDecision::DuplicateCustodyChainEvidenceId
+    );
+}
+
+#[test]
+fn claim_verification_rejects_a_custody_chain_outside_the_available_set() {
+    let claim = confirmed_claim("ten_12345678");
+    let available = [evidence("ten_12345678", IntegrityState::Verified)];
+    let mut foreign = available[0].clone();
+    foreign.evidence_id = serde_json::from_value(serde_json::json!("evd_87654321"))
+        .expect("foreign custody evidence id");
+    let chain = custody_chain_for(&foreign);
+
+    assert_eq!(
+        verify_claim_evidence_with_custody(
+            &claim,
+            &available,
+            &access_context("ten_12345678"),
+            &[chain],
+        ),
+        ClaimVerificationDecision::CustodyChainContainsForeignEvidence
+    );
+}
+
+#[test]
+fn claim_verification_rejects_an_unreferenced_tampered_custody_chain() {
+    let claim = confirmed_claim("ten_12345678");
+    let primary = evidence("ten_12345678", IntegrityState::Verified);
+    let secondary = second_evidence("ten_12345678");
+    let primary_chain = custody_chain_for(&primary);
+    let mut secondary_chain = custody_chain_for(&secondary);
+    secondary_chain.records[1].operation.clear();
+
+    assert_eq!(
+        verify_claim_evidence_with_custody(
+            &claim,
+            &[primary, secondary],
+            &access_context("ten_12345678"),
+            &[primary_chain, secondary_chain],
+        ),
+        ClaimVerificationDecision::CustodyChainRejected
+    );
+}
+
+#[test]
+fn claim_verification_rejects_a_missing_custody_chain() {
+    let claim = confirmed_claim("ten_12345678");
+    let available = [evidence("ten_12345678", IntegrityState::Verified)];
+
+    assert_eq!(
+        verify_claim_evidence_with_custody(
+            &claim,
+            &available,
+            &access_context("ten_12345678"),
+            &[],
+        ),
+        ClaimVerificationDecision::CustodyChainMissing
+    );
+}
+
+#[test]
+fn claim_verification_rejects_a_malformed_custody_chain() {
+    let claim = confirmed_claim("ten_12345678");
+    let available = [evidence("ten_12345678", IntegrityState::Verified)];
+    let mut chain = custody_chain_for(&available[0]);
+    chain.records[1].operation.clear();
+
+    assert_eq!(
+        verify_claim_evidence_with_custody(
+            &claim,
+            &available,
+            &access_context("ten_12345678"),
+            &[chain],
+        ),
+        ClaimVerificationDecision::CustodyChainRejected
     );
 }
 
@@ -1034,8 +1783,9 @@ fn agent_mtls_context_rejects_event_host_override() {
 #[test]
 fn agent_mtls_context_rejects_missing_nested_agent_identity() {
     let mut envelope = agent_envelope();
-    envelope.payload.events[0].source.kind = aisoc_contracts::EventSourceKind::Sensor;
+    envelope.payload.events[0].source.kind = aisoc_contracts::EventSourceKind::Journald;
     envelope.payload.events[0].source.agent_id = None;
+    envelope.payload.events[0].raw_evidence.source = aisoc_contracts::EvidenceSource::Sensor;
 
     assert_eq!(
         validate_agent_binding(&authenticated_agent_context(), &envelope),
@@ -1315,6 +2065,58 @@ fn security_event_rejects_schema_and_evidence_tenant_substitution() {
         validate_security_event(&event),
         SecurityEventDecision::EvidenceTenantMismatch
     );
+}
+
+#[test]
+fn security_event_rejects_raw_evidence_source_substitution() {
+    let mut event: SecurityEvent = serde_json::from_value(security_event("ten_12345678"))
+        .expect("security event");
+    event.raw_evidence.source = aisoc_contracts::EvidenceSource::WebGuard;
+
+    assert_eq!(
+        validate_security_event(&event),
+        SecurityEventDecision::EvidenceSourceMismatch
+    );
+}
+
+#[test]
+fn security_event_accepts_plan_backed_raw_evidence_source_lineage() {
+    use aisoc_contracts::{EventSourceKind, EvidenceSource};
+
+    for (kind, carried_by_agent, evidence_source) in [
+        (EventSourceKind::Agent, true, EvidenceSource::Agent),
+        (EventSourceKind::WebGuard, false, EvidenceSource::WebGuard),
+        (EventSourceKind::Suricata, false, EvidenceSource::Sensor),
+        (EventSourceKind::Falco, false, EvidenceSource::Sensor),
+        (EventSourceKind::Auditd, true, EvidenceSource::Agent),
+        (EventSourceKind::Journald, true, EvidenceSource::Agent),
+        (EventSourceKind::Journald, false, EvidenceSource::Sensor),
+        (EventSourceKind::Procfs, true, EvidenceSource::Agent),
+        (EventSourceKind::Netlink, true, EvidenceSource::Agent),
+        (EventSourceKind::ServiceLog, true, EvidenceSource::Agent),
+        (EventSourceKind::FileScan, true, EvidenceSource::Agent),
+        (EventSourceKind::FileScan, false, EvidenceSource::Scanner),
+        (
+            EventSourceKind::ResponseRunner,
+            false,
+            EvidenceSource::ResponseRunner,
+        ),
+        (EventSourceKind::Import, false, EvidenceSource::Ingest),
+    ] {
+        let mut event: SecurityEvent = serde_json::from_value(security_event("ten_12345678"))
+            .expect("security event");
+        event.source.kind = kind;
+        if !carried_by_agent {
+            event.source.agent_id = None;
+        }
+        event.raw_evidence.source = evidence_source;
+
+        assert_eq!(
+            validate_security_event(&event),
+            SecurityEventDecision::Accepted,
+            "source lineage must accept {kind:?}"
+        );
+    }
 }
 
 #[test]
@@ -2352,6 +3154,20 @@ fn incident_relationships_reject_a_detection_entity_missing_from_entity_set() {
 }
 
 #[test]
+fn incident_relationships_reject_a_substituted_detection_host() {
+    let mut detection = relationship_detection("ten_12345678");
+    detection.host_id = Some(
+        serde_json::from_value(serde_json::json!("host_87654321"))
+            .expect("substituted detection host"),
+    );
+
+    assert_eq!(
+        validate_incident_relationships(&relationship_incident(false), &[detection], &[]),
+        IncidentRelationshipDecision::DetectionHostMissing
+    );
+}
+
+#[test]
 fn incident_relationships_reject_a_cross_tenant_claim() {
     assert_eq!(
         validate_incident_relationships(
@@ -2559,6 +3375,98 @@ fn incident_relationships_reject_context_membership_outside_the_incident() {
             &context,
         ),
         IncidentRelationshipDecision::EvidenceAccessContextContainsForeignEvidence
+    );
+}
+
+#[test]
+fn incident_relationships_reject_an_oversized_custody_chain_set() {
+    let incident = relationship_incident(false);
+    let custody_chain = custody_chain_for(&incident.evidence_refs[0]);
+    let custody_chains = vec![custody_chain; 513];
+
+    assert_eq!(
+        validate_incident_relationships_with_custody(
+            &incident,
+            &[relationship_detection("ten_12345678")],
+            &[],
+            &access_context("ten_12345678"),
+            &custody_chains,
+        ),
+        IncidentRelationshipDecision::CustodyChainSetLimitExceeded
+    );
+}
+
+#[test]
+fn incident_relationships_reject_duplicate_custody_chain_ids() {
+    let incident = relationship_incident(false);
+    let custody_chain = custody_chain_for(&incident.evidence_refs[0]);
+
+    assert_eq!(
+        validate_incident_relationships_with_custody(
+            &incident,
+            &[relationship_detection("ten_12345678")],
+            &[],
+            &access_context("ten_12345678"),
+            &[custody_chain.clone(), custody_chain],
+        ),
+        IncidentRelationshipDecision::DuplicateCustodyChainEvidenceId
+    );
+}
+
+#[test]
+fn incident_relationships_reject_a_custody_chain_outside_the_revision() {
+    let incident = relationship_incident(false);
+    let foreign_evidence = second_evidence("ten_12345678");
+    let foreign_chain = custody_chain_for(&foreign_evidence);
+
+    assert_eq!(
+        validate_incident_relationships_with_custody(
+            &incident,
+            &[relationship_detection("ten_12345678")],
+            &[],
+            &access_context("ten_12345678"),
+            &[foreign_chain],
+        ),
+        IncidentRelationshipDecision::CustodyChainContainsForeignEvidence
+    );
+}
+
+#[test]
+fn incident_relationships_reject_a_tampered_custody_chain_set_member() {
+    let incident = relationship_incident(false);
+    let mut chain = custody_chain_for(&incident.evidence_refs[0]);
+    chain.records[1].operation.clear();
+
+    assert_eq!(
+        validate_incident_relationships_with_custody(
+            &incident,
+            &[relationship_detection("ten_12345678")],
+            &[],
+            &access_context("ten_12345678"),
+            &[chain],
+        ),
+        IncidentRelationshipDecision::CustodyChainRejected
+    );
+}
+
+#[test]
+fn confirmed_incident_relationships_reject_a_missing_custody_chain() {
+    let mut incident = relationship_incident(false);
+    incident.security_state = aisoc_contracts::SecurityState::ConfirmedCompromise;
+    incident.assurance = aisoc_contracts::Assurance::Verified;
+
+    assert_eq!(
+        validate_incident_relationships_with_custody(
+            &incident,
+            &[confirmed_detection(evidence(
+                "ten_12345678",
+                IntegrityState::Verified,
+            ))],
+            &[],
+            &access_context("ten_12345678"),
+            &[],
+        ),
+        IncidentRelationshipDecision::ConfirmedCustodyChainRejected
     );
 }
 
@@ -2895,7 +3803,7 @@ fn model_assessment_rejects_duplicate_claim_references() {
         "schema_version": "1.0.0",
         "model_run_id": "modelrun_12345678",
         "tenant_id": "ten_12345678",
-        "incident_id": "inc_12345678",
+        "subject": {"subject_type": "incident", "incident_id": "inc_12345678"},
         "provider_id": "provider_12345678",
         "provider_version": "openai-compatible-v1",
         "model_id": "model_12345678",
@@ -3085,10 +3993,11 @@ fn model_assessment_binding_rejects_invalid_contracts_duplicates_and_capacity() 
     );
 
     let mut assessment = model_assessment("ten_12345678");
-    assessment.incident_id = Some(
-        serde_json::from_value(serde_json::json!("inc_87654321"))
-            .expect("different assessment incident ID"),
-    );
+    assessment.subject = serde_json::from_value(serde_json::json!({
+        "subject_type": "incident",
+        "incident_id": "inc_87654321"
+    }))
+    .expect("different assessment incident subject");
     assert_eq!(
         validate_model_assessment_binding(
             &assessment,
@@ -3150,7 +4059,11 @@ fn incident_model_assessment_binding_rejects_assessment_evidence_outside_package
 #[test]
 fn incident_model_assessment_binding_requires_an_incident() {
     let mut assessment = model_assessment("ten_12345678");
-    assessment.incident_id = None;
+    assessment.subject = serde_json::from_value(serde_json::json!({
+        "subject_type": "web_request",
+        "request_id": "req_12345678"
+    }))
+    .expect("Web assessment subject");
 
     assert_eq!(
         validate_model_assessment_binding(
@@ -3158,7 +4071,7 @@ fn incident_model_assessment_binding_requires_an_incident() {
             &evidence_package("ten_12345678"),
             &[confirmed_claim("ten_12345678")],
         ),
-        ModelAssessmentBindingDecision::MissingIncident
+        ModelAssessmentBindingDecision::AssessmentSubjectNotIncident
     );
 }
 
@@ -3613,6 +4526,7 @@ fn agent_envelope_with_the_exact_payload_digest_is_accepted() {
         "payload": {"events": [security_event("ten_12345678")]}
     }))
     .expect("agent envelope");
+    envelope.payload.events[0].source.kind = aisoc_contracts::EventSourceKind::Journald;
     envelope.canonical_digest =
         compute_agent_payload_digest(&envelope.payload).expect("canonical payload digest");
     let context = serde_json::from_value(serde_json::json!({

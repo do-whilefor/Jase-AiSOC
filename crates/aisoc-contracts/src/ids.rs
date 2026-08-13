@@ -196,6 +196,11 @@ define_id!(PolicyId, "policy_", r"^policy_[A-Za-z0-9_-]{8,128}$");
 define_id!(ActionId, "action_", r"^action_[A-Za-z0-9_-]{8,128}$");
 define_id!(ApprovalId, "approval_", r"^approval_[A-Za-z0-9_-]{8,128}$");
 define_id!(AuditEventId, "audit_", r"^audit_[A-Za-z0-9_-]{8,128}$");
+define_id!(
+    AuditStreamId,
+    "auditstream_",
+    r"^auditstream_[A-Za-z0-9_-]{8,128}$"
+);
 define_id!(UserId, "user_", r"^user_[A-Za-z0-9_-]{8,128}$");
 define_id!(ServiceIdentityId, "identity_", r"^identity_[A-Za-z0-9_-]{8,128}$");
 define_id!(ProviderId, "provider_", r"^provider_[A-Za-z0-9_-]{8,128}$");

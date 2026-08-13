@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    contains_duplicate, validate_current_schema, AgentId, BootId, EntityId, EntityKind, EventId, EvidenceRef, HostId,
-    SchemaVersion, SchemaVersionDecision, Sha256Digest, TenantId, TenantScoped, Timestamp,
+    contains_duplicate, validate_current_schema, AgentId, BootId, EntityId, EntityKind, EventId,
+    EvidenceRef, EvidenceSource, HostId, SchemaVersion, SchemaVersionDecision, Sha256Digest,
+    TenantId, TenantScoped, Timestamp,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -169,6 +170,7 @@ pub enum SecurityEventDecision {
     UnsupportedSchemaVersion,
     EvidenceTenantMismatch,
     EvidenceContractRejected,
+    EvidenceSourceMismatch,
     DuplicateEntityId,
     EmptyCategory,
     InvalidCategory,
@@ -196,6 +198,9 @@ pub fn validate_security_event(event: &SecurityEvent) -> SecurityEventDecision {
     }
     if crate::validate_evidence_ref(&event.raw_evidence) != crate::EvidenceRefDecision::Accepted {
         return SecurityEventDecision::EvidenceContractRejected;
+    }
+    if !evidence_source_matches_event_source(&event.source, event.raw_evidence.source) {
+        return SecurityEventDecision::EvidenceSourceMismatch;
     }
     if contains_duplicate(event.entities.iter().map(|entity| &entity.entity_id)) {
         return SecurityEventDecision::DuplicateEntityId;
@@ -318,6 +323,44 @@ pub fn validate_security_event(event: &SecurityEvent) -> SecurityEventDecision {
         return SecurityEventDecision::InvalidExtensions;
     }
     SecurityEventDecision::Accepted
+}
+
+/// Preserves the producer lineage represented by the coarse Evidence source.
+/// Detailed Linux sources may run either behind an Agent or as independently
+/// registered sensors/scanners. Agent transport keeps the detailed kind while
+/// the optional typed Agent ID records who carried the raw material.
+fn evidence_source_matches_event_source(
+    event_source: &EventSource,
+    evidence_source: EvidenceSource,
+) -> bool {
+    match event_source.kind {
+        EventSourceKind::Agent => evidence_source == EvidenceSource::Agent,
+        EventSourceKind::WebGuard => evidence_source == EvidenceSource::WebGuard,
+        EventSourceKind::Suricata
+        | EventSourceKind::Falco
+        | EventSourceKind::Auditd
+        | EventSourceKind::Journald
+        | EventSourceKind::Procfs
+        | EventSourceKind::Netlink
+        | EventSourceKind::ServiceLog => {
+            evidence_source
+                == if event_source.agent_id.is_some() {
+                    EvidenceSource::Agent
+                } else {
+                    EvidenceSource::Sensor
+                }
+        }
+        EventSourceKind::FileScan => {
+            evidence_source
+                == if event_source.agent_id.is_some() {
+                    EvidenceSource::Agent
+                } else {
+                    EvidenceSource::Scanner
+                }
+        }
+        EventSourceKind::ResponseRunner => evidence_source == EvidenceSource::ResponseRunner,
+        EventSourceKind::Import => evidence_source == EvidenceSource::Ingest,
+    }
 }
 
 fn bounded_non_empty(value: &str, maximum_bytes: usize) -> bool {

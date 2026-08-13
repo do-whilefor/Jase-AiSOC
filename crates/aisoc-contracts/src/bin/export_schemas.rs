@@ -4,7 +4,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use aisoc_contracts::schema::generated_schemas;
+use aisoc_contracts::schema::{generated_schemas, is_safe_schema_filename, SCHEMA_FILENAMES};
 
 fn main() -> Result<(), String> {
     let mut arguments = env::args_os().skip(1);
@@ -29,6 +29,27 @@ fn main() -> Result<(), String> {
         return Err("usage: aisoc-export-schemas [--check] [output-directory]".to_owned());
     }
 
+    let schemas = generated_schemas();
+    let manifest_names: std::collections::BTreeSet<_> =
+        SCHEMA_FILENAMES.iter().copied().collect();
+    let generated_names: std::collections::BTreeSet<_> =
+        schemas.iter().map(|(filename, _)| *filename).collect();
+    if manifest_names.len() != SCHEMA_FILENAMES.len() {
+        return Err("duplicate schema filename in manifest".to_owned());
+    }
+    if generated_names.len() != schemas.len() {
+        return Err("duplicate generated schema filename".to_owned());
+    }
+    if manifest_names != generated_names {
+        return Err("schema manifest and generator drifted".to_owned());
+    }
+    if let Some(filename) = generated_names
+        .iter()
+        .find(|filename| !is_safe_schema_filename(filename))
+    {
+        return Err(format!("unsafe generated schema filename: {filename}"));
+    }
+
     if check_only && !output_dir.is_dir() {
         return Err(format!(
             "schema drift check directory does not exist: {}",
@@ -39,8 +60,8 @@ fn main() -> Result<(), String> {
         fs::create_dir_all(&output_dir).map_err(|error| error.to_string())?;
     }
 
-    for (filename, schema) in generated_schemas() {
-        let json = serde_json::to_string_pretty(&schema).map_err(|error| error.to_string())?;
+    for (filename, schema) in &schemas {
+        let json = serde_json::to_string_pretty(schema).map_err(|error| error.to_string())?;
         let expected = format!("{json}\n");
         let path = output_dir.join(filename);
         if check_only {
@@ -55,14 +76,10 @@ fn main() -> Result<(), String> {
     }
 
     if check_only {
-        let expected_names: std::collections::BTreeSet<_> = generated_schemas()
-            .into_iter()
-            .map(|(filename, _)| filename.to_owned())
-            .collect();
         for entry in fs::read_dir(&output_dir).map_err(|error| error.to_string())? {
             let entry = entry.map_err(|error| error.to_string())?;
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.ends_with(".schema.json") && !expected_names.contains(&name) {
+            if name.ends_with(".schema.json") && !generated_names.contains(name.as_str()) {
                 return Err(format!("unexpected committed schema: {name}"));
             }
         }

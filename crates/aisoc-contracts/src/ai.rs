@@ -3,9 +3,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     authorize_evidence_use, contains_duplicate, Assurance, ClaimId, ConfidenceScore,
-    DetectionId, EvidenceAccessContext, EvidenceId, EvidenceRef, EvidenceUseDecision, IncidentId,
-    ModelId, ModelRunId, PromptId, ProviderId, RiskScore, SchemaVersion, SchemaVersionDecision,
-    SecurityState, ServiceIdentityId, TenantId, TenantScoped, Timestamp, UserId,
+    DetectionId, EvidenceAccessContext, EvidenceCustodyChain, EvidenceId, EvidenceRef,
+    EvidenceUseDecision, IncidentId, ModelId, ModelRunId, PromptId, ProviderId, RequestId,
+    RiskScore, SchemaVersion, SchemaVersionDecision, SecurityState, ServiceIdentityId, TenantId,
+    TenantScoped, Timestamp, UserId,
     validate_current_schema,
 };
 
@@ -85,13 +86,20 @@ pub enum ModelVerdict {
     Unknown,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "subject_type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ModelAssessmentSubject {
+    WebRequest { request_id: RequestId },
+    Incident { incident_id: IncidentId },
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ModelAssessment {
     pub schema_version: SchemaVersion,
     pub model_run_id: ModelRunId,
     pub tenant_id: TenantId,
-    pub incident_id: Option<IncidentId>,
+    pub subject: ModelAssessmentSubject,
     pub provider_id: ProviderId,
     #[schemars(length(min = 1, max = 128))]
     pub provider_version: String,
@@ -161,6 +169,11 @@ pub enum ClaimVerificationDecision {
     EvidenceIntegrityFailed,
     EvidenceSetLimitExceeded,
     DuplicateAvailableEvidenceId,
+    CustodyChainSetLimitExceeded,
+    DuplicateCustodyChainEvidenceId,
+    CustodyChainContainsForeignEvidence,
+    CustodyChainMissing,
+    CustodyChainRejected,
     InvalidClaimOrigin,
 }
 
@@ -406,7 +419,7 @@ pub enum ModelAssessmentBindingDecision {
     DuplicateClaimId,
     ClaimSetMismatch,
     TenantMismatch,
-    MissingIncident,
+    AssessmentSubjectNotIncident,
     IncidentMismatch,
     AssessmentCompletedBeforePackage,
     AssessmentEvidenceNotInPackage,
@@ -492,8 +505,11 @@ pub fn validate_model_assessment_binding(
     if assessment.tenant_id != package.tenant_id {
         return ModelAssessmentBindingDecision::TenantMismatch;
     }
-    let Some(assessment_incident_id) = assessment.incident_id.as_ref() else {
-        return ModelAssessmentBindingDecision::MissingIncident;
+    let ModelAssessmentSubject::Incident {
+        incident_id: assessment_incident_id,
+    } = &assessment.subject
+    else {
+        return ModelAssessmentBindingDecision::AssessmentSubjectNotIncident;
     };
     if assessment_incident_id != &package.incident_id {
         return ModelAssessmentBindingDecision::IncidentMismatch;
@@ -551,6 +567,7 @@ pub fn verify_claim_evidence(
     claim: &Claim,
     available_evidence: &[EvidenceRef],
     access_context: &EvidenceAccessContext,
+    custody_chains: &[EvidenceCustodyChain],
 ) -> ClaimVerificationDecision {
     if validate_claim_contract(claim) != ClaimContractDecision::Accepted {
         return ClaimVerificationDecision::ClaimContractRejected;
@@ -572,6 +589,31 @@ pub fn verify_claim_evidence(
             .map(|evidence| &evidence.evidence_id),
     ) {
         return ClaimVerificationDecision::DuplicateAvailableEvidenceId;
+    }
+    if custody_chains.len() > 512 {
+        return ClaimVerificationDecision::CustodyChainSetLimitExceeded;
+    }
+    if contains_duplicate(custody_chains.iter().map(|chain| &chain.evidence_id)) {
+        return ClaimVerificationDecision::DuplicateCustodyChainEvidenceId;
+    }
+    if custody_chains.iter().any(|chain| {
+        !available_evidence
+            .iter()
+            .any(|evidence| evidence.evidence_id == chain.evidence_id)
+    }) {
+        return ClaimVerificationDecision::CustodyChainContainsForeignEvidence;
+    }
+    if custody_chains.iter().any(|chain| {
+        let Some(evidence) = available_evidence
+            .iter()
+            .find(|evidence| evidence.evidence_id == chain.evidence_id)
+        else {
+            return true;
+        };
+        crate::validate_evidence_custody_chain(evidence, chain)
+            != crate::EvidenceCustodyChainDecision::Accepted
+    }) {
+        return ClaimVerificationDecision::CustodyChainRejected;
     }
     if matches!(
         &claim.origin,
@@ -619,8 +661,18 @@ pub fn verify_claim_evidence(
         if evidence.integrity_state != crate::IntegrityState::Verified {
             return ClaimVerificationDecision::EvidenceIntegrityFailed;
         }
-        if authorize_evidence_use(evidence, access_context) != EvidenceUseDecision::Allowed {
-            return ClaimVerificationDecision::EvidenceAccessDenied;
+        let custody_chain = custody_chains
+            .iter()
+            .find(|chain| chain.evidence_id == evidence.evidence_id);
+        match authorize_evidence_use(evidence, access_context, custody_chain) {
+            EvidenceUseDecision::Allowed => {}
+            EvidenceUseDecision::CustodyChainMissing => {
+                return ClaimVerificationDecision::CustodyChainMissing;
+            }
+            EvidenceUseDecision::CustodyChainRejected => {
+                return ClaimVerificationDecision::CustodyChainRejected;
+            }
+            _ => return ClaimVerificationDecision::EvidenceAccessDenied,
         }
     }
     match claim.status {

@@ -16,11 +16,11 @@
 |---|---|---|---|
 | 实时 Web 防护数据面 | `aisoc-web-guard` | `WebRequestEnvelope` + `WebRouteFailPolicy` → `WebSecurityEvent` | 攻击者输入始终是数据；请求必须建立单一语义；模型无工具和策略写权；AI 失败按服务端 route-scoped Policy ID/version 显式决策并记录来源。 |
 | Linux/网络采集数据面 | `aisoc-agent`、`aisoc-linux` | Linux telemetry → `AgentEnvelope` | mTLS 身份决定 tenant/agent/host；单个 Collector 失败不得拖垮 Agent 主链。 |
-| 中心分析面 | `aisoc-ingest`、`aisoc-normalize`、`aisoc-detection`、`aisoc-incident` | Raw → Normalized → Detection → Incident Revision | Raw first、幂等、可重放；Incident revision 与服务端解析的 Detection/Claim 集合、Evidence lineage 和 EntitySet 形成闭包；相邻 revision 保留既有 Detection/Evidence/Claim 和 Timeline 事实，late event 可按 occurred_at 插入但不得改写历史；AI、搜索和控制台故障不阻断确定性 Detection。 |
-| AI 研判面 | `aisoc-ai` | `EvidencePackage` → `ModelAssessment`/`Claim` | EvidencePackage 先绑定权威 Incident revision 与逐字段 EvidenceRef；assessment/package/claims 再绑定 tenant/incident/model run/集合/时间；Claim 必须经程序化证据验证；模型多数票不替代事实。 |
-| 证据面 | `aisoc-evidence`、`aisoc-storage` | `EvidenceRef`、Custody、Integrity | Append-only；同租户；对象不可覆盖；下载需要 tenant + incident membership + classification 二次授权；confirmed Incident revision 的全部 Evidence 必须在同一权威访问上下文中可用。 |
-| 控制面 | `aisoc-api`、`aisoc-console`、`aisoc-ui`、`aisocctl` | OIDC/mTLS context、Policy、Approval、Audit | 服务端 Rust 再验证 tenant/RBAC/ABAC；浏览器不保存平台长期 Secret。 |
-| 响应面 | `aisoc-policy`、`aisoc-response`、Agent/Guard Runner | `ResponseAction` → ActionResult/Evidence/Audit | 仅固定动作；执行前目标重验证；R2 TTL/rollback；R3 人工/关键资产双审。 |
+| 中心分析面 | `aisoc-ingest`、`aisoc-normalize`、`aisoc-detection`、`aisoc-incident` | Raw → Normalized → Detection → Incident Revision | Raw first、幂等、可重放；Incident revision 与服务端解析的 Detection/Claim 集合、Evidence lineage、完整 custody chain 和 EntitySet 形成闭包，Detection 的 typed Host ID 必须存在于该 revision 的 EntitySet；相邻 revision 保留既有 Detection/Evidence/Claim 和 Timeline 事实，late event 可按 occurred_at 插入但不得改写历史；AI、搜索和控制台故障不阻断确定性 Detection。 |
+| AI 研判面 | `aisoc-ai` | Web Request 或 `EvidencePackage` → `ModelAssessment`/`Claim` | ModelAssessment 用 tagged subject 明确绑定 Web Request 或 Incident；Web assessment 先验证权威 ingress context，再与 request/event/model run/Evidence/时间闭包绑定且不得产生 Incident Claim；EvidencePackage 先绑定权威 Incident revision 与逐字段 EvidenceRef，Incident assessment/package/claims 再绑定 tenant/incident/model run/集合/时间；Claim 必须经程序化证据与服务端完整 custody chain 验证；模型多数票不替代事实。 |
+| 证据面 | `aisoc-evidence`、`aisoc-storage` | `EvidenceRef`、`EvidenceCustodyChain`、Integrity | 对象 append-only 且不可覆盖；custody 记录以 typed actor、Evidence digest、单调 sequence、前项 Hash 与自身 Hash 形成完整链，首项绑定 collection instant，末项绑定 EvidenceRef 当前状态；同租户；下载需要 tenant + incident membership + classification 二次授权及服务端完整 chain；confirmed Incident revision 的全部 Evidence 必须在同一权威访问上下文中可用且 chain 有效。 |
+| 控制面 | `aisoc-api`、`aisoc-console`、`aisoc-ui`、`aisocctl` | OIDC/mTLS context、Policy、Approval、Audit | 服务端 Rust 再验证 tenant/RBAC/ABAC；每个 API/Web Request、Host、Agent、Service、Route 与数据/治理对象使用 typed audit 主对象和可选同类 correlation，提供时必须一致；tenant 保持顶层唯一权威字段；浏览器不保存平台长期 Secret。 |
+| 响应面 | `aisoc-policy`、`aisoc-response`、Agent/Guard Runner | `ResponseAction` + `ResponseAuthorizationContext` → ActionResult/Evidence/Audit | 仅固定动作；服务端 Policy/Approval authority、Incident revision 与 Supporting Evidence 先闭合；执行前目标重验证；R2 TTL/rollback；R3 人工/关键资产双审。 |
 
 ## 数据流冻结
 
@@ -32,13 +32,14 @@ Web:
 SOC:
   Linux Agent / Suricata / Falco / auditd / journald / service logs
     -> Ingest -> Raw Evidence -> Normalize -> Deterministic Detection
-    -> Detection -> bound Incident Revision (Detection / Claim / Evidence / Entity closure)
+    -> Detection -> bound Incident Revision (Detection / Claim / Evidence / Custody / Entity closure)
     -> bound EvidencePackage -> bound ModelAssessment/Claims
     -> programmatic verification -> AI review result / Malware / Trace
 
 Control and response:
   Console / API / aisocctl -> server-side RBAC/ABAC -> Policy/Approval
-    -> typed ResponseAction -> target revalidation -> Runner
+    -> typed ResponseAction + server-resolved authorization/Incident/Evidence/Custody binding
+    -> target revalidation -> Runner
     -> ActionResult / rollback / post-check -> Evidence/Audit -> Incident Revision
 ```
 
@@ -61,8 +62,8 @@ P0 仅落地 `aisoc-contracts` 及其最小 Workspace 载体。P1 才建立 core
 1. 鉴权上下文决定 tenant，payload、HTTP 字段和模型输出不得覆盖租户归属。
 2. Web Guard 输入永远按不可信数据处理，模型不能修改 route、规则、白名单、Provider 或 Policy。
 3. AI 故障不影响确定性 SOC 主链；Web 实时链的 AI budget/timeout/circuit/unavailable/invalid-output 均按 tenant/service/route 绑定的版本化 fail policy 决策，事件来源不可伪装。
-4. Raw Evidence append-only；`confirmed_compromise` 必须具备存在、同租户、完整性有效且可访问的完整 Evidence 覆盖。
-5. Response Runner 只接受枚举化动作和带 fingerprint 的目标快照，不接受任意 Shell/SQL/URL。
+4. Raw Evidence append-only；custody sequence/hash-chain 必须完整且链末状态匹配 EvidenceRef；`confirmed_compromise` 必须具备存在、同租户、完整性有效且可访问的完整 Evidence 覆盖。
+5. Response Runner 只接受绑定权威 Policy/Approval、Incident revision、服务端完整 custody chain 和可用 Supporting Evidence 的枚举化动作及带 fingerprint 的目标快照，不接受任意 Shell/SQL/URL。
 6. Agent CA 私钥、Provider Key、对象存储 Secret 和数据库密码不得进入仓库、浏览器 bundle 或普通日志。
 7. Schema、Rule、Prompt、Model、Policy 和 ResponseAction 必须带版本与审计引用。
 

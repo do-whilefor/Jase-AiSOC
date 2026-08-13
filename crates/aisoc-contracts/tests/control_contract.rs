@@ -1,6 +1,7 @@
 use aisoc_contracts::{
-    compute_audit_event_hash, validate_audit_event, validate_authentication_context,
-    validate_current_schema, validate_error_envelope, validate_safe_fields, validate_tenant_scope,
+    compute_audit_event_hash, validate_audit_chain_transition, validate_audit_event,
+    validate_authentication_context, validate_current_schema, validate_error_envelope,
+    validate_safe_fields, validate_tenant_scope, AuditChainTransitionDecision,
     AuditContractDecision, AuditEvent, AuthenticatedRequestContext, AuthenticationContextDecision,
     AuthoritativeObjectScope, ClientObjectScope, ErrorContractDecision, ErrorEnvelope,
     SafeFieldsDecision, SchemaVersion, SchemaVersionDecision, TenantScopeDecision,
@@ -10,6 +11,8 @@ fn valid_audit_event() -> AuditEvent {
     let mut audit: AuditEvent = serde_json::from_value(serde_json::json!({
         "schema_version": "1.0.0",
         "audit_event_id": "audit_12345678",
+        "audit_stream_id": "auditstream_12345678",
+        "sequence": 2,
         "tenant_id": "ten_12345678",
         "correlation": {
             "request_id": "req_12345678",
@@ -44,6 +47,19 @@ fn valid_audit_event() -> AuditEvent {
     .expect("audit event");
     audit.event_hash = compute_audit_event_hash(&audit).expect("canonical audit hash");
     audit
+}
+
+fn valid_audit_transition() -> (AuditEvent, AuditEvent) {
+    let previous = valid_audit_event();
+    let mut current = previous.clone();
+    current.audit_event_id =
+        serde_json::from_value(serde_json::json!("audit_87654321")).expect("audit event ID");
+    current.sequence = previous.sequence + 1;
+    current.previous_event_hash = Some(previous.event_hash.clone());
+    current.occurred_at = serde_json::from_value(serde_json::json!("2026-08-12T10:00:01Z"))
+        .expect("next audit timestamp");
+    current.event_hash = compute_audit_event_hash(&current).expect("next audit hash");
+    (previous, current)
 }
 
 fn valid_error_envelope() -> ErrorEnvelope {
@@ -466,6 +482,8 @@ fn audit_attributes_reject_secret_named_fields() {
     let audit: AuditEvent = serde_json::from_value(serde_json::json!({
         "schema_version": "1.0.0",
         "audit_event_id": "audit_12345678",
+        "audit_stream_id": "auditstream_12345678",
+        "sequence": 1,
         "tenant_id": "ten_12345678",
         "correlation": {
             "request_id": "req_12345678",
@@ -510,6 +528,8 @@ fn audit_rejects_a_tenant_object_outside_the_event_tenant() {
     let audit: AuditEvent = serde_json::from_value(serde_json::json!({
         "schema_version": "1.0.0",
         "audit_event_id": "audit_12345678",
+        "audit_stream_id": "auditstream_12345678",
+        "sequence": 1,
         "tenant_id": "ten_12345678",
         "correlation": {
             "request_id": "req_12345678",
@@ -684,6 +704,8 @@ fn audit_object_and_correlation_cannot_name_different_incidents() {
     let audit: AuditEvent = serde_json::from_value(serde_json::json!({
         "schema_version": "1.0.0",
         "audit_event_id": "audit_12345678",
+        "audit_stream_id": "auditstream_12345678",
+        "sequence": 1,
         "tenant_id": "ten_12345678",
         "correlation": {
             "request_id": "req_12345678",
@@ -724,7 +746,88 @@ fn audit_object_and_correlation_cannot_name_different_incidents() {
 }
 
 #[test]
-fn audit_correlation_and_versions_cover_governed_releases() {
+fn audit_correlation_covers_stable_resources_and_governed_releases() {
+    let mut unknown_nested_field =
+        serde_json::to_value(valid_audit_event()).expect("audit event value");
+    unknown_nested_field["correlation"]["attacker_selected_tenant"] =
+        serde_json::json!("ten_87654321");
+    assert!(serde_json::from_value::<AuditEvent>(unknown_nested_field).is_err());
+
+    let mut audit = valid_audit_event();
+    audit.object = serde_json::from_value(serde_json::json!({
+        "object_type": "request",
+        "request_id": "req_12345678"
+    }))
+    .expect("request audit object");
+    audit.event_hash = compute_audit_event_hash(&audit).expect("request audit hash");
+    assert_eq!(
+        validate_audit_event(&audit),
+        AuditContractDecision::Accepted
+    );
+    audit.correlation.request_id = Some(
+        serde_json::from_value(serde_json::json!("req_87654321")).expect("request ID"),
+    );
+    assert_eq!(
+        validate_audit_event(&audit),
+        AuditContractDecision::CorrelationMismatch
+    );
+
+    let mut audit = valid_audit_event();
+    audit.object = serde_json::from_value(serde_json::json!({
+        "object_type": "host",
+        "host_id": "host_12345678"
+    }))
+    .expect("host audit object");
+    audit.correlation.host_id = Some(
+        serde_json::from_value(serde_json::json!("host_87654321")).expect("host ID"),
+    );
+    assert_eq!(
+        validate_audit_event(&audit),
+        AuditContractDecision::CorrelationMismatch
+    );
+
+    let mut audit = valid_audit_event();
+    audit.object = serde_json::from_value(serde_json::json!({
+        "object_type": "agent",
+        "agent_id": "agent_12345678"
+    }))
+    .expect("agent audit object");
+    audit.correlation.agent_id = Some(
+        serde_json::from_value(serde_json::json!("agent_87654321")).expect("agent ID"),
+    );
+    assert_eq!(
+        validate_audit_event(&audit),
+        AuditContractDecision::CorrelationMismatch
+    );
+
+    let mut audit = valid_audit_event();
+    audit.object = serde_json::from_value(serde_json::json!({
+        "object_type": "service",
+        "service_id": "svc_12345678"
+    }))
+    .expect("service audit object");
+    audit.correlation.service_id = Some(
+        serde_json::from_value(serde_json::json!("svc_87654321")).expect("service ID"),
+    );
+    assert_eq!(
+        validate_audit_event(&audit),
+        AuditContractDecision::CorrelationMismatch
+    );
+
+    let mut audit = valid_audit_event();
+    audit.object = serde_json::from_value(serde_json::json!({
+        "object_type": "route",
+        "route_id": "route_12345678"
+    }))
+    .expect("route audit object");
+    audit.correlation.route_id = Some(
+        serde_json::from_value(serde_json::json!("route_87654321")).expect("route ID"),
+    );
+    assert_eq!(
+        validate_audit_event(&audit),
+        AuditContractDecision::CorrelationMismatch
+    );
+
     let mut audit = valid_audit_event();
     audit.object = serde_json::from_value(serde_json::json!({
         "object_type": "model",
@@ -983,5 +1086,111 @@ fn error_context_rejects_non_token_field_names() {
     assert_eq!(
         validate_error_envelope(&error),
         ErrorContractDecision::UnsafeContext
+    );
+}
+
+#[test]
+fn audit_sequence_requires_the_matching_chain_shape() {
+    let mut first = valid_audit_event();
+    first.sequence = 1;
+    first.previous_event_hash = None;
+    first.event_hash = compute_audit_event_hash(&first).expect("first audit hash");
+    assert_eq!(validate_audit_event(&first), AuditContractDecision::Accepted);
+
+    let mut first_with_previous = first.clone();
+    first_with_previous.previous_event_hash = serde_json::from_value(serde_json::json!(
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ))
+    .ok();
+    assert_eq!(
+        validate_audit_event(&first_with_previous),
+        AuditContractDecision::InvalidSequenceBinding
+    );
+
+    let mut later_without_previous = first;
+    later_without_previous.sequence = 2;
+    assert_eq!(
+        validate_audit_event(&later_without_previous),
+        AuditContractDecision::InvalidSequenceBinding
+    );
+}
+
+#[test]
+fn adjacent_audit_events_form_an_accepted_stream_transition() {
+    let (previous, current) = valid_audit_transition();
+
+    assert_eq!(
+        validate_audit_chain_transition(&previous, &current),
+        AuditChainTransitionDecision::Accepted
+    );
+}
+
+#[test]
+fn audit_transition_rejects_invalid_endpoint_contracts() {
+    let (mut previous, current) = valid_audit_transition();
+    previous.sequence = 0;
+    assert_eq!(
+        validate_audit_chain_transition(&previous, &current),
+        AuditChainTransitionDecision::PreviousEventRejected
+    );
+
+    let (previous, mut current) = valid_audit_transition();
+    current.sequence = 0;
+    assert_eq!(
+        validate_audit_chain_transition(&previous, &current),
+        AuditChainTransitionDecision::CurrentEventRejected
+    );
+}
+
+#[test]
+fn audit_transition_rejects_stream_tenant_and_identity_substitution() {
+    let (previous, mut current) = valid_audit_transition();
+    current.audit_stream_id = serde_json::from_value(serde_json::json!(
+        "auditstream_87654321"
+    ))
+    .expect("other audit stream ID");
+    current.event_hash = compute_audit_event_hash(&current).expect("substituted stream hash");
+    assert_eq!(
+        validate_audit_chain_transition(&previous, &current),
+        AuditChainTransitionDecision::StreamMismatch
+    );
+
+    let (previous, mut current) = valid_audit_transition();
+    current.tenant_id =
+        serde_json::from_value(serde_json::json!("ten_87654321")).expect("other tenant ID");
+    current.event_hash = compute_audit_event_hash(&current).expect("substituted tenant hash");
+    assert_eq!(
+        validate_audit_chain_transition(&previous, &current),
+        AuditChainTransitionDecision::TenantMismatch
+    );
+
+    let (previous, mut current) = valid_audit_transition();
+    current.audit_event_id = previous.audit_event_id.clone();
+    current.event_hash = compute_audit_event_hash(&current).expect("duplicate event hash");
+    assert_eq!(
+        validate_audit_chain_transition(&previous, &current),
+        AuditChainTransitionDecision::DuplicateEventId
+    );
+}
+
+#[test]
+fn audit_transition_rejects_gaps_and_wrong_links() {
+    let (previous, mut current) = valid_audit_transition();
+    current.sequence += 1;
+    current.event_hash = compute_audit_event_hash(&current).expect("gapped event hash");
+    assert_eq!(
+        validate_audit_chain_transition(&previous, &current),
+        AuditChainTransitionDecision::SequenceNotAdjacent
+    );
+
+    let (previous, mut current) = valid_audit_transition();
+    current.previous_event_hash = serde_json::from_value(serde_json::json!(
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    ))
+    .ok();
+    current.event_hash = compute_audit_event_hash(&current).expect("wrong-link event hash");
+    assert_eq!(
+        validate_audit_chain_transition(&previous, &current),
+        AuditChainTransitionDecision::PreviousHashMismatch
     );
 }

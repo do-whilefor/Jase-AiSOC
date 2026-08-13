@@ -5,10 +5,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    contains_duplicate, is_sensitive_field_name, validate_current_schema, EvidenceRef, ModelRunId,
-    PolicyId, RequestId, RiskScore, RouteId, RuleId, RuleReleaseId, SchemaVersion,
-    SchemaVersionDecision, SecurityState, ServiceId, Sha256Digest, TenantId, TenantScoped,
-    Timestamp, WafRuleId,
+    contains_duplicate, is_sensitive_field_name, validate_current_schema, EvidenceRef,
+    ModelAssessment, ModelAssessmentDecision, ModelAssessmentSubject, ModelRunId, PolicyId,
+    RequestId, RiskScore, RouteId, RuleId, RuleReleaseId, SchemaVersion, SchemaVersionDecision,
+    SecurityState, ServiceId, Sha256Digest, TenantId, TenantScoped, Timestamp, WafRuleId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -113,6 +113,8 @@ pub enum WebRequestContractDecision {
     UriExceeded,
     ParserVersionExceeded,
     InvalidContentHashBinding,
+    InvalidContentTypeSyntax,
+    InvalidContentTypeBinding,
     InvalidWafContext,
     SelectedSampleExceeded,
     SensitiveFieldSelected,
@@ -277,15 +279,20 @@ pub fn validate_web_request_contract(
     if !crate::common::valid_contract_token(&envelope.parser_version, 128) {
         return WebRequestContractDecision::InvalidParserVersion;
     }
-    if envelope.content_length > 0 && envelope.body_sha256.is_none() {
+    if (envelope.content_length > 0 && envelope.body_sha256.is_none())
+        || (envelope.content_length == 0 && !envelope.selected_body_fields.is_empty())
+    {
         return WebRequestContractDecision::InvalidContentHashBinding;
     }
     if envelope
         .content_type
         .as_deref()
-        .is_some_and(|content_type| content_type.len() > 256 || content_type.trim().is_empty())
+        .is_some_and(|content_type| !valid_http_content_type(content_type))
     {
-        return WebRequestContractDecision::SelectedValueExceeded;
+        return WebRequestContractDecision::InvalidContentTypeSyntax;
+    }
+    if !envelope.selected_body_fields.is_empty() && envelope.content_type.is_none() {
+        return WebRequestContractDecision::InvalidContentTypeBinding;
     }
     let field_count = envelope.selected_headers.len()
         + envelope.selected_query_fields.len()
@@ -366,14 +373,165 @@ pub fn validate_web_request_contract(
 }
 
 fn valid_http_method(method: &str) -> bool {
-    !method.is_empty()
-        && method.len() <= 64
-        && method.bytes().all(|byte| {
+    !method.is_empty() && method.len() <= 64 && method.bytes().all(is_http_token_byte)
+}
+
+fn is_http_token_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric()
+        || matches!(
+            byte,
+            b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.' | b'^'
+                | b'_' | b'`' | b'|' | b'~'
+        )
+}
+
+fn valid_http_content_type(content_type: &str) -> bool {
+    if content_type.is_empty()
+        || content_type.len() > 256
+        || !content_type.is_ascii()
+        || content_type.trim_matches(' ') != content_type
+        || content_type
+            .bytes()
+            .any(|byte| byte < b' ' || byte == 0x7f)
+    {
+        return false;
+    }
+
+    let Some(segments) = split_content_type_segments(content_type) else {
+        return false;
+    };
+    let Some(media_type) = segments.first().map(|segment| segment.trim_matches(' ')) else {
+        return false;
+    };
+    let Some((type_name, subtype_name)) = media_type.split_once('/') else {
+        return false;
+    };
+    if type_name.is_empty()
+        || subtype_name.is_empty()
+        || subtype_name.contains('/')
+        || !type_name.bytes().all(is_http_token_byte)
+        || !subtype_name.bytes().all(is_http_token_byte)
+    {
+        return false;
+    }
+
+    let mut parameter_names: Vec<&str> = Vec::new();
+    let mut multipart_boundary = false;
+    for raw_parameter in segments.iter().skip(1) {
+        let parameter = raw_parameter.trim_matches(' ');
+        let Some((name, value)) = parameter.split_once('=') else {
+            return false;
+        };
+        let name = name.trim_matches(' ');
+        let value = value.trim_matches(' ');
+        if name.is_empty()
+            || !name.bytes().all(is_http_token_byte)
+            || parameter_names
+                .iter()
+                .any(|known| known.eq_ignore_ascii_case(name))
+            || !valid_content_type_parameter_value(value)
+        {
+            return false;
+        }
+        parameter_names.push(name);
+        if type_name.eq_ignore_ascii_case("multipart") && name.eq_ignore_ascii_case("boundary") {
+            if !valid_multipart_boundary(value) {
+                return false;
+            }
+            multipart_boundary = true;
+        }
+    }
+
+    !type_name.eq_ignore_ascii_case("multipart") || multipart_boundary
+}
+
+fn split_content_type_segments(content_type: &str) -> Option<Vec<&str>> {
+    let mut segments = Vec::new();
+    let mut start = 0;
+    let mut quoted = false;
+    let mut escaped = false;
+    for (index, byte) in content_type.bytes().enumerate() {
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                quoted = false;
+            }
+        } else if byte == b'"' {
+            quoted = true;
+        } else if byte == b';' {
+            segments.push(&content_type[start..index]);
+            start = index + 1;
+        }
+    }
+    if quoted || escaped {
+        return None;
+    }
+    segments.push(&content_type[start..]);
+    Some(segments)
+}
+
+fn valid_content_type_parameter_value(value: &str) -> bool {
+    if !value.is_empty() && value.bytes().all(is_http_token_byte) {
+        return true;
+    }
+    let Some(quoted) = value
+        .strip_prefix('"')
+        .and_then(|inner| inner.strip_suffix('"'))
+    else {
+        return false;
+    };
+    let mut escaped = false;
+    for byte in quoted.bytes() {
+        if escaped {
+            if !(b' '..=b'~').contains(&byte) {
+                return false;
+            }
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if byte == b'"' || byte < b' ' || byte == 0x7f {
+            return false;
+        }
+    }
+    !escaped
+}
+
+fn valid_multipart_boundary(value: &str) -> bool {
+    let mut decoded = Vec::new();
+    if let Some(quoted) = value
+        .strip_prefix('"')
+        .and_then(|inner| inner.strip_suffix('"'))
+    {
+        let mut escaped = false;
+        for byte in quoted.bytes() {
+            if escaped {
+                decoded.push(byte);
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else {
+                decoded.push(byte);
+            }
+        }
+        if escaped {
+            return false;
+        }
+    } else {
+        decoded.extend_from_slice(value.as_bytes());
+    }
+
+    !decoded.is_empty()
+        && decoded.len() <= 70
+        && decoded.last() != Some(&b' ')
+        && decoded.iter().all(|byte| {
             byte.is_ascii_alphanumeric()
                 || matches!(
                     byte,
-                    b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.'
-                        | b'^' | b'_' | b'`' | b'|' | b'~'
+                    b'\'' | b'(' | b')' | b'+' | b'_' | b',' | b'-' | b'.' | b'/' | b':'
+                        | b'=' | b'?' | b' '
                 )
         })
 }
@@ -738,6 +896,102 @@ pub fn validate_web_fail_policy_application(
         return WebFailPolicyApplicationDecision::DecisionMismatch;
     }
     WebFailPolicyApplicationDecision::Applied
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum WebModelAssessmentBindingDecision {
+    Applied,
+    IngressBindingRejected,
+    RequestRejected,
+    EventRejected,
+    AssessmentRejected,
+    NotModelAssessmentDecision,
+    TenantMismatch,
+    ServiceMismatch,
+    RouteMismatch,
+    RequestMismatch,
+    ModelRunMismatch,
+    UnexpectedClaim,
+    AssessmentEvidenceRequired,
+    AssessmentEvidenceNotInEvent,
+    AssessmentCompletedBeforeEvidence,
+    AssessmentCompletedBeforeRequest,
+    AssessmentCompletedAfterDecision,
+}
+
+/// Closes the Web semantic-classifier graph. A model run is usable only for
+/// the exact, already-validated request named by the event; it cannot be
+/// replayed across tenants, services, routes, requests, or later decisions.
+pub fn validate_web_model_assessment_binding(
+    context: &WebIngressContext,
+    request: &WebRequestEnvelope,
+    event: &WebSecurityEvent,
+    assessment: &ModelAssessment,
+) -> WebModelAssessmentBindingDecision {
+    if validate_web_binding(context, request) != WebBindingDecision::Accepted {
+        return WebModelAssessmentBindingDecision::IngressBindingRejected;
+    }
+    if validate_web_request_contract(request) != WebRequestContractDecision::Accepted {
+        return WebModelAssessmentBindingDecision::RequestRejected;
+    }
+    if validate_web_security_event(event) != WebSecurityEventDecision::Accepted {
+        return WebModelAssessmentBindingDecision::EventRejected;
+    }
+    if crate::validate_model_assessment(assessment) != ModelAssessmentDecision::Accepted {
+        return WebModelAssessmentBindingDecision::AssessmentRejected;
+    }
+    if event.decision_basis != WebDecisionBasis::ModelAssessment {
+        return WebModelAssessmentBindingDecision::NotModelAssessmentDecision;
+    }
+    if request.tenant_id != event.tenant_id || request.tenant_id != assessment.tenant_id {
+        return WebModelAssessmentBindingDecision::TenantMismatch;
+    }
+    if request.service_id != event.service_id {
+        return WebModelAssessmentBindingDecision::ServiceMismatch;
+    }
+    if request.route_id != event.route_id {
+        return WebModelAssessmentBindingDecision::RouteMismatch;
+    }
+    let ModelAssessmentSubject::WebRequest {
+        request_id: assessment_request_id,
+    } = &assessment.subject
+    else {
+        return WebModelAssessmentBindingDecision::RequestMismatch;
+    };
+    if request.request_id != event.request_id || &request.request_id != assessment_request_id {
+        return WebModelAssessmentBindingDecision::RequestMismatch;
+    }
+    if event.model_assessment_id.as_ref() != Some(&assessment.model_run_id) {
+        return WebModelAssessmentBindingDecision::ModelRunMismatch;
+    }
+    if !assessment.claim_ids.is_empty() {
+        return WebModelAssessmentBindingDecision::UnexpectedClaim;
+    }
+    if assessment.evidence_ids.is_empty() {
+        return WebModelAssessmentBindingDecision::AssessmentEvidenceRequired;
+    }
+    if assessment.evidence_ids.iter().any(|assessment_evidence_id| {
+        !event
+            .evidence_refs
+            .iter()
+            .any(|evidence| &evidence.evidence_id == assessment_evidence_id)
+    }) {
+        return WebModelAssessmentBindingDecision::AssessmentEvidenceNotInEvent;
+    }
+    if event.evidence_refs.iter().any(|evidence| {
+        assessment.evidence_ids.contains(&evidence.evidence_id)
+            && assessment.completed_at.is_before(&evidence.collected_at)
+    }) {
+        return WebModelAssessmentBindingDecision::AssessmentCompletedBeforeEvidence;
+    }
+    if assessment.completed_at.is_before(&request.received_at) {
+        return WebModelAssessmentBindingDecision::AssessmentCompletedBeforeRequest;
+    }
+    if assessment.completed_at.is_after(&event.decided_at) {
+        return WebModelAssessmentBindingDecision::AssessmentCompletedAfterDecision;
+    }
+    WebModelAssessmentBindingDecision::Applied
 }
 
 fn bounded_non_empty(value: &str, maximum_bytes: usize) -> bool {

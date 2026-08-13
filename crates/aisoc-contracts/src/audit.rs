@@ -7,10 +7,10 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     validate_current_schema, validate_safe_fields, ActionId, AgentId, ApprovalId, AuditEventId,
-    ClaimId, DetectionId, EventId, EvidenceId, HostId, IncidentId, ModelId, ModelRunId, Plane,
-    PolicyId, PromptId, RequestId, RouteId, RuleId, RuleReleaseId, SafeFieldsDecision,
-    SchemaVersion, SchemaVersionDecision, ServiceId, ServiceIdentityId, Sha256Digest, TenantId,
-    Timestamp, UserId,
+    AuditStreamId, ClaimId, DetectionId, EventId, EvidenceId, HostId, IncidentId, ModelId,
+    ModelRunId, Plane, PolicyId, PromptId, RequestId, RouteId, RuleId, RuleReleaseId,
+    SafeFieldsDecision, SchemaVersion, SchemaVersionDecision, ServiceId, ServiceIdentityId,
+    Sha256Digest, TenantId, Timestamp, UserId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -37,6 +37,10 @@ pub struct AuditActor {
 #[serde(deny_unknown_fields)]
 pub struct AuditCorrelation {
     pub request_id: Option<RequestId>,
+    pub host_id: Option<HostId>,
+    pub agent_id: Option<AgentId>,
+    pub service_id: Option<ServiceId>,
+    pub route_id: Option<RouteId>,
     pub event_id: Option<EventId>,
     pub evidence_id: Option<EvidenceId>,
     pub detection_id: Option<DetectionId>,
@@ -59,6 +63,7 @@ pub enum AuditObjectRef {
     Tenant { tenant_id: TenantId },
     Host { host_id: HostId },
     Agent { agent_id: AgentId },
+    Request { request_id: RequestId },
     Event { event_id: EventId },
     Evidence { evidence_id: EvidenceId },
     Detection { detection_id: DetectionId },
@@ -101,6 +106,9 @@ pub enum AuditObjectRef {
 pub struct AuditEvent {
     pub schema_version: SchemaVersion,
     pub audit_event_id: AuditEventId,
+    pub audit_stream_id: AuditStreamId,
+    #[schemars(range(min = 1))]
+    pub sequence: u64,
     pub tenant_id: TenantId,
     pub correlation: AuditCorrelation,
     pub plane: Plane,
@@ -125,6 +133,8 @@ pub struct AuditEvent {
 struct AuditEventHashInput<'a> {
     schema_version: &'a SchemaVersion,
     audit_event_id: &'a AuditEventId,
+    audit_stream_id: &'a AuditStreamId,
+    sequence: u64,
     tenant_id: &'a TenantId,
     correlation: &'a AuditCorrelation,
     plane: Plane,
@@ -169,6 +179,8 @@ pub fn compute_audit_event_hash(event: &AuditEvent) -> Result<Sha256Digest, Audi
     let input = AuditEventHashInput {
         schema_version: &event.schema_version,
         audit_event_id: &event.audit_event_id,
+        audit_stream_id: &event.audit_stream_id,
+        sequence: event.sequence,
         tenant_id: &event.tenant_id,
         correlation: &event.correlation,
         plane: event.plane,
@@ -193,6 +205,7 @@ pub fn compute_audit_event_hash(event: &AuditEvent) -> Result<Sha256Digest, Audi
 pub enum AuditContractDecision {
     Accepted,
     UnsupportedSchemaVersion,
+    InvalidSequenceBinding,
     MissingActor,
     AmbiguousActor,
     EmptyRole,
@@ -211,6 +224,12 @@ pub enum AuditContractDecision {
 pub fn validate_audit_event(event: &AuditEvent) -> AuditContractDecision {
     if validate_current_schema(&event.schema_version) != SchemaVersionDecision::Current {
         return AuditContractDecision::UnsupportedSchemaVersion;
+    }
+    if event.sequence == 0
+        || (event.sequence == 1 && event.previous_event_hash.is_some())
+        || (event.sequence > 1 && event.previous_event_hash.is_none())
+    {
+        return AuditContractDecision::InvalidSequenceBinding;
     }
     match (&event.actor.user_id, &event.actor.service_identity) {
         (None, None) => return AuditContractDecision::MissingActor,
@@ -278,6 +297,21 @@ pub fn validate_audit_event(event: &AuditEvent) -> AuditContractDecision {
         return AuditContractDecision::TenantObjectMismatch;
     }
     let correlation_matches_object = match &event.object {
+        AuditObjectRef::Host { host_id } => event
+            .correlation
+            .host_id
+            .as_ref()
+            .map_or(true, |correlated| correlated == host_id),
+        AuditObjectRef::Agent { agent_id } => event
+            .correlation
+            .agent_id
+            .as_ref()
+            .map_or(true, |correlated| correlated == agent_id),
+        AuditObjectRef::Request { request_id } => event
+            .correlation
+            .request_id
+            .as_ref()
+            .map_or(true, |correlated| correlated == request_id),
         AuditObjectRef::Event { event_id } => event
             .correlation
             .event_id
@@ -352,11 +386,17 @@ pub fn validate_audit_event(event: &AuditEvent) -> AuditContractDecision {
             .action_id
             .as_ref()
             .map_or(true, |correlated| correlated == action_id),
-        AuditObjectRef::Tenant { .. }
-        | AuditObjectRef::Host { .. }
-        | AuditObjectRef::Agent { .. }
-        | AuditObjectRef::Service { .. }
-        | AuditObjectRef::Route { .. } => true,
+        AuditObjectRef::Service { service_id } => event
+            .correlation
+            .service_id
+            .as_ref()
+            .map_or(true, |correlated| correlated == service_id),
+        AuditObjectRef::Route { route_id } => event
+            .correlation
+            .route_id
+            .as_ref()
+            .map_or(true, |correlated| correlated == route_id),
+        AuditObjectRef::Tenant { .. } => true,
     };
     if !correlation_matches_object {
         return AuditContractDecision::CorrelationMismatch;
@@ -377,6 +417,51 @@ pub fn validate_audit_event(event: &AuditEvent) -> AuditContractDecision {
         _ => return AuditContractDecision::EventHashMismatch,
     }
     AuditContractDecision::Accepted
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AuditChainTransitionDecision {
+    Accepted,
+    PreviousEventRejected,
+    CurrentEventRejected,
+    StreamMismatch,
+    TenantMismatch,
+    DuplicateEventId,
+    SequenceNotAdjacent,
+    PreviousHashMismatch,
+}
+
+/// Validates an append-only transition inside one authoritative audit stream.
+/// Storage code must call this guard while atomically comparing and advancing
+/// the persisted stream head; an event-provided previous hash is never trusted
+/// without resolving the preceding event by stream and sequence.
+pub fn validate_audit_chain_transition(
+    previous: &AuditEvent,
+    current: &AuditEvent,
+) -> AuditChainTransitionDecision {
+    if validate_audit_event(previous) != AuditContractDecision::Accepted {
+        return AuditChainTransitionDecision::PreviousEventRejected;
+    }
+    if validate_audit_event(current) != AuditContractDecision::Accepted {
+        return AuditChainTransitionDecision::CurrentEventRejected;
+    }
+    if previous.audit_stream_id != current.audit_stream_id {
+        return AuditChainTransitionDecision::StreamMismatch;
+    }
+    if previous.tenant_id != current.tenant_id {
+        return AuditChainTransitionDecision::TenantMismatch;
+    }
+    if previous.audit_event_id == current.audit_event_id {
+        return AuditChainTransitionDecision::DuplicateEventId;
+    }
+    if previous.sequence.checked_add(1) != Some(current.sequence) {
+        return AuditChainTransitionDecision::SequenceNotAdjacent;
+    }
+    if current.previous_event_hash.as_ref() != Some(&previous.event_hash) {
+        return AuditChainTransitionDecision::PreviousHashMismatch;
+    }
+    AuditChainTransitionDecision::Accepted
 }
 
 fn valid_audit_code(value: &str, maximum_bytes: usize) -> bool {

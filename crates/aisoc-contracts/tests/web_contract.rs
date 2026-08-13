@@ -1,9 +1,11 @@
 use aisoc_contracts::{
+    validate_web_model_assessment_binding,
     validate_web_binding, validate_web_data_minimization, validate_web_fail_policy_application,
     validate_web_request_contract, validate_web_route_fail_policy, validate_web_security_event,
-    WebBindingDecision, WebDataMinimizationDecision, WebFailPolicyApplicationDecision,
-    WebIngressContext, WebPolicyDecision, WebRequestContractDecision, WebRequestEnvelope,
-    WebRouteFailPolicy, WebRouteFailPolicyDecision, WebSecurityEvent, WebSecurityEventDecision,
+    ModelAssessment, WebBindingDecision, WebDataMinimizationDecision,
+    WebFailPolicyApplicationDecision, WebIngressContext, WebModelAssessmentBindingDecision,
+    WebPolicyDecision, WebRequestContractDecision, WebRequestEnvelope, WebRouteFailPolicy,
+    WebRouteFailPolicyDecision, WebSecurityEvent, WebSecurityEventDecision,
 };
 
 #[test]
@@ -65,6 +67,16 @@ fn request() -> WebRequestEnvelope {
         "waf_context": null
     }))
     .expect("frozen request contract")
+}
+
+fn ingress_context() -> WebIngressContext {
+    serde_json::from_value(serde_json::json!({
+        "schema_version": "1.0.0",
+        "tenant_id": "ten_12345678",
+        "service_id": "svc_12345678",
+        "route_id": "route_12345678"
+    }))
+    .expect("authoritative Web ingress context")
 }
 
 #[test]
@@ -186,7 +198,7 @@ fn extension_http_method_is_allowed_but_invalid_token_is_rejected() {
 }
 
 #[test]
-fn ambiguous_authority_and_uri_delimiters_are_rejected() {
+fn ambiguous_authority_uri_and_content_type_syntax_are_rejected() {
     let mut envelope = request();
     envelope.authority = "user@service.example".to_owned();
     assert_eq!(
@@ -214,16 +226,117 @@ fn ambiguous_authority_and_uri_delimiters_are_rejected() {
         validate_web_request_contract(&envelope),
         WebRequestContractDecision::InvalidParserVersion
     );
+
+    let mut envelope = request();
+    envelope.content_type = Some("application/json\r\nx-forged: yes".to_owned());
+    assert_eq!(
+        validate_web_request_contract(&envelope),
+        WebRequestContractDecision::InvalidContentTypeSyntax
+    );
+
+    let mut envelope = request();
+    envelope.content_type = Some("application/json; charset=utf-8; CHARSET=utf-16".to_owned());
+    assert_eq!(
+        validate_web_request_contract(&envelope),
+        WebRequestContractDecision::InvalidContentTypeSyntax
+    );
+
+    envelope.content_type = Some("application/json; profile=\"unterminated".to_owned());
+    assert_eq!(
+        validate_web_request_contract(&envelope),
+        WebRequestContractDecision::InvalidContentTypeSyntax
+    );
+
+    envelope.content_type = Some("application/json; profile=\"incident;v1\"".to_owned());
+    assert_eq!(
+        validate_web_request_contract(&envelope),
+        WebRequestContractDecision::Accepted
+    );
+
+    let mut envelope = request();
+    envelope.content_length = 16;
+    envelope.body_sha256 = Some(
+        serde_json::from_value(serde_json::json!(
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        ))
+        .expect("body digest"),
+    );
+    envelope.content_type = Some("multipart/form-data".to_owned());
+    assert_eq!(
+        validate_web_request_contract(&envelope),
+        WebRequestContractDecision::InvalidContentTypeSyntax
+    );
+
+    envelope.content_type = Some("multipart/form-data; boundary=aisoc-boundary".to_owned());
+    assert_eq!(
+        validate_web_request_contract(&envelope),
+        WebRequestContractDecision::Accepted
+    );
+
+    envelope.content_type = Some("multipart/form-data; boundary=\"aisoc:boundary\"".to_owned());
+    assert_eq!(
+        validate_web_request_contract(&envelope),
+        WebRequestContractDecision::Accepted
+    );
+
+    envelope.content_type =
+        Some("multipart/form-data; boundary=one; BOUNDARY=two".to_owned());
+    assert_eq!(
+        validate_web_request_contract(&envelope),
+        WebRequestContractDecision::InvalidContentTypeSyntax
+    );
+
+    envelope.content_type = Some(format!(
+        "multipart/form-data; boundary={}",
+        "a".repeat(71)
+    ));
+    assert_eq!(
+        validate_web_request_contract(&envelope),
+        WebRequestContractDecision::InvalidContentTypeSyntax
+    );
+
+    envelope.content_type = Some("multipart/form-data; boundary=\"ends-with-space \"".to_owned());
+    assert_eq!(
+        validate_web_request_contract(&envelope),
+        WebRequestContractDecision::InvalidContentTypeSyntax
+    );
 }
 
 #[test]
-fn nonempty_web_body_requires_a_body_digest() {
+fn web_body_metadata_requires_a_consistent_nonempty_body() {
     let mut request = request();
     request.content_length = 16;
 
     assert_eq!(
         validate_web_request_contract(&request),
         WebRequestContractDecision::InvalidContentHashBinding
+    );
+
+    let mut request = request();
+    request
+        .selected_body_fields
+        .insert("operation".to_owned(), "update".to_owned());
+
+    assert_eq!(
+        validate_web_request_contract(&request),
+        WebRequestContractDecision::InvalidContentHashBinding
+    );
+
+    let mut request = request();
+    request.content_length = 16;
+    request.body_sha256 = Some(
+        serde_json::from_value(serde_json::json!(
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        ))
+        .expect("body digest"),
+    );
+    request
+        .selected_body_fields
+        .insert("operation".to_owned(), "update".to_owned());
+
+    assert_eq!(
+        validate_web_request_contract(&request),
+        WebRequestContractDecision::InvalidContentTypeBinding
     );
 }
 
@@ -461,6 +574,43 @@ fn route_fail_policy() -> WebRouteFailPolicy {
         "ai_output_invalid": "MONITOR"
     }))
     .expect("route-scoped Web AI failure policy")
+}
+
+fn web_model_event() -> WebSecurityEvent {
+    let mut event = web_event();
+    event.decision_basis = aisoc_contracts::WebDecisionBasis::ModelAssessment;
+    event.failure_context = None;
+    event.model_assessment_id = Some(
+        serde_json::from_value(serde_json::json!("modelrun_12345678"))
+            .expect("model run ID"),
+    );
+    event.policy_decision = WebPolicyDecision::Monitor;
+    event.security_state = aisoc_contracts::SecurityState::AttackAttempt;
+    event
+}
+
+fn web_model_assessment() -> ModelAssessment {
+    serde_json::from_value(serde_json::json!({
+        "schema_version": "1.0.0",
+        "model_run_id": "modelrun_12345678",
+        "tenant_id": "ten_12345678",
+        "subject": {"subject_type": "web_request", "request_id": "req_12345678"},
+        "provider_id": "provider_12345678",
+        "provider_version": "openai-compatible-v1",
+        "model_id": "model_12345678",
+        "model_version": "2026-08-01",
+        "prompt_id": "prompt_12345678",
+        "prompt_version": "web-semantic-v1",
+        "input_schema_version": "1.0.0",
+        "verdict": "malicious",
+        "risk_score": 90,
+        "confidence": 0.85,
+        "claim_ids": [],
+        "evidence_ids": ["evd_12345678"],
+        "reason_codes": ["semantic_attack_pattern"],
+        "completed_at": "2026-08-12T10:00:00.500Z"
+    }))
+    .expect("Web model assessment")
 }
 
 #[test]
@@ -926,4 +1076,271 @@ fn blocked_web_event_with_evidence_is_accepted() {
         validate_web_security_event(&web_event()),
         WebSecurityEventDecision::Accepted
     );
+}
+
+#[test]
+fn web_model_assessment_binds_to_the_exact_request_and_event() {
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &web_model_event(),
+            &web_model_assessment(),
+        ),
+        WebModelAssessmentBindingDecision::Applied
+    );
+}
+
+#[test]
+fn web_model_assessment_binding_rejects_invalid_or_non_model_inputs() {
+    let mut foreign_ingress = ingress_context();
+    foreign_ingress.tenant_id =
+        serde_json::from_value(serde_json::json!("ten_87654321")).expect("other tenant ID");
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &foreign_ingress,
+            &request(),
+            &web_model_event(),
+            &web_model_assessment(),
+        ),
+        WebModelAssessmentBindingDecision::IngressBindingRejected
+    );
+
+    let mut invalid_request = request();
+    invalid_request.parser_version.clear();
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &invalid_request,
+            &web_model_event(),
+            &web_model_assessment(),
+        ),
+        WebModelAssessmentBindingDecision::RequestRejected
+    );
+
+    let mut invalid_event = web_model_event();
+    invalid_event.schema_version = serde_json::from_value(serde_json::json!("2.0.0"))
+        .expect("future event schema");
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &invalid_event,
+            &web_model_assessment(),
+        ),
+        WebModelAssessmentBindingDecision::EventRejected
+    );
+
+    let mut invalid_assessment = web_model_assessment();
+    invalid_assessment.prompt_version.clear();
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &web_model_event(),
+            &invalid_assessment,
+        ),
+        WebModelAssessmentBindingDecision::AssessmentRejected
+    );
+
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &web_event(),
+            &web_model_assessment(),
+        ),
+        WebModelAssessmentBindingDecision::NotModelAssessmentDecision
+    );
+}
+
+#[test]
+fn web_model_assessment_binding_rejects_scope_and_request_substitution() {
+    let mut assessment = web_model_assessment();
+    assessment.tenant_id =
+        serde_json::from_value(serde_json::json!("ten_87654321")).expect("other tenant ID");
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &web_model_event(),
+            &assessment,
+        ),
+        WebModelAssessmentBindingDecision::TenantMismatch
+    );
+
+    let mut event = web_model_event();
+    event.service_id =
+        serde_json::from_value(serde_json::json!("svc_87654321")).expect("other service ID");
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &event,
+            &web_model_assessment(),
+        ),
+        WebModelAssessmentBindingDecision::ServiceMismatch
+    );
+
+    let mut event = web_model_event();
+    event.route_id = Some(
+        serde_json::from_value(serde_json::json!("route_87654321")).expect("other route ID"),
+    );
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &event,
+            &web_model_assessment(),
+        ),
+        WebModelAssessmentBindingDecision::RouteMismatch
+    );
+
+    let mut assessment = web_model_assessment();
+    assessment.subject = serde_json::from_value(serde_json::json!({
+        "subject_type": "web_request",
+        "request_id": "req_87654321"
+    }))
+    .expect("other request subject");
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &web_model_event(),
+            &assessment,
+        ),
+        WebModelAssessmentBindingDecision::RequestMismatch
+    );
+
+    let mut assessment = web_model_assessment();
+    assessment.subject = serde_json::from_value(serde_json::json!({
+        "subject_type": "incident",
+        "incident_id": "inc_12345678"
+    }))
+    .expect("Incident subject");
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &web_model_event(),
+            &assessment,
+        ),
+        WebModelAssessmentBindingDecision::RequestMismatch
+    );
+}
+
+#[test]
+fn web_model_assessment_binding_rejects_run_claim_evidence_and_time_substitution() {
+    let mut event = web_model_event();
+    event.model_assessment_id = Some(
+        serde_json::from_value(serde_json::json!("modelrun_87654321"))
+            .expect("other model run ID"),
+    );
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &event,
+            &web_model_assessment(),
+        ),
+        WebModelAssessmentBindingDecision::ModelRunMismatch
+    );
+
+    let mut assessment = web_model_assessment();
+    assessment.claim_ids.push(
+        serde_json::from_value(serde_json::json!("claim_12345678")).expect("claim ID"),
+    );
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &web_model_event(),
+            &assessment,
+        ),
+        WebModelAssessmentBindingDecision::UnexpectedClaim
+    );
+
+    let mut assessment = web_model_assessment();
+    assessment.evidence_ids.clear();
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &web_model_event(),
+            &assessment,
+        ),
+        WebModelAssessmentBindingDecision::AssessmentEvidenceRequired
+    );
+
+    let mut assessment = web_model_assessment();
+    assessment.evidence_ids[0] =
+        serde_json::from_value(serde_json::json!("evd_87654321")).expect("other evidence ID");
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &web_model_event(),
+            &assessment,
+        ),
+        WebModelAssessmentBindingDecision::AssessmentEvidenceNotInEvent
+    );
+
+    let mut event = web_model_event();
+    event.evidence_refs[0].collected_at =
+        serde_json::from_value(serde_json::json!("2026-08-12T10:00:00.750Z"))
+            .expect("evidence collected after assessment");
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &event,
+            &web_model_assessment(),
+        ),
+        WebModelAssessmentBindingDecision::AssessmentCompletedBeforeEvidence
+    );
+
+    let mut assessment = web_model_assessment();
+    assessment.completed_at = serde_json::from_value(serde_json::json!("2026-08-12T09:59:59Z"))
+        .expect("assessment before request");
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &web_model_event(),
+            &assessment,
+        ),
+        WebModelAssessmentBindingDecision::AssessmentCompletedBeforeRequest
+    );
+
+    let mut assessment = web_model_assessment();
+    assessment.completed_at = serde_json::from_value(serde_json::json!("2026-08-12T10:00:02Z"))
+        .expect("assessment after decision");
+    assert_eq!(
+        validate_web_model_assessment_binding(
+            &ingress_context(),
+            &request(),
+            &web_model_event(),
+            &assessment,
+        ),
+        WebModelAssessmentBindingDecision::AssessmentCompletedAfterDecision
+    );
+}
+
+#[test]
+fn model_assessment_subject_is_required_and_exclusive() {
+    let value = serde_json::to_value(web_model_assessment()).expect("assessment value");
+    let mut missing = value.as_object().cloned().expect("assessment object");
+    missing.remove("subject");
+    assert!(serde_json::from_value::<ModelAssessment>(missing.into()).is_err());
+
+    let mut ambiguous = value.as_object().cloned().expect("assessment object");
+    ambiguous.insert(
+        "subject".to_owned(),
+        serde_json::json!({
+            "subject_type": "web_request",
+            "request_id": "req_12345678",
+            "incident_id": "inc_12345678"
+        }),
+    );
+    assert!(serde_json::from_value::<ModelAssessment>(ambiguous.into()).is_err());
 }

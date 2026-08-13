@@ -138,6 +138,10 @@ pub enum IncidentRelationshipDecision {
     EvidenceAccessContextRejected,
     EvidenceAccessContextMismatch,
     EvidenceAccessContextContainsForeignEvidence,
+    CustodyChainSetLimitExceeded,
+    DuplicateCustodyChainEvidenceId,
+    CustodyChainContainsForeignEvidence,
+    CustodyChainRejected,
     DetectionSetLimitExceeded,
     ClaimSetLimitExceeded,
     DuplicateDetectionId,
@@ -156,9 +160,11 @@ pub enum IncidentRelationshipDecision {
     DetectionEvidenceIdentityMismatch,
     DetectionEvidenceLifecycleRegressed,
     DetectionEntityMissing,
+    DetectionHostMissing,
     ClaimEvidenceMissing,
     ClaimOriginDetectionMissing,
     ClaimVerificationRejected,
+    ConfirmedCustodyChainRejected,
     ConfirmedEvidenceAccessDenied,
     ConfirmedSupportMissing,
 }
@@ -343,6 +349,7 @@ pub fn validate_incident_relationships(
     detections: &[crate::Detection],
     claims: &[crate::Claim],
     evidence_access_context: &crate::EvidenceAccessContext,
+    custody_chains: &[crate::EvidenceCustodyChain],
 ) -> IncidentRelationshipDecision {
     if validate_incident_contract(incident) != IncidentContractDecision::Accepted {
         return IncidentRelationshipDecision::IncidentContractRejected;
@@ -368,6 +375,34 @@ pub fn validate_incident_relationships(
         })
     {
         return IncidentRelationshipDecision::EvidenceAccessContextContainsForeignEvidence;
+    }
+    if custody_chains.len() > 512 {
+        return IncidentRelationshipDecision::CustodyChainSetLimitExceeded;
+    }
+    if contains_duplicate(custody_chains.iter().map(|chain| &chain.evidence_id)) {
+        return IncidentRelationshipDecision::DuplicateCustodyChainEvidenceId;
+    }
+    if custody_chains.iter().any(|chain| {
+        chain.tenant_id != incident.tenant_id
+            || !incident
+                .evidence_refs
+                .iter()
+                .any(|evidence| evidence.evidence_id == chain.evidence_id)
+    }) {
+        return IncidentRelationshipDecision::CustodyChainContainsForeignEvidence;
+    }
+    if custody_chains.iter().any(|chain| {
+        let Some(evidence) = incident
+            .evidence_refs
+            .iter()
+            .find(|evidence| evidence.evidence_id == chain.evidence_id)
+        else {
+            return true;
+        };
+        crate::validate_evidence_custody_chain(evidence, chain)
+            != crate::EvidenceCustodyChainDecision::Accepted
+    }) {
+        return IncidentRelationshipDecision::CustodyChainRejected;
     }
     if detections.len() > 512 {
         return IncidentRelationshipDecision::DetectionSetLimitExceeded;
@@ -439,6 +474,14 @@ pub fn validate_incident_relationships(
         }) {
             return IncidentRelationshipDecision::DetectionEntityMissing;
         }
+        if detection.host_id.as_ref().is_some_and(|host_id| {
+            !incident
+                .entities
+                .iter()
+                .any(|entity| entity.host_id.as_ref() == Some(host_id))
+        }) {
+            return IncidentRelationshipDecision::DetectionHostMissing;
+        }
     }
     for claim in claims {
         if claim.tenant_id != incident.tenant_id {
@@ -483,17 +526,29 @@ pub fn validate_incident_relationships(
             claim,
             &incident.evidence_refs,
             evidence_access_context,
+            custody_chains,
         ) != expected_verification
         {
             return IncidentRelationshipDecision::ClaimVerificationRejected;
         }
     }
     if incident.security_state == SecurityState::ConfirmedCompromise {
-        if incident.evidence_refs.iter().any(|evidence| {
-            crate::authorize_evidence_use(evidence, evidence_access_context)
-                != crate::EvidenceUseDecision::Allowed
-        }) {
-            return IncidentRelationshipDecision::ConfirmedEvidenceAccessDenied;
+        for evidence in &incident.evidence_refs {
+            let custody_chain = custody_chains
+                .iter()
+                .find(|chain| chain.evidence_id == evidence.evidence_id);
+            match crate::authorize_evidence_use(
+                evidence,
+                evidence_access_context,
+                custody_chain,
+            ) {
+                crate::EvidenceUseDecision::Allowed => {}
+                crate::EvidenceUseDecision::CustodyChainMissing
+                | crate::EvidenceUseDecision::CustodyChainRejected => {
+                    return IncidentRelationshipDecision::ConfirmedCustodyChainRejected;
+                }
+                _ => return IncidentRelationshipDecision::ConfirmedEvidenceAccessDenied,
+            }
         }
         let confirmed_detection = detections
             .iter()
