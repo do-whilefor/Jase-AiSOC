@@ -1,65 +1,18 @@
 [workspace]
-members = [
-    "crates/aisoc-core",
-    "crates/aisoc-contracts",
-    "crates/aisoc-linux",
-    "crates/aisoc-agent",
-    "crates/aisoc-ingest",
-    "crates/aisoc-normalize",
-    "crates/aisoc-detection",
-    "crates/aisoc-incident",
-    "crates/aisoc-evidence",
-    "crates/aisoc-ai",
-    "crates/aisoc-malware",
-    "crates/aisoc-trace",
-    "crates/aisoc-policy",
-    "crates/aisoc-response",
-    "crates/aisoc-storage",
-    "crates/aisoc-api",
-    "crates/aisoc-console",
-    "crates/aisoc-web-guard",
-    "crates/aisoc-python",
-]
-default-members = [
-    "crates/aisoc-core",
-    "crates/aisoc-contracts",
-    "crates/aisoc-linux",
-    "crates/aisoc-agent",
-    "crates/aisoc-ingest",
-    "crates/aisoc-normalize",
-    "crates/aisoc-detection",
-    "crates/aisoc-incident",
-    "crates/aisoc-evidence",
-    "crates/aisoc-ai",
-    "crates/aisoc-malware",
-    "crates/aisoc-trace",
-    "crates/aisoc-policy",
-    "crates/aisoc-response",
-    "crates/aisoc-storage",
-    "crates/aisoc-api",
-    "crates/aisoc-console",
-    "crates/aisoc-web-guard",
-]
+members = ["crates/aisoc-contracts"]
+default-members = ["crates/aisoc-contracts"]
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
+publish = false
 rust-version = "1.82"
 
 [workspace.dependencies]
+chrono = { version = "=0.4.41", default-features = false, features = ["serde", "std"] }
+schemars = "=0.8.22"
 serde = { version = "=1.0.219", features = ["derive"] }
 serde_json = "=1.0.140"
-schemars = "=0.8.22"
-thiserror = "=2.0.12"
-tracing = "=0.1.41"
-chrono = { version = "=0.4.41", default-features = false, features = ["clock", "serde"] }
-uuid = { version = "=1.16.0", features = ["v4", "serde"] }
-tokio = { version = "=1.44.1", features = ["macros", "rt-multi-thread"] }
-sqlx = { version = "=0.8.3", default-features = false, features = ["runtime-tokio-rustls", "postgres", "migrate", "macros", "json", "chrono", "uuid"] }
-
-[profile.release]
-lto = true
-codegen-units = 1
-strip = "symbols"
+sha2 = "=0.10.9"

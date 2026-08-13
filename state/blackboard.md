@@ -1,32 +1,60 @@
-# Jase-AiSOC Engineering Blackboard
-
-> Recovery-oriented implementation state. This is not a completion report.
+# Security validation blackboard
 
 ```yaml
 tested:
-  - target: "Rust Ingest × Base/Standalone raw Agent envelope × immutable write/read/replay × tenant/object/hash boundary"
-    finding_status: technical_hit
-    rating: unrated
-    evidence:
-      - "crates/aisoc-storage/src/object_store.rs: tenant-bound evidence:// locator, server-generated flat object key, create_new write-once, 0600 file/0700 root, regular-file/single-link/inode/device/size/SHA-256 read checks"
-      - "crates/aisoc-ingest/src/lib.rs: new accepted-events journal records clear canonical_json and retain object_key/raw_ref/hash/size; old inline records are hash-verified and object-backfilled on recovery"
-      - "crates/aisoc-ingest/src/main.rs: startup and normalize-DLQ replay use AISOC_INGEST_OBJECT_STORE_ROOT; replay lookup is tenant-scoped"
-      - "crates/aisoc-storage/migrations/202608120006_raw_evidence_object_store.sql: new rows require object_key while legacy rows remain explicitly backfillable"
-      - "No compilation, runtime, dependency installation, project scripts, or tests executed on the Windows development host per user constraint"
-    next: "On Linux Rust 1.82, regenerate/review Cargo.lock and run fmt/check/clippy/test plus PostgreSQL/object tamper/restart/DLQ integration before marking impact_verified."
-
-  - target: "P3 Central/HA × raw evidence cross-node replay × S3/MinIO + JetStream durable consumer × failure/backpressure"
+  - target: unauthenticated/version-skewed subject × Agent/Web/Control/Evidence context × schema-version boundary × missing/unsupported version
     finding_status: lead
     rating: unrated
-    evidence:
-      - "Base/Standalone local object backend is implemented; no S3/MinIO adapter or async-nats production path exists yet."
-    next: "Implement a bounded Rust ObjectStore backend contract for S3/MinIO, then JetStream durable publish/consume/ACK-redelivery without making Base profile depend on NATS."
+    evidence: AuthenticatedAgentContext, WebIngressContext, AuthenticatedRequestContext, and EvidenceAccessContext all carry SchemaVersion; their boundary guards reject a context other than 1.0.0; all cross-boundary _id/_ids fields, including registry/external IDs, are typed newtypes; WafRuleId runtime deserialization and Schema both allow only safe nonempty slash-separated registry segments and reject URL/colon/empty/traversal-shaped selectors; JSON samples include schema_version; source exists but was not executed
+    next: on Linux, execute negative deserialization and contract cases for missing, malformed, old, and future context versions, then retain request/decision evidence
 
-  - target: "Jase-AiSOC branding × public docs/Web/service metadata × visible product identity"
-    finding_status: technical_hit
+  - target: authenticated identity × Agent/Web/Control entry points × tenant-scoped objects × ownership binding
+    finding_status: lead
     rating: unrated
-    evidence:
-      - "README, Next.js metadata/sidebar, Rust fallback console, systemd descriptions, P3/deployment/migration docs now carry Jase-AiSOC branding."
-      - "Existing historical audit documents retain their original titles as dated evidence; the authoritative DOCX was inspected but not modified."
-    next: "Continue applying Jase-AiSOC branding when each remaining document/page is materially edited; perform rendered UI/DOCX verification only in an authorized environment."
+    evidence: crates/aisoc-contracts/src/agent.rs, web.rs, and control.rs encode server-authenticated tenant/agent/host/service binding; Web ingress context and request schema versions plus tenant/service/route bindings now cover every WebBindingDecision outcome directly; Control authentication is versioned, requires exactly one actor, binds OIDC to User and mTLS to ServiceIdentity, and accepts only bounded unique token-shaped roles/attributes; Control then requires the authenticated tenant, client object declaration, and a separately constructed AuthoritativeObjectScope from the server repository/registry to agree on both object and owner tenant; all AuthenticationContextDecision and TenantScopeDecision outcomes have direct source cases, but none was executed
+    next: on Linux, execute Web/SOC/Control contract tests with two tenants, human/service identities, auth-kind substitution, client object substitution, authoritative owner/object substitution, missing/duplicate claims, and replayed envelopes; then bind AuthoritativeObjectScope construction to repository lookups
+
+  - target: untrusted Web request/model subject × WebSecurityEvent × security state/policy result × attempted-versus-successful outcome
+    finding_status: lead
+    rating: unrated
+    evidence: validate_web_request_contract rejects authority userinfo/delimiters, URI control/whitespace/fragment/backslash ambiguity, invalid or oversized parser/authority/URI/selected fields, and sensitive header/query/body names; validate_web_security_event rejects suspected_success and confirmed_compromise, prevents monitor/shadow from reporting execution decisions, binds BLOCK exactly to blocked state, requires same-tenant contract-valid unique nonempty bounded Evidence collected no later than the decision for attack/blocked results, rejects invalid or duplicate Rule/reason data, and requires fully exclusive deterministic/model/route-fail-policy provenance; WebDataMinimizationDecision, WebRequestContractDecision, and WebSecurityEventDecision now have direct cases for every outcome, but sources were not executed
+    next: on Linux, execute authority/URI/framing differential and Web state/policy/source combinations, then verify that only downstream Detection/Incident can elevate success state using process/file/network/authentication Evidence
+
+  - target: optional Web AI provider × tenant/service/route fail policy × timeout/budget/circuit/unavailable/invalid-output state × fallback decision
+    finding_status: lead
+    rating: unrated
+    evidence: WebRouteFailPolicy is a versioned Rust contract keyed by typed tenant/service/route/Policy IDs with explicit dispositions for every frozen AI failure kind; validate_web_fail_policy_application requires an accepted WebSecurityEvent whose route-fail-policy source, tenant, service, route, policy ID/version, failure kind, and decision match the separately loaded authoritative policy; invalid structured output must identify the failed model run while pre-run failure kinds cannot claim one; WebRouteFailPolicyDecision and WebFailPolicyApplicationDecision now have direct cases for every outcome, including event/policy rejection, non-route-fail provenance, service substitution, route/tenant/policy substitution and disposition mismatch, but were not executed
+    next: on Linux, inject Provider timeout, circuit-open, budget-exhausted, unavailable, and structurally invalid output for multiple routes and prove deterministic Web/SOC processing continues with only the configured route disposition
+
+  - target: authenticated Agent × AgentEnvelope payload × nested SecurityEvent/EvidenceRef × tenant/host/agent/boot/sequence/contract variables
+    finding_status: lead
+    rating: unrated
+    evidence: validate_agent_binding checks context/envelope schema versions and authoritative mTLS tenant/agent/host before nested content; each Event must match tenant/host/agent, declare the envelope boot and an in-range sequence, preserve strict batch ordering and exact first/last boundaries while keeping gaps observable, pass SecurityEvent/EvidenceRef subcontracts, and match a recomputed SHA-256 over project canonical JSON with recursively sorted object keys; all 24 AgentBindingDecision outcomes now have direct positive or negative source cases, including empty/oversized payload and digest mismatch; all 20 SecurityEventDecision outcomes now have direct cases covering Schema, Evidence tenant/subcontract, entity identity/capacity, category/action/source/version, Agent source identity, Linux process/network/file/auth, labels, and extensions; sources exist but no test was executed
+    next: on Linux, execute the complete Agent binding matrix with real mTLS identities and certificate revocation, then validate batch replay, gap recovery, same-key/different-digest conflict, and disconnect resume against Ingest persistence
+
+  - target: Incident service × Incident revision/timeline × authoritative Detection/Claim/Evidence/Entity relationships × revision/time/reference/confirmation variables
+    finding_status: lead
+    rating: unrated
+    evidence: validate_detection_contract now has direct cases for all 17 outcomes covering Schema, Evidence tenant/subcontract/duplication/required lineage, confirmed size/integrity/custody, observation window/count, Rule metadata, entity limits/identity, and suppression state; validate_incident_contract enforces revision links, RFC3339 business-time and timeline ordering, same-tenant valid non-future EvidenceRefs, timeline-to-Evidence closure, and nonzero verified non-expired Evidence plus Assurance for confirmed compromise; validate_incident_relationships requires exact server-resolved Detection/Claim sets, accepted child contracts, same tenant/incident, no future Detection/Claim, Detection Evidence and Entity closure, Claim Evidence closure, linked Detection origin, an access-context Evidence set contained by the revision, and for confirmed incidents access to every revision Evidence plus either a confirmed Detection or an independently verified Claim requesting confirmed compromise; same_evidence_identity allows integrity/custody lifecycle advancement while rejecting locator/hash/size/source/classification/collection-time substitution under the same Evidence ID; validate_incident_revision_transition binds adjacent revisions and tenant/incident/created/revised time, preserves Detection/Evidence/Claim relationships, rejects lifecycle regression, and retains prior Timeline facts as a multiset while allowing late events to be inserted by occurred_at; sources were not executed
+    next: on Linux, execute the Incident relationship and adjacent-revision matrices with repository-resolved objects, scoped and complete Evidence access, late events, same-ID metadata substitution, duplicate Timeline facts, RFC3339 offset-equivalent times, and concurrent revision attempts
+
+  - target: AI/Incident subject × EvidenceRef relationship × confirmed-compromise claim × existence/tenant/integrity/time variables
+    finding_status: lead
+    rating: unrated
+    evidence: crates/aisoc-contracts/src/ai.rs, incident.rs, and evidence.rs reject URL/path-shaped store selectors plus missing, duplicate, invalid, zero-byte, cross-tenant, unauthorized, over-classified, failed-integrity, expired-custody, or future-collected evidence; EvidenceAccessContext is versioned, unique, and capped at 512 IDs, and direct source cases cover unsupported/invalid contexts plus tenant, Incident membership, classification, Evidence subcontract, size, integrity, and custody authorization decisions; Incident revisions reject Evidence collected after revised_at; validate_evidence_package_binding requires the authoritative tenant/incident/revision and exact EvidenceRef equality, preventing same-ID locator/hash/classification/integrity/custody substitution; EvidencePackage rejects evidence collected after package creation and Claim verification rejects evidence collected after Claim creation, while equal instants remain valid; all Claim statuses are bound to the access-context tenant and incident, and any referenced Evidence is validated before contradicted/unsupported/human-review decisions are returned; validate_model_assessment_binding additionally requires an Incident assessment, accepted package/claim subcontracts, one tenant/incident/model run, an exact returned Claim set, assessment Evidence drawn only from the package, Claim Evidence declared by the assessment, and package-created <= claim-created <= assessment-completed; verifier ID/version must be paired and readonly-tool self-verification is rejected even while proposed; a proposed Claim with valid Evidence returns EvidenceValidated rather than Verified; ModelAssessment records typed Provider/Model/Prompt identities and their versions; EvidencePackage is capped at 512 refs and 64 MiB; SOC contract tests are written but not executed
+    next: on Linux, execute the Evidence authorization and Claim/review negative contract matrices including repository-backed existence, cross-review substitutions, RFC3339 offset-equivalent/equal/future timestamps, classification, custody, and complete evidence coverage, then retain original request/decision evidence
+
+  - target: Policy/Approval subject × ResponseAction target snapshot × R2/R3 state × replay/target-change/approval variables
+    finding_status: lead
+    rating: unrated
+    evidence: crates/aisoc-contracts/src/response.rs defines typed action-to-tier-to-capability-to-target mappings, Linux-safe immutable target snapshots and Incident binding, a 24-hour validity ceiling, unique approval IDs and approver identities, 16-attestation and 512-Evidence ceilings, nonempty unique Supporting Evidence for R2/R3, canonical digest-bound time-windowed attestations, explicit rejection fail-closed, critical-asset dual approval, R2 TTL/window/deadline/registered-inverse binding, R3 opaque human recovery runbook, and idempotency; all 35 ResponseContractDecision outcomes now have direct source cases, but none was executed
+    next: on Linux, execute the complete response contract matrix, then validate repository-backed Evidence, runner capability authorization, digest recomputation, live PID/inode/hash/agent fingerprint target revalidation, approval replay/expiry, rollback, post-check, and idempotency against real runners
+
+  - target: platform service × Audit/Error boundary × safe attributes/hash chain × secret-name/cardinality/value-length/content/previous-link variables
+    finding_status: lead
+    rating: unrated
+    evidence: SchemaVersionDecision 2/2, SafeFieldsDecision 8/8, AuditContractDecision 15/15, and ErrorContractDecision 6/6 now have direct source cases; validate_safe_fields rejects password, authorization, cookie, key, secret, and token names plus empty/non-token/oversized keys, control-character or oversized values, and oversized collections; AuditEvent rejects unsupported schema, missing/ambiguous actor, empty/oversized/invalid code fields, mismatched typed governance correlations, tenant substitution, unsafe attributes, and hash-chain tampering; ErrorEnvelope rejects unsupported schema, empty/noncanonical messages, invalid retryability, and unsafe context; no tests, logs, or responses were executed or generated
+    next: on Linux, execute boundary, retryability, and audit tamper cases, validate append-only journal continuity/anchors/concurrency, and inspect journald, HTTP responses, traces, metrics labels, and browser assets for real secret propagation
 ```
+
+No vulnerability status or rating is assigned: this turn performed code authoring and static review only, with no dynamic requests, responses, runtime state, or Linux execution evidence.

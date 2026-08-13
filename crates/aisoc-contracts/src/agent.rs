@@ -1,327 +1,268 @@
-//! Authoritative P2 Agent heartbeat and capability-report contracts.
+use std::fmt;
 
-use std::collections::HashSet;
-
-use chrono::DateTime;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
 
-use crate::valid_prefixed_id;
-
-pub const AGENT_HEARTBEAT_SCHEMA_VERSION: &str = "0.1.0";
-pub const CAPABILITY_REPORT_SCHEMA_VERSION: &str = "0.1.0";
+use crate::{
+    contains_duplicate, validate_current_schema, AgentId, BatchId, BootId, HostId, SchemaVersion,
+    SchemaVersionDecision, SecurityEvent, Sha256Digest, TenantId, TenantScoped, Timestamp,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub enum CapabilityLevel {
-    L0,
-    L1,
-    L2,
-    L3,
+#[serde(rename_all = "snake_case")]
+pub enum Compression {
+    None,
+    Zstd,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum EventPriority {
+    P3,
+    P2,
+    P1,
+    P0,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AuthenticatedAgentContext {
+    pub schema_version: SchemaVersion,
+    pub tenant_id: TenantId,
+    pub agent_id: AgentId,
+    pub host_id: HostId,
+    pub certificate_fingerprint: Sha256Digest,
+    pub authenticated_at: Timestamp,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AgentPayload {
+    #[schemars(length(min = 1, max = 4096))]
+    pub events: Vec<SecurityEvent>,
+}
+
+#[derive(Debug)]
+pub enum AgentDigestError {
+    Serialization(serde_json::Error),
+    DigestInvariant,
+}
+
+impl fmt::Display for AgentDigestError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Serialization(_) => formatter.write_str("agent payload serialization failed"),
+            Self::DigestInvariant => formatter.write_str("agent payload SHA-256 invariant failed"),
+        }
+    }
+}
+
+impl std::error::Error for AgentDigestError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Serialization(error) => Some(error),
+            Self::DigestInvariant => None,
+        }
+    }
+}
+
+/// Computes the envelope digest from the frozen typed AgentPayload using the
+/// project canonical JSON form. Object keys are sorted recursively by their
+/// UTF-8 byte representation; this is deliberately narrower than claiming
+/// conformance with an external JSON canonicalization standard.
+pub fn compute_agent_payload_digest(
+    payload: &AgentPayload,
+) -> Result<Sha256Digest, AgentDigestError> {
+    let value = serde_json::to_value(payload).map_err(AgentDigestError::Serialization)?;
+    let mut canonical = Vec::new();
+    write_canonical_json(&value, &mut canonical)?;
+    let digest = Sha256::digest(canonical);
+    let encoded = digest.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+    Sha256Digest::try_from(encoded).map_err(|_| AgentDigestError::DigestInvariant)
+}
+
+fn write_canonical_json(value: &Value, output: &mut Vec<u8>) -> Result<(), AgentDigestError> {
+    match value {
+        Value::Null => output.extend_from_slice(b"null"),
+        Value::Bool(boolean) => {
+            output.extend_from_slice(if *boolean { b"true" } else { b"false" })
+        }
+        Value::Number(number) => {
+            serde_json::to_writer(output, number).map_err(AgentDigestError::Serialization)?;
+        }
+        Value::String(string) => {
+            serde_json::to_writer(output, string).map_err(AgentDigestError::Serialization)?;
+        }
+        Value::Array(items) => {
+            output.push(b'[');
+            for (index, item) in items.iter().enumerate() {
+                if index > 0 {
+                    output.push(b',');
+                }
+                write_canonical_json(item, output)?;
+            }
+            output.push(b']');
+        }
+        Value::Object(object) => {
+            output.push(b'{');
+            let mut entries = object.iter().collect::<Vec<_>>();
+            entries.sort_unstable_by(|(left, _), (right, _)| left.as_bytes().cmp(right.as_bytes()));
+            for (index, (key, child)) in entries.into_iter().enumerate() {
+                if index > 0 {
+                    output.push(b',');
+                }
+                serde_json::to_writer(&mut *output, key)
+                    .map_err(AgentDigestError::Serialization)?;
+                output.push(b':');
+                write_canonical_json(child, output)?;
+            }
+            output.push(b'}');
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AgentEnvelope {
+    pub schema_version: SchemaVersion,
+    pub tenant_id: TenantId,
+    pub agent_id: AgentId,
+    pub host_id: HostId,
+    pub boot_id: BootId,
+    pub batch_id: BatchId,
+    pub first_sequence: u64,
+    pub last_sequence: u64,
+    pub priority: EventPriority,
+    pub compression: Compression,
+    pub canonical_digest: Sha256Digest,
+    pub created_at: Timestamp,
+    pub payload: AgentPayload,
+}
+
+impl TenantScoped for AgentEnvelope {
+    fn tenant_id(&self) -> &TenantId {
+        &self.tenant_id
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum CollectorState {
-    Enabled,
-    Degraded,
-    Failed,
+pub enum AgentBindingDecision {
+    Accepted,
+    UnsupportedContextSchemaVersion,
+    UnsupportedSchemaVersion,
+    TenantMismatch,
+    AgentMismatch,
+    HostMismatch,
+    EventTenantMismatch,
+    EventHostMismatch,
+    EventAgentMissing,
+    EventAgentMismatch,
+    EventBootMissing,
+    EventBootMismatch,
+    EventSequenceMissing,
+    EventSequenceOutOfRange,
+    EventSequenceNotStrictlyIncreasing,
+    SequenceRangeDoesNotMatchPayload,
+    DuplicateEventId,
+    EventContractRejected,
+    EvidenceTenantMismatch,
+    EvidenceContractRejected,
+    InvalidSequenceRange,
+    EmptyPayload,
+    PayloadLimitExceeded,
+    CanonicalDigestMismatch,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum InitSystem {
-    Systemd,
-    Openrc,
-    Runit,
-    Other,
-    Unknown,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum PackageManager {
-    Apt,
-    Dnf,
-    Yum,
-    Zypper,
-    Pacman,
-    Apk,
-    Unknown,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum CgroupVersion {
-    V1,
-    V2,
-    Unknown,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct PlatformInfo {
-    pub distro_id: String,
-    #[serde(default)]
-    pub distro_like: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub version_id: Option<String>,
-    pub kernel_release: String,
-    pub architecture: String,
-    #[serde(default = "default_init_system")]
-    pub init_system: InitSystem,
-    #[serde(default = "default_package_manager")]
-    pub package_manager: PackageManager,
-    #[serde(default)]
-    pub btf_available: bool,
-    #[serde(default = "default_cgroup_version")]
-    pub cgroup_version: CgroupVersion,
-    #[serde(default)]
-    pub security_modules: Vec<String>,
-    #[serde(default)]
-    pub probe_warnings: Vec<String>,
-}
-
-impl PlatformInfo {
-    pub fn is_valid(&self) -> bool {
-        valid_distro_id(&self.distro_id)
-            && bounded_non_empty(&self.kernel_release, 128)
-            && bounded_non_empty(&self.architecture, 64)
-            && self.version_id.as_deref().is_none_or(|value| value.len() <= 64)
-            && normalized_unique(&self.distro_like, 64)
-            && normalized_unique(&self.security_modules, 64)
+/// The authenticated mTLS identity is authoritative. Envelope fields are
+/// assertions to compare, never a source from which tenant ownership is set.
+pub fn validate_agent_binding(
+    context: &AuthenticatedAgentContext,
+    envelope: &AgentEnvelope,
+) -> AgentBindingDecision {
+    if validate_current_schema(&context.schema_version) != SchemaVersionDecision::Current {
+        return AgentBindingDecision::UnsupportedContextSchemaVersion;
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct CollectorCapability {
-    pub name: String,
-    pub state: CollectorState,
-    #[serde(default)]
-    pub drop_count: u64,
-    #[serde(default)]
-    pub backlog_count: u64,
-    #[serde(default)]
-    pub parse_error_count: u64,
-    #[serde(default)]
-    pub incomplete_count: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_error: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub validated_version: Option<String>,
-}
-
-impl CollectorCapability {
-    pub fn is_valid(&self) -> bool {
-        valid_code(&self.name)
-            && self
-                .last_error
-                .as_deref()
-                .is_none_or(|value| bounded_non_empty(value, 1024))
-            && self
-                .validated_version
-                .as_deref()
-                .is_none_or(|value| bounded_non_empty(value, 64))
-            && (!matches!(self.state, CollectorState::Failed) || self.last_error.is_some())
+    if validate_current_schema(&envelope.schema_version) != SchemaVersionDecision::Current {
+        return AgentBindingDecision::UnsupportedSchemaVersion;
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct CapabilityReport {
-    #[serde(default = "default_capability_schema_version")]
-    pub schema_version: String,
-    pub observed_at: String,
-    pub level: CapabilityLevel,
-    pub platform: PlatformInfo,
-    pub collectors: Vec<CollectorCapability>,
-}
-
-impl CapabilityReport {
-    pub fn is_valid(&self) -> bool {
-        if self.schema_version != CAPABILITY_REPORT_SCHEMA_VERSION
-            || !valid_rfc3339(&self.observed_at)
-            || !self.platform.is_valid()
-            || !self.collectors.iter().all(CollectorCapability::is_valid)
-        {
-            return false;
+    if context.tenant_id != envelope.tenant_id {
+        return AgentBindingDecision::TenantMismatch;
+    }
+    if context.agent_id != envelope.agent_id {
+        return AgentBindingDecision::AgentMismatch;
+    }
+    if context.host_id != envelope.host_id {
+        return AgentBindingDecision::HostMismatch;
+    }
+    if envelope.first_sequence > envelope.last_sequence {
+        return AgentBindingDecision::InvalidSequenceRange;
+    }
+    if envelope.payload.events.is_empty() {
+        return AgentBindingDecision::EmptyPayload;
+    }
+    if envelope.payload.events.len() > 4096 {
+        return AgentBindingDecision::PayloadLimitExceeded;
+    }
+    if contains_duplicate(envelope.payload.events.iter().map(|event| &event.event_id)) {
+        return AgentBindingDecision::DuplicateEventId;
+    }
+    for (index, event) in envelope.payload.events.iter().enumerate() {
+        if event.tenant_id != context.tenant_id {
+            return AgentBindingDecision::EventTenantMismatch;
         }
-        let mut names = HashSet::with_capacity(self.collectors.len());
-        self.collectors
-            .iter()
-            .all(|collector| names.insert(collector.name.as_str()))
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct PriorityCounts {
-    #[serde(default)]
-    pub p0: u64,
-    #[serde(default)]
-    pub p1: u64,
-    #[serde(default)]
-    pub p2: u64,
-    #[serde(default)]
-    pub p3: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct AgentQueueTelemetry {
-    pub queued_count: u64,
-    pub inflight_count: u64,
-    pub corrupt_count: u64,
-    pub stored_bytes: u64,
-    #[serde(default)]
-    pub dropped: PriorityCounts,
-    #[serde(default)]
-    pub protection_mode: bool,
-}
-
-impl AgentQueueTelemetry {
-    pub fn is_valid(&self) -> bool {
-        self.dropped.p0 == 0
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct AgentHeartbeat {
-    #[serde(default = "default_agent_heartbeat_schema_version")]
-    pub schema_version: String,
-    pub tenant_id: String,
-    pub agent_id: String,
-    pub host_id: String,
-    pub boot_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_version: Option<String>,
-    pub observed_at: String,
-    pub capabilities: CapabilityReport,
-    pub queue: AgentQueueTelemetry,
-}
-
-impl AgentHeartbeat {
-    pub fn is_valid(&self) -> bool {
-        self.schema_version == AGENT_HEARTBEAT_SCHEMA_VERSION
-            && valid_prefixed_id(&self.tenant_id, "ten_")
-            && valid_prefixed_id(&self.agent_id, "agent_")
-            && valid_prefixed_id(&self.host_id, "host_")
-            && bounded_non_empty(&self.boot_id, 128)
-            && self
-                .agent_version
-                .as_deref()
-                .is_none_or(|version| version.len() <= 128 && valid_semver(version))
-            && valid_rfc3339(&self.observed_at)
-            && self.capabilities.is_valid()
-            && self.queue.is_valid()
-    }
-}
-
-fn default_agent_heartbeat_schema_version() -> String {
-    AGENT_HEARTBEAT_SCHEMA_VERSION.to_owned()
-}
-
-fn default_capability_schema_version() -> String {
-    CAPABILITY_REPORT_SCHEMA_VERSION.to_owned()
-}
-
-fn default_init_system() -> InitSystem {
-    InitSystem::Unknown
-}
-
-fn default_package_manager() -> PackageManager {
-    PackageManager::Unknown
-}
-
-fn default_cgroup_version() -> CgroupVersion {
-    CgroupVersion::Unknown
-}
-
-fn valid_rfc3339(value: &str) -> bool {
-    DateTime::parse_from_rfc3339(value).is_ok()
-}
-
-fn bounded_non_empty(value: &str, max: usize) -> bool {
-    !value.is_empty() && value.len() <= max
-}
-
-fn valid_distro_id(value: &str) -> bool {
-    if value.is_empty() || value.len() > 64 {
-        return false;
-    }
-    let mut bytes = value.bytes();
-    matches!(bytes.next(), Some(b'a'..=b'z' | b'0'..=b'9'))
-        && bytes.all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
-        })
-}
-
-fn valid_code(value: &str) -> bool {
-    if value.is_empty() || value.len() > 64 {
-        return false;
-    }
-    let mut bytes = value.bytes();
-    matches!(bytes.next(), Some(b'a'..=b'z'))
-        && bytes.all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
-        })
-}
-
-fn normalized_unique(values: &[String], max_len: usize) -> bool {
-    let mut seen = HashSet::with_capacity(values.len());
-    values.iter().all(|value| {
-        !value.is_empty()
-            && value.len() <= max_len
-            && value.trim() == value
-            && value.to_ascii_lowercase() == *value
-            && seen.insert(value.as_str())
-    })
-}
-
-fn valid_semver(value: &str) -> bool {
-    let main = value.split_once('+').map_or(value, |(left, _)| left);
-    let core = main.split_once('-').map_or(main, |(left, _)| left);
-    let mut parts = core.split('.');
-    let Some(major) = parts.next() else { return false; };
-    let Some(minor) = parts.next() else { return false; };
-    let Some(patch) = parts.next() else { return false; };
-    if parts.next().is_some()
-        || !valid_semver_number(major)
-        || !valid_semver_number(minor)
-        || !valid_semver_number(patch)
-    {
-        return false;
-    }
-    value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+'))
-}
-
-fn valid_semver_number(value: &str) -> bool {
-    !value.is_empty()
-        && value.bytes().all(|byte| byte.is_ascii_digit())
-        && (value == "0" || !value.starts_with('0'))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn queue_rejects_p0_drop_accounting() {
-        let queue = AgentQueueTelemetry {
-            queued_count: 0,
-            inflight_count: 0,
-            corrupt_count: 0,
-            stored_bytes: 0,
-            dropped: PriorityCounts { p0: 1, ..PriorityCounts::default() },
-            protection_mode: true,
+        if event.raw_evidence.tenant_id != context.tenant_id {
+            return AgentBindingDecision::EvidenceTenantMismatch;
+        }
+        if crate::validate_evidence_ref(&event.raw_evidence) != crate::EvidenceRefDecision::Accepted {
+            return AgentBindingDecision::EvidenceContractRejected;
+        }
+        if crate::validate_security_event(event) != crate::SecurityEventDecision::Accepted {
+            return AgentBindingDecision::EventContractRejected;
+        }
+        if event.host_id != context.host_id {
+            return AgentBindingDecision::EventHostMismatch;
+        }
+        let Some(event_agent_id) = event.source.agent_id.as_ref() else {
+            return AgentBindingDecision::EventAgentMissing;
         };
-        assert!(!queue.is_valid());
+        if event_agent_id != &context.agent_id {
+            return AgentBindingDecision::EventAgentMismatch;
+        }
+        let Some(event_boot_id) = event.boot_id.as_ref() else {
+            return AgentBindingDecision::EventBootMissing;
+        };
+        if event_boot_id != &envelope.boot_id {
+            return AgentBindingDecision::EventBootMismatch;
+        }
+        let Some(event_sequence) = event.sequence else {
+            return AgentBindingDecision::EventSequenceMissing;
+        };
+        if event_sequence < envelope.first_sequence || event_sequence > envelope.last_sequence {
+            return AgentBindingDecision::EventSequenceOutOfRange;
+        }
+        if index == 0 && event_sequence != envelope.first_sequence {
+            return AgentBindingDecision::SequenceRangeDoesNotMatchPayload;
+        }
+        if index > 0
+            && envelope.payload.events[index - 1]
+                .sequence
+                .is_some_and(|previous| event_sequence <= previous)
+        {
+            return AgentBindingDecision::EventSequenceNotStrictlyIncreasing;
+        }
     }
-
-    #[test]
-    fn semantic_version_rejects_leading_zeroes() {
-        assert!(valid_semver("0.4.0-alpha.1+linux"));
-        assert!(!valid_semver("01.4.0"));
+    if envelope.payload.events.last().and_then(|event| event.sequence)
+        != Some(envelope.last_sequence)
+    {
+        return AgentBindingDecision::SequenceRangeDoesNotMatchPayload;
     }
+    match compute_agent_payload_digest(&envelope.payload) {
+        Ok(digest) if digest == envelope.canonical_digest => {}
+        _ => return AgentBindingDecision::CanonicalDigestMismatch,
+    }
+    AgentBindingDecision::Accepted
 }

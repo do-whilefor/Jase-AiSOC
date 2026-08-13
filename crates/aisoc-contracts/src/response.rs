@@ -1,37 +1,43 @@
-//! Authoritative P11 response contracts.
-//!
-//! The contract deliberately exposes only registered response operations. No
-//! field can carry an arbitrary shell command or executable argument vector.
-
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeSet;
+use std::fmt;
 use std::net::IpAddr;
-use std::path::{Component, Path};
+use std::str::FromStr;
 
-use chrono::{DateTime, FixedOffset};
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::{Deserialize, Deserializer, Serialize};
+use sha2::{Digest, Sha256};
 
-use crate::valid_prefixed_id;
+use crate::{
+    ActionId, ApprovalId, EvidenceId, HostId, IncidentId, PolicyId, RouteId, SchemaVersion,
+    SchemaVersionDecision, ServiceId, Severity, Sha256Digest, TenantId, TenantScoped, Timestamp,
+    UserId, validate_current_schema,
+};
 
-pub const RESPONSE_ACTION_SCHEMA_VERSION: &str = "0.1.0";
-pub const RESPONSE_POLICY_VERSION: &str = "p11-response-policy-v0.1.0";
+pub const MAX_RESPONSE_VALIDITY_SECONDS: u64 = 86_400;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ResponseTier {
-    R0Recommendation,
-    R1Collection,
+    R0Advice,
+    R1Collect,
     R2ReversibleContainment,
     R3BusinessImpact,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum ResponseActionKind {
-    CollectEvidence,
-    TemporaryBlockIp,
-    IsolateFile,
+pub enum ResponseActionType {
+    InvestigationRecommendation,
+    QueryRecommendation,
+    ReportRecommendation,
+    RuleRecommendation,
+    CollectProcessTree,
+    CollectFileMetadata,
+    CollectNetworkSnapshot,
+    CollectPcapSegment,
+    TemporaryIpBlock,
+    TemporaryWebPolicy,
+    QuarantineFile,
     TerminateProcess,
     DisableAccount,
     IsolateHost,
@@ -39,822 +45,633 @@ pub enum ResponseActionKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum ResponseActionStatus {
-    PendingApproval,
-    Approved,
-    Rejected,
-    Queued,
-    Executing,
-    Succeeded,
-    VerificationFailed,
-    Failed,
-    RollbackQueued,
-    RollingBack,
-    RolledBack,
-    RollbackFailed,
-    Cancelled,
-    Expired,
+pub enum ResponseCapability {
+    IncidentAdvise,
+    EvidenceCollect,
+    NetworkContain,
+    WebPolicyContain,
+    FileQuarantine,
+    ProcessTerminate,
+    AccountDisable,
+    HostIsolate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NetworkPolicyScope {
+    HostIngress,
+    HostEgress,
+    HostBidirectional,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AssetCriticality {
+    Low,
+    Standard,
+    Important,
+    Critical,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ApprovalDecision {
-    Approve,
-    Reject,
+    Approved,
+    Rejected,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum ExecutionResultStatus {
-    Succeeded,
-    Failed,
-    VerificationFailed,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum RollbackResultStatus {
-    Succeeded,
-    Failed,
-    VerificationFailed,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub enum ResponseOperation {
-    #[serde(rename = "firewall.block_ip")]
-    FirewallBlockIp,
-    #[serde(rename = "file.quarantine")]
-    FileQuarantine,
-    #[serde(rename = "process.terminate")]
-    ProcessTerminate,
-    #[serde(rename = "account.disable")]
-    AccountDisable,
-    #[serde(rename = "host.isolate")]
-    HostIsolate,
-    #[serde(rename = "evidence.collect")]
-    EvidenceCollect,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum EvidenceCollectionKind {
-    Logs,
-    ProcessTree,
-    FileMetadata,
-    Pcap,
+pub enum RollbackStrategy {
+    None,
+    AutomaticRegisteredInverse,
+    HumanRecoveryRunbook,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct IpResponseTarget {
-    #[serde(default = "target_ip")]
-    pub target_type: String,
-    pub host_id: String,
-    pub expected_agent_id: String,
-    pub ip_address: String,
+pub struct ApprovalAttestation {
+    pub approval_id: ApprovalId,
+    pub approver_id: UserId,
+    pub decision: ApprovalDecision,
+    pub action_digest: Sha256Digest,
+    pub decided_at: Timestamp,
 }
 
-impl IpResponseTarget {
-    pub fn is_valid(&self) -> bool {
-        self.target_type == "ip"
-            && valid_prefixed_id(&self.host_id, "host_")
-            && bounded_nonempty(&self.expected_agent_id, 128)
-            && canonical_unicast_ip(&self.ip_address)
-    }
-}
+/// A Linux target path captured as part of an immutable target snapshot.
+/// Relative paths, path traversal, empty segments and NUL bytes are rejected.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, JsonSchema)]
+#[serde(transparent)]
+pub struct LinuxPath(
+    #[schemars(
+        length(min = 2, max = 4096),
+        regex(pattern = r"^/[^/]+(?:/[^/]+)*$")
+    )]
+    String,
+);
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ProcessResponseTarget {
-    #[serde(default = "target_process")]
-    pub target_type: String,
-    pub host_id: String,
-    pub expected_agent_id: String,
-    pub pid: u32,
-    pub start_ticks: u64,
-    pub executable_path: String,
-    pub executable_sha256: String,
-}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinuxPathParseError;
 
-impl ProcessResponseTarget {
-    pub fn is_valid(&self) -> bool {
-        self.target_type == "process"
-            && valid_prefixed_id(&self.host_id, "host_")
-            && bounded_nonempty(&self.expected_agent_id, 128)
-            && (2..=2_147_483_647).contains(&self.pid)
-            && self.start_ticks >= 1
-            && valid_absolute_path(&self.executable_path)
-            && is_lower_sha256(&self.executable_sha256)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct FileResponseTarget {
-    #[serde(default = "target_file")]
-    pub target_type: String,
-    pub host_id: String,
-    pub expected_agent_id: String,
-    pub path: String,
-    pub sha256: String,
-    pub inode: u64,
-    pub device: u64,
-    pub uid: u32,
-    pub gid: u32,
-    pub mode: u16,
-}
-
-impl FileResponseTarget {
-    pub fn is_valid(&self) -> bool {
-        self.target_type == "file"
-            && valid_prefixed_id(&self.host_id, "host_")
-            && bounded_nonempty(&self.expected_agent_id, 128)
-            && valid_absolute_path(&self.path)
-            && is_lower_sha256(&self.sha256)
-            && self.inode >= 1
-            && self.mode <= 0o7777
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct AccountResponseTarget {
-    #[serde(default = "target_account")]
-    pub target_type: String,
-    pub host_id: String,
-    pub expected_agent_id: String,
-    pub username: String,
-    pub uid: u32,
-    pub shell: String,
-    pub locked: bool,
-}
-
-impl AccountResponseTarget {
-    pub fn is_valid(&self) -> bool {
-        self.target_type == "account"
-            && valid_prefixed_id(&self.host_id, "host_")
-            && bounded_nonempty(&self.expected_agent_id, 128)
-            && valid_username(&self.username)
-            && valid_absolute_path(&self.shell)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct HostResponseTarget {
-    #[serde(default = "target_host")]
-    pub target_type: String,
-    pub host_id: String,
-    pub expected_agent_id: String,
-    pub management_ip: String,
-    pub allowlist_ips: Vec<String>,
-}
-
-impl HostResponseTarget {
-    pub fn is_valid(&self) -> bool {
-        self.target_type == "host"
-            && valid_prefixed_id(&self.host_id, "host_")
-            && bounded_nonempty(&self.expected_agent_id, 128)
-            && canonical_unicast_ip(&self.management_ip)
-            && (1..=32).contains(&self.allowlist_ips.len())
-            && self.allowlist_ips.iter().all(|ip| canonical_unicast_ip(ip))
-            && self.allowlist_ips.windows(2).all(|pair| pair[0] < pair[1])
-            && self.allowlist_ips.contains(&self.management_ip)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct EvidenceCollectionTarget {
-    #[serde(default = "target_evidence")]
-    pub target_type: String,
-    pub host_id: String,
-    pub expected_agent_id: String,
-    pub collections: Vec<EvidenceCollectionKind>,
-    pub max_bytes: u64,
-    #[serde(default = "default_collection_duration")]
-    pub duration_seconds: u16,
-}
-
-impl EvidenceCollectionTarget {
-    pub fn is_valid(&self) -> bool {
-        self.target_type == "evidence_collection"
-            && valid_prefixed_id(&self.host_id, "host_")
-            && bounded_nonempty(&self.expected_agent_id, 128)
-            && (1..=4).contains(&self.collections.len())
-            && self.collections.windows(2).all(|pair| {
-                evidence_collection_name(pair[0]) < evidence_collection_name(pair[1])
-            })
-            && (1024..=1024 * 1024 * 1024).contains(&self.max_bytes)
-            && (1..=3600).contains(&self.duration_seconds)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(untagged)]
-pub enum ResponseTarget {
-    Ip(IpResponseTarget),
-    Process(ProcessResponseTarget),
-    File(FileResponseTarget),
-    Account(AccountResponseTarget),
-    Host(HostResponseTarget),
-    EvidenceCollection(EvidenceCollectionTarget),
-}
-
-impl ResponseTarget {
-    pub fn is_valid(&self) -> bool {
-        match self {
-            Self::Ip(target) => target.is_valid(),
-            Self::Process(target) => target.is_valid(),
-            Self::File(target) => target.is_valid(),
-            Self::Account(target) => target.is_valid(),
-            Self::Host(target) => target.is_valid(),
-            Self::EvidenceCollection(target) => target.is_valid(),
-        }
-    }
-
-    pub fn host_id(&self) -> &str {
-        match self {
-            Self::Ip(target) => &target.host_id,
-            Self::Process(target) => &target.host_id,
-            Self::File(target) => &target.host_id,
-            Self::Account(target) => &target.host_id,
-            Self::Host(target) => &target.host_id,
-            Self::EvidenceCollection(target) => &target.host_id,
-        }
-    }
-
-    pub fn matches_action(&self, action: ResponseActionKind) -> bool {
-        matches!(
-            (action, self),
-            (ResponseActionKind::CollectEvidence, Self::EvidenceCollection(_))
-                | (ResponseActionKind::TemporaryBlockIp, Self::Ip(_))
-                | (ResponseActionKind::IsolateFile, Self::File(_))
-                | (ResponseActionKind::TerminateProcess, Self::Process(_))
-                | (ResponseActionKind::DisableAccount, Self::Account(_))
-                | (ResponseActionKind::IsolateHost, Self::Host(_))
+impl fmt::Display for LinuxPathParseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(
+            "Linux path must be absolute, bounded, traversal-free, and contain no empty segments",
         )
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ResponsePlanCreate {
-    pub incident_revision: u64,
-    pub action: ResponseActionKind,
-    pub target: ResponseTarget,
-    pub evidence_ids: Vec<String>,
-    pub reason: String,
-    pub ttl_seconds: Option<u32>,
-}
+impl std::error::Error for LinuxPathParseError {}
 
-impl ResponsePlanCreate {
-    pub fn is_valid(&self) -> bool {
-        self.incident_revision >= 1
-            && self.target.is_valid()
-            && self.target.matches_action(self.action)
-            && canonical_strings(&self.evidence_ids, 1, 128, 132)
-            && bounded_nonempty(&self.reason, 512)
-            && match self.action {
-                ResponseActionKind::TemporaryBlockIp => self
-                    .ttl_seconds
-                    .is_some_and(|value| (60..=86_400).contains(&value)),
-                _ => self.ttl_seconds.is_none(),
-            }
+impl LinuxPath {
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ResponseApprovalCreate {
-    pub decision: ApprovalDecision,
-    pub comment: String,
-    #[serde(default)]
-    pub business_confirmation: bool,
-}
+impl TryFrom<String> for LinuxPath {
+    type Error = LinuxPathParseError;
 
-impl ResponseApprovalCreate {
-    pub fn is_valid(&self) -> bool {
-        bounded_nonempty(&self.comment, 512)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ResponsePolicyDecision {
-    #[serde(default = "default_policy_version")]
-    pub policy_version: String,
-    pub allowed: bool,
-    pub tier: ResponseTier,
-    pub required_approvals: u8,
-    pub rollback_required: bool,
-    pub rollback_supported: bool,
-    #[serde(default = "default_true")]
-    pub target_revalidation_required: bool,
-    #[serde(default = "default_true")]
-    pub execution_verification_required: bool,
-    pub business_confirmation_required: bool,
-    pub reasons: Vec<String>,
-}
-
-impl ResponsePolicyDecision {
-    pub fn is_valid(&self) -> bool {
-        self.policy_version == RESPONSE_POLICY_VERSION
-            && self.required_approvals <= 2
-            && self.target_revalidation_required
-            && self.execution_verification_required
-            && (1..=16).contains(&self.reasons.len())
-            && self
-                .reasons
-                .iter()
-                .all(|reason| bounded_nonempty(reason, 256))
-            && (!self.rollback_required || self.rollback_supported)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ResponseActionPlan {
-    pub schema_version: String,
-    pub action_id: String,
-    pub tenant_id: String,
-    pub incident_id: String,
-    pub incident_revision: u64,
-    pub action: ResponseActionKind,
-    pub tier: ResponseTier,
-    pub status: ResponseActionStatus,
-    pub target: ResponseTarget,
-    pub target_identity_sha256: String,
-    pub evidence_ids: Vec<String>,
-    pub reason: String,
-    pub operation: ResponseOperation,
-    pub adapter: String,
-    pub policy: ResponsePolicyDecision,
-    pub requested_by: String,
-    #[serde(default)]
-    pub approval_count: u8,
-    pub ttl_seconds: Option<u32>,
-    pub created_at: String,
-    pub expires_at: Option<String>,
-    pub queued_at: Option<String>,
-    pub completed_at: Option<String>,
-}
-
-impl ResponseActionPlan {
-    pub fn is_valid(&self) -> bool {
-        if self.schema_version != RESPONSE_ACTION_SCHEMA_VERSION
-            || !lower_hex_id(&self.action_id, "rsa_", 32)
-            || !valid_prefixed_id(&self.tenant_id, "ten_")
-            || !bounded_nonempty(&self.incident_id, 132)
-            || self.incident_revision < 1
-            || !self.target.is_valid()
-            || !self.target.matches_action(self.action)
-            || !is_lower_sha256(&self.target_identity_sha256)
-            || !canonical_strings(&self.evidence_ids, 1, 128, 132)
-            || !bounded_nonempty(&self.reason, 512)
-            || !operation_matches(self.action, self.operation)
-            || !valid_adapter_id(&self.adapter)
-            || !self.policy.is_valid()
-            || self.policy.tier != self.tier
-            || !bounded_nonempty(&self.requested_by, 256)
-            || self.approval_count > 2
-            || self.approval_count > self.policy.required_approvals
-            || parse_time(&self.created_at).is_none()
-            || !valid_optional_time(&self.expires_at)
-            || !valid_optional_time(&self.queued_at)
-            || !valid_optional_time(&self.completed_at)
-        {
-            return false;
-        }
-        if let Some(expires) = self.expires_at.as_deref() {
-            if !strictly_after(&self.created_at, expires) {
-                return false;
-            }
-        }
-        match self.action {
-            ResponseActionKind::TemporaryBlockIp => {
-                self.ttl_seconds
-                    .is_some_and(|ttl| (60..=86_400).contains(&ttl))
-                    && self.expires_at.is_some()
-            }
-            _ => self.ttl_seconds.is_none(),
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let valid = value.starts_with('/')
+            && value.len() >= 2
+            && value.len() <= 4096
+            && !value.contains('\0')
+            && !value.chars().any(char::is_control)
+            && value
+                .split('/')
+                .skip(1)
+                .all(|segment| !segment.is_empty() && segment != "." && segment != "..");
+        if valid {
+            Ok(Self(value))
+        } else {
+            Err(LinuxPathParseError)
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ResponseApprovalRead {
-    pub approval_id: String,
-    pub action_id: String,
-    pub decision: ApprovalDecision,
-    pub approver: String,
-    pub comment: String,
-    pub business_confirmation: bool,
-    pub created_at: String,
-}
+impl FromStr for LinuxPath {
+    type Err = LinuxPathParseError;
 
-impl ResponseApprovalRead {
-    pub fn is_valid(&self) -> bool {
-        lower_hex_id(&self.approval_id, "rap_", 32)
-            && lower_hex_id(&self.action_id, "rsa_", 32)
-            && bounded_nonempty(&self.approver, 256)
-            && bounded_nonempty(&self.comment, 512)
-            && parse_time(&self.created_at).is_some()
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.to_owned())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct TargetObservation {
-    pub target: ResponseTarget,
-    pub observed_at: String,
-    pub state_sha256: String,
-    #[serde(default)]
-    pub state: BTreeMap<String, Value>,
-}
-
-impl TargetObservation {
-    pub fn is_valid(&self) -> bool {
-        self.target.is_valid()
-            && parse_time(&self.observed_at).is_some()
-            && is_lower_sha256(&self.state_sha256)
-            && self.state.len() <= 32
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct AdapterExecutionResult {
-    pub status: ExecutionResultStatus,
-    pub adapter: String,
-    pub operation_reference: String,
-    pub before: TargetObservation,
-    pub after: Option<TargetObservation>,
-    pub verification_passed: bool,
-    pub error_code: Option<String>,
-}
-
-impl AdapterExecutionResult {
-    pub fn is_valid(&self) -> bool {
-        if !valid_adapter_id(&self.adapter)
-            || !bounded_nonempty(&self.operation_reference, 256)
-            || !self.before.is_valid()
-            || self.after.as_ref().is_some_and(|after| !after.is_valid())
-            || !self.error_code.as_deref().is_none_or(valid_adapter_id)
-        {
-            return false;
-        }
-        let succeeded = self.status == ExecutionResultStatus::Succeeded;
-        succeeded == (self.after.is_some() && self.verification_passed)
-            && succeeded != self.error_code.is_some()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct AdapterRollbackResult {
-    pub status: RollbackResultStatus,
-    pub adapter: String,
-    pub operation_reference: String,
-    pub before: TargetObservation,
-    pub after: Option<TargetObservation>,
-    pub verification_passed: bool,
-    pub error_code: Option<String>,
-}
-
-impl AdapterRollbackResult {
-    pub fn is_valid(&self) -> bool {
-        if !valid_adapter_id(&self.adapter)
-            || !bounded_nonempty(&self.operation_reference, 256)
-            || !self.before.is_valid()
-            || self.after.as_ref().is_some_and(|after| !after.is_valid())
-            || !self.error_code.as_deref().is_none_or(valid_adapter_id)
-        {
-            return false;
-        }
-        let succeeded = self.status == RollbackResultStatus::Succeeded;
-        succeeded == (self.after.is_some() && self.verification_passed)
-            && succeeded != self.error_code.is_some()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ResponseExecutionRead {
-    pub execution_id: String,
-    pub action_id: String,
-    pub attempt: u64,
-    pub idempotency_key: String,
-    pub status: ExecutionResultStatus,
-    pub result: AdapterExecutionResult,
-    pub started_at: String,
-    pub completed_at: String,
-}
-
-impl ResponseExecutionRead {
-    pub fn is_valid(&self) -> bool {
-        lower_hex_id(&self.execution_id, "rex_", 32)
-            && lower_hex_id(&self.action_id, "rsa_", 32)
-            && self.attempt >= 1
-            && (8..=128).contains(&self.idempotency_key.len())
-            && self.result.is_valid()
-            && self.result.status == self.status
-            && ordered_times(&self.started_at, &self.completed_at)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ResponseRollbackRead {
-    pub rollback_id: String,
-    pub action_id: String,
-    pub execution_id: String,
-    pub idempotency_key: String,
-    pub reason: String,
-    pub requested_by: String,
-    pub status: RollbackResultStatus,
-    pub result: AdapterRollbackResult,
-    pub started_at: String,
-    pub completed_at: String,
-}
-
-impl ResponseRollbackRead {
-    pub fn is_valid(&self) -> bool {
-        lower_hex_id(&self.rollback_id, "rrb_", 32)
-            && lower_hex_id(&self.action_id, "rsa_", 32)
-            && lower_hex_id(&self.execution_id, "rex_", 32)
-            && (8..=128).contains(&self.idempotency_key.len())
-            && bounded_nonempty(&self.reason, 512)
-            && bounded_nonempty(&self.requested_by, 256)
-            && self.result.is_valid()
-            && self.result.status == self.status
-            && ordered_times(&self.started_at, &self.completed_at)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ResponseActionEvent {
-    pub sequence: u64,
-    pub action_id: String,
-    pub from_status: Option<ResponseActionStatus>,
-    pub to_status: ResponseActionStatus,
-    pub actor: String,
-    pub reason: String,
-    pub created_at: String,
-}
-
-impl ResponseActionEvent {
-    pub fn is_valid(&self) -> bool {
-        self.sequence >= 1
-            && lower_hex_id(&self.action_id, "rsa_", 32)
-            && bounded_nonempty(&self.actor, 256)
-            && bounded_nonempty(&self.reason, 512)
-            && parse_time(&self.created_at).is_some()
-            && self.from_status != Some(self.to_status)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ResponseActionDetail {
-    pub plan: ResponseActionPlan,
-    #[serde(default)]
-    pub approvals: Vec<ResponseApprovalRead>,
-    #[serde(default)]
-    pub executions: Vec<ResponseExecutionRead>,
-    #[serde(default)]
-    pub rollbacks: Vec<ResponseRollbackRead>,
-    pub events: Vec<ResponseActionEvent>,
-}
-
-impl ResponseActionDetail {
-    pub fn is_valid(&self) -> bool {
-        if !self.plan.is_valid()
-            || self.approvals.len() > 2
-            || !self.approvals.iter().all(ResponseApprovalRead::is_valid)
-            || self.executions.len() > 100
-            || !self.executions.iter().all(ResponseExecutionRead::is_valid)
-            || self.rollbacks.len() > 100
-            || !self.rollbacks.iter().all(ResponseRollbackRead::is_valid)
-            || !(1..=512).contains(&self.events.len())
-            || !self.events.iter().all(ResponseActionEvent::is_valid)
-        {
-            return false;
-        }
-        let action_id = self.plan.action_id.as_str();
-        if self
-            .approvals
-            .iter()
-            .any(|approval| approval.action_id != action_id)
-            || self
-                .executions
-                .iter()
-                .any(|execution| execution.action_id != action_id)
-            || self
-                .rollbacks
-                .iter()
-                .any(|rollback| rollback.action_id != action_id)
-            || self.events.iter().any(|event| event.action_id != action_id)
-        {
-            return false;
-        }
-        if self
-            .events
-            .windows(2)
-            .any(|pair| pair[0].sequence >= pair[1].sequence)
-        {
-            return false;
-        }
-        let approval_ids = self
-            .approvals
-            .iter()
-            .map(|approval| approval.approval_id.as_str())
-            .collect::<HashSet<_>>();
-        let execution_ids = self
-            .executions
-            .iter()
-            .map(|execution| execution.execution_id.as_str())
-            .collect::<HashSet<_>>();
-        let rollback_ids = self
-            .rollbacks
-            .iter()
-            .map(|rollback| rollback.rollback_id.as_str())
-            .collect::<HashSet<_>>();
-        approval_ids.len() == self.approvals.len()
-            && execution_ids.len() == self.executions.len()
-            && rollback_ids.len() == self.rollbacks.len()
-    }
-}
-
-fn target_ip() -> String {
-    "ip".to_owned()
-}
-fn target_process() -> String {
-    "process".to_owned()
-}
-fn target_file() -> String {
-    "file".to_owned()
-}
-fn target_account() -> String {
-    "account".to_owned()
-}
-fn target_host() -> String {
-    "host".to_owned()
-}
-fn target_evidence() -> String {
-    "evidence_collection".to_owned()
-}
-fn default_collection_duration() -> u16 {
-    60
-}
-fn default_policy_version() -> String {
-    RESPONSE_POLICY_VERSION.to_owned()
-}
-fn default_true() -> bool {
-    true
-}
-
-fn evidence_collection_name(value: EvidenceCollectionKind) -> &'static str {
-    match value {
-        EvidenceCollectionKind::Logs => "logs",
-        EvidenceCollectionKind::ProcessTree => "process_tree",
-        EvidenceCollectionKind::FileMetadata => "file_metadata",
-        EvidenceCollectionKind::Pcap => "pcap",
-    }
-}
-
-fn operation_matches(action: ResponseActionKind, operation: ResponseOperation) -> bool {
-    matches!(
-        (action, operation),
-        (ResponseActionKind::CollectEvidence, ResponseOperation::EvidenceCollect)
-            | (ResponseActionKind::TemporaryBlockIp, ResponseOperation::FirewallBlockIp)
-            | (ResponseActionKind::IsolateFile, ResponseOperation::FileQuarantine)
-            | (ResponseActionKind::TerminateProcess, ResponseOperation::ProcessTerminate)
-            | (ResponseActionKind::DisableAccount, ResponseOperation::AccountDisable)
-            | (ResponseActionKind::IsolateHost, ResponseOperation::HostIsolate)
-    )
-}
-
-fn canonical_unicast_ip(value: &str) -> bool {
-    let Ok(ip) = value.parse::<IpAddr>() else {
-        return false;
-    };
-    !ip.is_loopback() && !ip.is_unspecified() && !ip.is_multicast() && ip.to_string() == value
-}
-
-fn valid_absolute_path(value: &str) -> bool {
-    if value.is_empty()
-        || value.len() > 4096
-        || value.bytes().any(|byte| matches!(byte, 0 | b'\n' | b'\r'))
-        || !value.starts_with('/')
-        || value.contains("//")
-        || (value.len() > 1 && value.ends_with('/'))
+impl<'de> Deserialize<'de> for LinuxPath {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
     {
-        return false;
+        Self::try_from(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
     }
-    let path = Path::new(value);
-    path.is_absolute()
-        && path
-            .components()
-            .all(|component| !matches!(component, Component::ParentDir | Component::CurDir))
 }
 
-fn valid_username(value: &str) -> bool {
-    if value.is_empty() || value.len() > 32 {
-        return false;
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "target_type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TargetSnapshot {
+    Incident {
+        incident_id: IncidentId,
+    },
+    Host {
+        host_id: HostId,
+        agent_identity_fingerprint: Sha256Digest,
+    },
+    Process {
+        host_id: HostId,
+        #[schemars(range(min = 1))]
+        pid: u32,
+        #[schemars(range(min = 1))]
+        start_time_ticks: u64,
+        executable_sha256: Option<Sha256Digest>,
+    },
+    File {
+        host_id: HostId,
+        path: LinuxPath,
+        #[schemars(range(min = 1))]
+        inode: u64,
+        sha256: Sha256Digest,
+    },
+    Account {
+        host_id: HostId,
+        #[schemars(length(min = 1, max = 256))]
+        account: String,
+        uid: u32,
+    },
+    IpAddress {
+        host_id: HostId,
+        address: IpAddr,
+        policy_scope: NetworkPolicyScope,
+    },
+    WebRoute {
+        service_id: ServiceId,
+        route_id: RouteId,
+        #[schemars(length(min = 1, max = 128))]
+        policy_version: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalRequirement {
+    pub required: bool,
+    pub minimum_approvers: u8,
+    pub distinct_approvers_required: bool,
+    #[schemars(length(max = 16))]
+    pub attestations: Vec<ApprovalAttestation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RollbackPlan {
+    pub required: bool,
+    pub strategy: RollbackStrategy,
+    pub deadline: Option<Timestamp>,
+    #[schemars(length(min = 1, max = 512))]
+    pub recovery_instructions_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ResponseAction {
+    pub schema_version: SchemaVersion,
+    pub action_id: ActionId,
+    pub tenant_id: TenantId,
+    pub incident_id: IncidentId,
+    pub policy_id: PolicyId,
+    #[schemars(length(min = 1, max = 128))]
+    pub policy_version: String,
+    pub action_type: ResponseActionType,
+    pub tier: ResponseTier,
+    pub required_capability: ResponseCapability,
+    pub risk_level: Severity,
+    pub asset_criticality: AssetCriticality,
+    pub target: TargetSnapshot,
+    pub canonical_digest: Sha256Digest,
+    pub requested_at: Timestamp,
+    pub expires_at: Timestamp,
+    pub ttl_seconds: Option<u64>,
+    pub approval: ApprovalRequirement,
+    pub rollback: RollbackPlan,
+    #[schemars(length(min = 1, max = 256))]
+    pub idempotency_key: String,
+    #[schemars(length(max = 512))]
+    pub supporting_evidence_ids: Vec<EvidenceId>,
+}
+
+#[derive(Serialize)]
+struct ResponseActionDigestInput<'a> {
+    schema_version: &'a SchemaVersion,
+    action_id: &'a ActionId,
+    tenant_id: &'a TenantId,
+    incident_id: &'a IncidentId,
+    policy_id: &'a PolicyId,
+    policy_version: &'a str,
+    action_type: ResponseActionType,
+    tier: ResponseTier,
+    required_capability: ResponseCapability,
+    risk_level: Severity,
+    asset_criticality: AssetCriticality,
+    target: &'a TargetSnapshot,
+    requested_at: &'a Timestamp,
+    expires_at: &'a Timestamp,
+    ttl_seconds: Option<u64>,
+    approval_required: bool,
+    minimum_approvers: u8,
+    distinct_approvers_required: bool,
+    rollback: &'a RollbackPlan,
+    idempotency_key: &'a str,
+    supporting_evidence_ids: &'a [EvidenceId],
+}
+
+#[derive(Debug)]
+pub enum ResponseDigestError {
+    Serialization(serde_json::Error),
+    DigestInvariant,
+}
+
+impl fmt::Display for ResponseDigestError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Serialization(_) => formatter.write_str("response action digest serialization failed"),
+            Self::DigestInvariant => formatter.write_str("response action SHA-256 invariant failed"),
+        }
     }
-    let mut bytes = value.bytes();
-    let Some(first) = bytes.next() else {
-        return false;
+}
+
+impl std::error::Error for ResponseDigestError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Serialization(error) => Some(error),
+            Self::DigestInvariant => None,
+        }
+    }
+}
+
+/// Computes the approval digest from a fixed, versioned field sequence.
+/// Attestations and the digest field itself are deliberately excluded.
+pub fn compute_response_action_digest(
+    action: &ResponseAction,
+) -> Result<Sha256Digest, ResponseDigestError> {
+    let input = ResponseActionDigestInput {
+        schema_version: &action.schema_version,
+        action_id: &action.action_id,
+        tenant_id: &action.tenant_id,
+        incident_id: &action.incident_id,
+        policy_id: &action.policy_id,
+        policy_version: &action.policy_version,
+        action_type: action.action_type,
+        tier: action.tier,
+        required_capability: action.required_capability,
+        risk_level: action.risk_level,
+        asset_criticality: action.asset_criticality,
+        target: &action.target,
+        requested_at: &action.requested_at,
+        expires_at: &action.expires_at,
+        ttl_seconds: action.ttl_seconds,
+        approval_required: action.approval.required,
+        minimum_approvers: action.approval.minimum_approvers,
+        distinct_approvers_required: action.approval.distinct_approvers_required,
+        rollback: &action.rollback,
+        idempotency_key: &action.idempotency_key,
+        supporting_evidence_ids: &action.supporting_evidence_ids,
     };
-    (first.is_ascii_lowercase() || first == b'_')
-        && bytes.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_-".contains(&byte))
+    let canonical = serde_json::to_vec(&input).map_err(ResponseDigestError::Serialization)?;
+    let digest = Sha256::digest(canonical);
+    let encoded = digest.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+    Sha256Digest::try_from(encoded).map_err(|_| ResponseDigestError::DigestInvariant)
 }
 
-fn valid_adapter_id(value: &str) -> bool {
-    (1..=64).contains(&value.len())
-        && value
-            .as_bytes()
-            .first()
-            .is_some_and(|byte| byte.is_ascii_lowercase())
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_.-".contains(&byte))
+impl TenantScoped for ResponseAction {
+    fn tenant_id(&self) -> &TenantId {
+        &self.tenant_id
+    }
 }
 
-fn lower_hex_id(value: &str, prefix: &str, length: usize) -> bool {
-    let Some(rest) = value.strip_prefix(prefix) else {
-        return false;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponseContractDecision {
+    Allowed,
+    UnsupportedSchemaVersion,
+    TierActionMismatch,
+    RequiredCapabilityMismatch,
+    TargetTypeMismatch,
+    InvalidTargetParameter,
+    InvalidPolicyVersion,
+    CanonicalDigestMismatch,
+    ApprovalMissing,
+    ApprovalNotAllowed,
+    ApprovalRejected,
+    ApprovalCountInsufficient,
+    ApprovalBindingMismatch,
+    DualApprovalRequired,
+    TtlRequired,
+    RollbackRequired,
+    EmptyIdempotencyKey,
+    InvalidIdempotencyKey,
+    InvalidValidityWindow,
+    ValidityWindowExceeded,
+    InvalidTtl,
+    TtlValidityMismatch,
+    RollbackDeadlineRequired,
+    RollbackDeadlineMismatch,
+    InconsistentRollbackConfiguration,
+    UnexpectedTtl,
+    DuplicateApprovalId,
+    DuplicateApproverId,
+    SupportingEvidenceRequired,
+    DuplicateSupportingEvidence,
+    ApprovalOutsideValidityWindow,
+    IncidentTargetMismatch,
+    InconsistentApprovalConfiguration,
+    ParameterLimitExceeded,
+    InvalidRollbackReference,
+}
+
+pub fn validate_response_contract(action: &ResponseAction) -> ResponseContractDecision {
+    if validate_current_schema(&action.schema_version) != SchemaVersionDecision::Current {
+        return ResponseContractDecision::UnsupportedSchemaVersion;
+    }
+    let expected_tier = match action.action_type {
+        ResponseActionType::InvestigationRecommendation
+        | ResponseActionType::QueryRecommendation
+        | ResponseActionType::ReportRecommendation
+        | ResponseActionType::RuleRecommendation => ResponseTier::R0Advice,
+        ResponseActionType::CollectProcessTree
+        | ResponseActionType::CollectFileMetadata
+        | ResponseActionType::CollectNetworkSnapshot
+        | ResponseActionType::CollectPcapSegment => ResponseTier::R1Collect,
+        ResponseActionType::TemporaryIpBlock
+        | ResponseActionType::TemporaryWebPolicy
+        | ResponseActionType::QuarantineFile => ResponseTier::R2ReversibleContainment,
+        ResponseActionType::TerminateProcess
+        | ResponseActionType::DisableAccount
+        | ResponseActionType::IsolateHost => ResponseTier::R3BusinessImpact,
     };
-    rest.len() == length
-        && rest
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-}
-
-fn is_lower_sha256(value: &str) -> bool {
-    lower_hex_id(value, "", 64)
-}
-
-fn bounded_nonempty(value: &str, max_len: usize) -> bool {
-    !value.is_empty() && value.len() <= max_len
-}
-
-fn canonical_strings(values: &[String], min: usize, max: usize, max_len: usize) -> bool {
-    (min..=max).contains(&values.len())
-        && values.iter().all(|value| bounded_nonempty(value, max_len))
-        && values.windows(2).all(|pair| pair[0] < pair[1])
-}
-
-fn parse_time(value: &str) -> Option<DateTime<FixedOffset>> {
-    DateTime::parse_from_rfc3339(value).ok()
-}
-
-fn valid_optional_time(value: &Option<String>) -> bool {
-    value.as_deref().is_none_or(|time| parse_time(time).is_some())
-}
-
-fn ordered_times(first: &str, last: &str) -> bool {
-    matches!((parse_time(first), parse_time(last)), (Some(a), Some(b)) if a <= b)
-}
-
-fn strictly_after(first: &str, second: &str) -> bool {
-    matches!((parse_time(first), parse_time(second)), (Some(a), Some(b)) if b > a)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn temporary_ip_block_is_ttl_bound() {
-        let plan = ResponsePlanCreate {
-            incident_revision: 1,
-            action: ResponseActionKind::TemporaryBlockIp,
-            target: ResponseTarget::Ip(IpResponseTarget {
-                target_type: "ip".to_owned(),
-                host_id: "host_12345678".to_owned(),
-                expected_agent_id: "agent_12345678".to_owned(),
-                ip_address: "203.0.113.10".to_owned(),
-            }),
-            evidence_ids: vec!["evi_1234567890abcdef12345678".to_owned()],
-            reason: "confirmed outbound IOC".to_owned(),
-            ttl_seconds: None,
-        };
-        assert!(!plan.is_valid());
+    if action.tier != expected_tier {
+        return ResponseContractDecision::TierActionMismatch;
     }
-
-    #[test]
-    fn host_isolation_preserves_management_path() {
-        let target = HostResponseTarget {
-            target_type: "host".to_owned(),
-            host_id: "host_12345678".to_owned(),
-            expected_agent_id: "agent_12345678".to_owned(),
-            management_ip: "203.0.113.10".to_owned(),
-            allowlist_ips: vec!["203.0.113.11".to_owned()],
-        };
-        assert!(!target.is_valid());
+    let expected_capability = match action.action_type {
+        ResponseActionType::InvestigationRecommendation
+        | ResponseActionType::QueryRecommendation
+        | ResponseActionType::ReportRecommendation
+        | ResponseActionType::RuleRecommendation => ResponseCapability::IncidentAdvise,
+        ResponseActionType::CollectProcessTree
+        | ResponseActionType::CollectFileMetadata
+        | ResponseActionType::CollectNetworkSnapshot
+        | ResponseActionType::CollectPcapSegment => ResponseCapability::EvidenceCollect,
+        ResponseActionType::TemporaryIpBlock => ResponseCapability::NetworkContain,
+        ResponseActionType::TemporaryWebPolicy => ResponseCapability::WebPolicyContain,
+        ResponseActionType::QuarantineFile => ResponseCapability::FileQuarantine,
+        ResponseActionType::TerminateProcess => ResponseCapability::ProcessTerminate,
+        ResponseActionType::DisableAccount => ResponseCapability::AccountDisable,
+        ResponseActionType::IsolateHost => ResponseCapability::HostIsolate,
+    };
+    if action.required_capability != expected_capability {
+        return ResponseContractDecision::RequiredCapabilityMismatch;
     }
+    let target_matches_action = matches!(
+        (&action.action_type, &action.target),
+        (
+            ResponseActionType::InvestigationRecommendation
+                | ResponseActionType::QueryRecommendation
+                | ResponseActionType::ReportRecommendation
+                | ResponseActionType::RuleRecommendation,
+            TargetSnapshot::Incident { .. }
+        )
+            | (ResponseActionType::CollectProcessTree, TargetSnapshot::Process { .. })
+            | (ResponseActionType::CollectFileMetadata, TargetSnapshot::File { .. })
+            | (
+                ResponseActionType::CollectNetworkSnapshot,
+                TargetSnapshot::Host { .. }
+            )
+            | (
+                ResponseActionType::CollectPcapSegment,
+                TargetSnapshot::Host { .. } | TargetSnapshot::IpAddress { .. }
+            )
+            | (ResponseActionType::TemporaryIpBlock, TargetSnapshot::IpAddress { .. })
+            | (
+                ResponseActionType::TemporaryWebPolicy,
+                TargetSnapshot::WebRoute { .. }
+            )
+            | (ResponseActionType::QuarantineFile, TargetSnapshot::File { .. })
+            | (ResponseActionType::TerminateProcess, TargetSnapshot::Process { .. })
+            | (ResponseActionType::DisableAccount, TargetSnapshot::Account { .. })
+            | (ResponseActionType::IsolateHost, TargetSnapshot::Host { .. })
+    );
+    if !target_matches_action {
+        return ResponseContractDecision::TargetTypeMismatch;
+    }
+    let target_parameters_valid = match &action.target {
+        TargetSnapshot::Incident { .. } | TargetSnapshot::Host { .. } => true,
+        TargetSnapshot::Process {
+            pid,
+            start_time_ticks,
+            ..
+        } => *pid > 0 && *start_time_ticks > 0,
+        TargetSnapshot::File { inode, .. } => *inode > 0,
+        TargetSnapshot::Account { account, .. } => bounded_non_empty(account, 256),
+        TargetSnapshot::IpAddress { .. } => true,
+        TargetSnapshot::WebRoute { policy_version, .. } => {
+            crate::common::valid_contract_token(policy_version, 128)
+        }
+    };
+    if !target_parameters_valid {
+        return ResponseContractDecision::InvalidTargetParameter;
+    }
+    if matches!(
+        &action.target,
+        TargetSnapshot::Incident { incident_id } if incident_id != &action.incident_id
+    ) {
+        return ResponseContractDecision::IncidentTargetMismatch;
+    }
+    if !crate::common::valid_contract_token(&action.policy_version, 128) {
+        return ResponseContractDecision::InvalidPolicyVersion;
+    }
+    if !bounded_non_empty(&action.idempotency_key, 256) {
+        return ResponseContractDecision::EmptyIdempotencyKey;
+    }
+    if !crate::common::valid_contract_token(&action.idempotency_key, 256) {
+        return ResponseContractDecision::InvalidIdempotencyKey;
+    }
+    if action.approval.minimum_approvers > 16
+        || action.approval.attestations.len() > 16
+        || action.supporting_evidence_ids.len() > 512
+    {
+        return ResponseContractDecision::ParameterLimitExceeded;
+    }
+    if action
+        .rollback
+        .recovery_instructions_ref
+        .as_deref()
+        .is_some_and(|reference| !valid_opaque_reference(reference, 512))
+    {
+        return ResponseContractDecision::InvalidRollbackReference;
+    }
+    if !action.requested_at.is_before(&action.expires_at) {
+        return ResponseContractDecision::InvalidValidityWindow;
+    }
+    if action
+        .requested_at
+        .whole_seconds_until(&action.expires_at)
+        .map_or(true, |seconds| seconds > MAX_RESPONSE_VALIDITY_SECONDS)
+    {
+        return ResponseContractDecision::ValidityWindowExceeded;
+    }
+    if action.ttl_seconds == Some(0) {
+        return ResponseContractDecision::InvalidTtl;
+    }
+    if action.tier != ResponseTier::R2ReversibleContainment && action.ttl_seconds.is_some() {
+        return ResponseContractDecision::UnexpectedTtl;
+    }
+    if matches!(action.tier, ResponseTier::R2ReversibleContainment | ResponseTier::R3BusinessImpact)
+        && action.supporting_evidence_ids.is_empty()
+    {
+        return ResponseContractDecision::SupportingEvidenceRequired;
+    }
+    let distinct_evidence: BTreeSet<&EvidenceId> =
+        action.supporting_evidence_ids.iter().collect();
+    if distinct_evidence.len() != action.supporting_evidence_ids.len() {
+        return ResponseContractDecision::DuplicateSupportingEvidence;
+    }
+    if action.tier == ResponseTier::R2ReversibleContainment {
+        let Some(ttl_seconds) = action.ttl_seconds else {
+            return ResponseContractDecision::TtlRequired;
+        };
+        if action.requested_at.whole_seconds_until(&action.expires_at) != Some(ttl_seconds) {
+            return ResponseContractDecision::TtlValidityMismatch;
+        }
+        if !action.rollback.required
+            || action.rollback.strategy != RollbackStrategy::AutomaticRegisteredInverse
+        {
+            return ResponseContractDecision::RollbackRequired;
+        }
+        let Some(deadline) = action.rollback.deadline.as_ref() else {
+            return ResponseContractDecision::RollbackDeadlineRequired;
+        };
+        if !deadline.is_same_instant(&action.expires_at) {
+            return ResponseContractDecision::RollbackDeadlineMismatch;
+        }
+        if action.rollback.recovery_instructions_ref.is_some() {
+            return ResponseContractDecision::InconsistentRollbackConfiguration;
+        }
+        if action.asset_criticality == AssetCriticality::Critical && !action.approval.required {
+            return ResponseContractDecision::ApprovalMissing;
+        }
+    }
+    if action.tier != ResponseTier::R2ReversibleContainment
+        && action.rollback.strategy == RollbackStrategy::AutomaticRegisteredInverse
+    {
+        return ResponseContractDecision::InconsistentRollbackConfiguration;
+    }
+    if action.tier == ResponseTier::R3BusinessImpact && !action.approval.required {
+        return ResponseContractDecision::ApprovalMissing;
+    }
+    if action.tier == ResponseTier::R0Advice && action.approval.required {
+        return ResponseContractDecision::ApprovalNotAllowed;
+    }
+    if !action.approval.required
+        && (action.approval.minimum_approvers != 0
+            || action.approval.distinct_approvers_required
+            || !action.approval.attestations.is_empty())
+    {
+        return ResponseContractDecision::InconsistentApprovalConfiguration;
+    }
+    if action.approval.required {
+        let approved_approvers: BTreeSet<&UserId> = action
+            .approval
+            .attestations
+            .iter()
+            .filter(|attestation| attestation.decision == ApprovalDecision::Approved)
+            .map(|attestation| &attestation.approver_id)
+            .collect();
+        if action
+            .approval
+            .attestations
+            .iter()
+            .any(|attestation| attestation.action_digest != action.canonical_digest)
+        {
+            return ResponseContractDecision::ApprovalBindingMismatch;
+        }
+        let distinct_approval_ids: BTreeSet<&ApprovalId> = action
+            .approval
+            .attestations
+            .iter()
+            .map(|attestation| &attestation.approval_id)
+            .collect();
+        if distinct_approval_ids.len() != action.approval.attestations.len() {
+            return ResponseContractDecision::DuplicateApprovalId;
+        }
+        let distinct_attesting_approvers: BTreeSet<&UserId> = action
+            .approval
+            .attestations
+            .iter()
+            .map(|attestation| &attestation.approver_id)
+            .collect();
+        if distinct_attesting_approvers.len() != action.approval.attestations.len() {
+            return ResponseContractDecision::DuplicateApproverId;
+        }
+        if action.approval.attestations.iter().any(|attestation| {
+            action.requested_at.is_after(&attestation.decided_at)
+                || !attestation.decided_at.is_before(&action.expires_at)
+        }) {
+            return ResponseContractDecision::ApprovalOutsideValidityWindow;
+        }
+        if action
+            .approval
+            .attestations
+            .iter()
+            .any(|attestation| attestation.decision == ApprovalDecision::Rejected)
+        {
+            return ResponseContractDecision::ApprovalRejected;
+        }
+        if action.approval.minimum_approvers < 1
+            || approved_approvers.len() < usize::from(action.approval.minimum_approvers)
+        {
+            return ResponseContractDecision::ApprovalCountInsufficient;
+        }
+    }
+    if action.tier == ResponseTier::R3BusinessImpact {
+        if action.asset_criticality == AssetCriticality::Critical
+            && (action.approval.minimum_approvers < 2
+                || !action.approval.distinct_approvers_required)
+        {
+            return ResponseContractDecision::DualApprovalRequired;
+        }
+        if !action.rollback.required
+            || action.rollback.strategy != RollbackStrategy::HumanRecoveryRunbook
+            || action.rollback.deadline.is_some()
+            || action
+                .rollback
+                .recovery_instructions_ref
+                .as_deref()
+                .map_or(true, |reference| !valid_opaque_reference(reference, 512))
+        {
+            return ResponseContractDecision::RollbackRequired;
+        }
+    }
+    if matches!(action.tier, ResponseTier::R0Advice | ResponseTier::R1Collect)
+        && (action.rollback.required
+            || action.rollback.strategy != RollbackStrategy::None
+            || action.rollback.deadline.is_some()
+            || action.rollback.recovery_instructions_ref.is_some())
+    {
+        return ResponseContractDecision::InconsistentRollbackConfiguration;
+    }
+    match compute_response_action_digest(action) {
+        Ok(digest) if digest == action.canonical_digest => {}
+        _ => return ResponseContractDecision::CanonicalDigestMismatch,
+    }
+    ResponseContractDecision::Allowed
+}
+
+fn bounded_non_empty(value: &str, maximum_bytes: usize) -> bool {
+    !value.trim().is_empty() && value.len() <= maximum_bytes
+}
+
+fn valid_opaque_reference(value: &str, maximum_bytes: usize) -> bool {
+    bounded_non_empty(value, maximum_bytes)
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'_' | b'-' | b'.')
+        })
 }

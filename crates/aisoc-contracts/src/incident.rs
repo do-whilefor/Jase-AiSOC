@@ -1,496 +1,619 @@
-//! Authoritative P6 IncidentCandidate contract.
-//!
-//! This module mirrors `schemas/incident-candidate-v0.1.schema.json` instead of
-//! introducing a second Rust-only incident DTO. Runtime correlation state lives
-//! in [`crate::IncidentState`]; persistence/API boundaries use these types.
-
-use std::collections::{BTreeMap, HashSet};
-
-use chrono::{DateTime, FixedOffset};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
-use crate::{AttackState, Severity};
-
-pub const INCIDENT_CANDIDATE_SCHEMA_VERSION: &str = "0.1.0";
-pub const INCIDENT_REDUCTION_RULE_VERSION: &str = "p6-reduction-v0.1.0";
-pub const INCIDENT_REDUCTION_REASON: &str = "incident_context_sampling";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum TimelineAssurance {
-    Trusted,
-    Degraded,
-    Untrusted,
-}
+use crate::{
+    contains_duplicate, validate_current_schema, Assurance, ClaimId, CustodyState, DetectionId,
+    EntityId, EntityKind, EvidenceId, EvidenceRef, HostId, IncidentId, IntegrityState, RiskScore,
+    SchemaVersion, SchemaVersionDecision, SecurityState, Severity, TenantId, TenantScoped,
+    Timestamp,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum EntityType {
-    Host,
-    User,
-    Process,
-    File,
-    Ip,
-    Domain,
-    Session,
-    DetectionSubject,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ClaimEpistemicStatus {
-    Observed,
-    Inferred,
-    Unknown,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ClaimVerificationStatus {
-    Supported,
-    Contradicted,
-    Unsupported,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum IncidentAssurance {
-    DeterministicOnly,
-    DeterministicTimeDegraded,
+pub enum IncidentStatus {
+    Open,
+    Investigating,
+    Contained,
+    Resolved,
+    Closed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum IncidentRevisionReason {
-    InitialCorrelation,
-    LateEvidenceRecompute,
-    ManualMerge,
-    ManualSplit,
+    Created,
+    DetectionAdded,
+    LateEvent,
+    EvidenceAdded,
+    ClaimReviewed,
+    ResponseResult,
+    AnalystDecision,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct IncidentEntity {
+    pub entity_id: EntityId,
+    pub kind: EntityKind,
+    #[schemars(length(min = 1, max = 1024))]
+    pub stable_key: String,
+    #[schemars(length(min = 1, max = 512))]
+    pub display: String,
+    pub host_id: Option<HostId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TimelineEntry {
+    pub occurred_at: Timestamp,
+    #[schemars(length(min = 1, max = 4096))]
+    pub summary: String,
+    #[schemars(length(min = 1, max = 128))]
+    pub source_version: String,
+    #[schemars(length(max = 128))]
+    pub evidence_ids: Vec<EvidenceId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct IncidentEvidenceRef {
-    pub evidence_id: String,
-    pub event_id: String,
-    pub event_type: String,
-    pub event_time: String,
-    pub host_id: String,
-    pub raw_ref: String,
-    pub integrity_sha256: Option<String>,
-    pub source_time_quality: SourceTimeQuality,
-    #[serde(default)]
-    pub is_late: bool,
+pub struct Incident {
+    pub schema_version: SchemaVersion,
+    pub incident_id: IncidentId,
+    pub tenant_id: TenantId,
+    pub revision: u64,
+    pub revision_reason: IncidentRevisionReason,
+    pub previous_revision: Option<u64>,
+    pub status: IncidentStatus,
+    pub severity: Severity,
+    pub security_state: SecurityState,
+    pub risk_score: RiskScore,
+    pub assurance: Assurance,
+    #[schemars(length(min = 1, max = 512))]
+    pub title: String,
+    #[schemars(length(max = 128))]
+    pub attack_families: Vec<String>,
+    #[schemars(length(max = 512))]
+    pub detections: Vec<DetectionId>,
+    #[schemars(length(max = 1024))]
+    pub entities: Vec<IncidentEntity>,
+    #[schemars(length(max = 4096))]
+    pub timeline: Vec<TimelineEntry>,
+    #[schemars(length(max = 512))]
+    pub evidence_refs: Vec<EvidenceRef>,
+    #[schemars(length(max = 512))]
+    pub claim_ids: Vec<ClaimId>,
+    pub created_at: Timestamp,
+    pub revised_at: Timestamp,
+}
+
+impl TenantScoped for Incident {
+    fn tenant_id(&self) -> &TenantId {
+        &self.tenant_id
+    }
+}
+
+impl Incident {
+    pub fn references_only_own_tenant(&self) -> bool {
+        self.evidence_refs
+            .iter()
+            .all(|evidence| evidence.tenant_id == self.tenant_id)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum SourceTimeQuality {
-    Trusted,
-    SkewDetected,
-    Untrusted,
+pub enum IncidentContractDecision {
+    Accepted,
+    UnsupportedSchemaVersion,
+    InvalidRevisionLink,
+    EvidenceTenantMismatch,
+    EvidenceContractRejected,
+    EvidenceCollectedAfterRevision,
+    DetectionRequired,
+    EvidenceRequired,
+    DuplicateDetectionId,
+    DuplicateEntityId,
+    DuplicateEvidenceId,
+    DuplicateClaimId,
+    TimelineEvidenceMissing,
+    TimelineEvidenceRequired,
+    ConfirmedEvidenceEmpty,
+    ConfirmedEvidenceIntegrityFailed,
+    ConfirmedEvidenceCustodyUnavailable,
+    ConfirmedAssuranceNotVerified,
+    InvalidRevisionTime,
+    InvalidTextField,
+    ReferenceLimitExceeded,
+    DuplicateAttackFamily,
+    DuplicateTimelineEvidenceId,
+    DuplicateEntityStableKey,
+    InvalidTimelineOrder,
 }
 
-impl IncidentEvidenceRef {
-    pub fn is_valid(&self) -> bool {
-        valid_prefixed_hex(&self.evidence_id, "evi_", 24)
-            && valid_event_id(&self.event_id)
-            && valid_event_type(&self.event_type)
-            && parse_time(&self.event_time).is_some()
-            && valid_scoped_id(&self.host_id, "host_")
-            && (1..=2048).contains(&self.raw_ref.len())
-            && self
-                .integrity_sha256
-                .as_deref()
-                .is_none_or(is_lower_sha256)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum IncidentRelationshipDecision {
+    Accepted,
+    IncidentContractRejected,
+    EvidenceAccessContextRejected,
+    EvidenceAccessContextMismatch,
+    EvidenceAccessContextContainsForeignEvidence,
+    DetectionSetLimitExceeded,
+    ClaimSetLimitExceeded,
+    DuplicateDetectionId,
+    DuplicateClaimId,
+    DetectionContractRejected,
+    ClaimContractRejected,
+    DetectionSetMismatch,
+    ClaimSetMismatch,
+    DetectionTenantMismatch,
+    ClaimTenantMismatch,
+    ClaimIncidentMismatch,
+    ClaimCreatedBeforeIncident,
+    DetectionObservedAfterRevision,
+    ClaimCreatedAfterRevision,
+    DetectionEvidenceMissing,
+    DetectionEvidenceIdentityMismatch,
+    DetectionEvidenceLifecycleRegressed,
+    DetectionEntityMissing,
+    ClaimEvidenceMissing,
+    ClaimOriginDetectionMissing,
+    ClaimVerificationRejected,
+    ConfirmedEvidenceAccessDenied,
+    ConfirmedSupportMissing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum IncidentRevisionTransitionDecision {
+    Accepted,
+    PreviousContractRejected,
+    CurrentContractRejected,
+    TenantMismatch,
+    IncidentMismatch,
+    NonAdjacentRevision,
+    CreatedAtChanged,
+    RevisionTimeRegressed,
+    DetectionRemoved,
+    EvidenceRemoved,
+    EvidenceIdentityChanged,
+    EvidenceLifecycleRegressed,
+    ClaimRemoved,
+    EntityIdentityChanged,
+    TimelineRewritten,
+}
+
+pub fn validate_incident_contract(incident: &Incident) -> IncidentContractDecision {
+    if validate_current_schema(&incident.schema_version) != SchemaVersionDecision::Current {
+        return IncidentContractDecision::UnsupportedSchemaVersion;
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct IncidentEntity {
-    pub entity_id: String,
-    pub entity_type: EntityType,
-    pub canonical_key: String,
-    #[serde(default)]
-    pub attributes: BTreeMap<String, Value>,
-    pub first_seen: String,
-    pub last_seen: String,
-}
-
-impl IncidentEntity {
-    pub fn is_valid(&self) -> bool {
-        valid_prefixed_hex(&self.entity_id, "ent_", 24)
-            && (1..=512).contains(&self.canonical_key.len())
-            && self.attributes.len() <= 32
-            && ordered_times(&self.first_seen, &self.last_seen)
+    let valid_revision = match incident.revision_reason {
+        IncidentRevisionReason::Created => incident.revision == 1 && incident.previous_revision.is_none(),
+        _ => incident.revision > 1 && incident.previous_revision == Some(incident.revision - 1),
+    };
+    if !valid_revision {
+        return IncidentContractDecision::InvalidRevisionLink;
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct IncidentEdge {
-    pub edge_id: String,
-    pub source_entity_id: String,
-    pub target_entity_id: String,
-    pub relationship: String,
-    pub first_seen: String,
-    pub last_seen: String,
-    pub evidence_event_ids: Vec<String>,
-    pub evidence_count: u64,
-}
-
-impl IncidentEdge {
-    pub fn is_valid(&self) -> bool {
-        valid_prefixed_hex(&self.edge_id, "edg_", 24)
-            && valid_prefixed_hex(&self.source_entity_id, "ent_", 24)
-            && valid_prefixed_hex(&self.target_entity_id, "ent_", 24)
-            && self.source_entity_id != self.target_entity_id
-            && valid_slug(&self.relationship, 64)
-            && ordered_times(&self.first_seen, &self.last_seen)
-            && !self.evidence_event_ids.is_empty()
-            && self.evidence_event_ids.len() <= 50
-            && self.evidence_count >= self.evidence_event_ids.len() as u64
+    if incident.created_at.is_after(&incident.revised_at) {
+        return IncidentContractDecision::InvalidRevisionTime;
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct IncidentTimelineEntry {
-    pub timeline_id: String,
-    pub event_time: String,
-    pub category: String,
-    pub summary: String,
-    pub evidence_event_ids: Vec<String>,
-    pub assurance: TimelineAssurance,
-}
-
-impl IncidentTimelineEntry {
-    pub fn is_valid(&self) -> bool {
-        valid_prefixed_hex(&self.timeline_id, "tli_", 24)
-            && parse_time(&self.event_time).is_some()
-            && (1..=128).contains(&self.category.len())
-            && (1..=512).contains(&self.summary.len())
-            && !self.evidence_event_ids.is_empty()
-            && self.evidence_event_ids.len() <= 50
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct IncidentClaim {
-    pub claim_id: String,
-    pub category: String,
-    pub statement: String,
-    pub epistemic_status: ClaimEpistemicStatus,
-    pub verification_status: ClaimVerificationStatus,
-    pub evidence_event_ids: Vec<String>,
-    pub support_score: f64,
-    #[serde(default)]
-    pub contradiction_score: f64,
-}
-
-impl IncidentClaim {
-    pub fn is_valid(&self) -> bool {
-        valid_prefixed_hex(&self.claim_id, "clm_", 24)
-            && (1..=128).contains(&self.category.len())
-            && (1..=512).contains(&self.statement.len())
-            && !self.evidence_event_ids.is_empty()
-            && self.evidence_event_ids.len() <= 512
-            && (0.0..=1.0).contains(&self.support_score)
-            && (0.0..=1.0).contains(&self.contradiction_score)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct IncidentQuerySpec {
-    pub tenant_id: String,
-    pub host_id: String,
-    pub event_time_from: String,
-    pub event_time_to: String,
-    pub event_types: Vec<String>,
-}
-
-impl IncidentQuerySpec {
-    pub fn is_valid(&self) -> bool {
-        valid_scoped_id(&self.tenant_id, "ten_")
-            && valid_scoped_id(&self.host_id, "host_")
-            && ordered_times(&self.event_time_from, &self.event_time_to)
-            && !self.event_types.is_empty()
-            && self.event_types.len() <= 128
-            && is_sorted_unique(&self.event_types)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct IncidentDataReduction {
-    pub reduction_id: String,
-    #[serde(default = "default_reduction_rule")]
-    pub rule_version: String,
-    #[serde(default = "default_reduction_reason")]
-    pub reason: String,
-    pub input_count: u64,
-    pub retained_count: u64,
-    pub dropped_count: u64,
-    pub sample_event_ids: Vec<String>,
-    pub full_query_ref: String,
-    pub query: IncidentQuerySpec,
-}
-
-impl IncidentDataReduction {
-    pub fn is_valid(&self) -> bool {
-        valid_prefixed_hex(&self.reduction_id, "red_", 24)
-            && self.rule_version == INCIDENT_REDUCTION_RULE_VERSION
-            && self.reason == INCIDENT_REDUCTION_REASON
-            && self.input_count >= 1
-            && self.retained_count >= 1
-            && self.sample_event_ids.len() <= 20
-            && self.retained_count == self.sample_event_ids.len() as u64
-            && self.input_count == self.retained_count + self.dropped_count
-            && valid_prefixed_hex(&self.full_query_ref, "qry_", 32)
-            && self.query.is_valid()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct IncidentCandidate {
-    #[serde(default = "default_incident_schema_version")]
-    pub schema_version: String,
-    pub correlation_key: String,
-    pub tenant_id: String,
-    pub primary_host_id: String,
-    pub severity: Severity,
-    pub confidence: f64,
-    pub risk_score: u8,
-    pub attack_state: AttackState,
-    pub summary: String,
-    pub first_seen: String,
-    pub last_seen: String,
-    pub assurance: IncidentAssurance,
-    pub revision_reason: IncidentRevisionReason,
-    pub detection_ids: Vec<String>,
-    pub detection_count: u64,
-    pub evidence_count: u64,
-    pub evidence_index: Vec<IncidentEvidenceRef>,
-    pub sample_event_ids: Vec<String>,
-    pub full_query_ref: String,
-    pub aggregate_metrics: BTreeMap<String, Value>,
-    pub timeline: Vec<IncidentTimelineEntry>,
-    pub claims: Vec<IncidentClaim>,
-    pub entities: Vec<IncidentEntity>,
-    pub edges: Vec<IncidentEdge>,
-    pub data_reductions: Vec<IncidentDataReduction>,
-}
-
-impl IncidentCandidate {
-    pub fn is_valid(&self) -> bool {
-        if self.schema_version != INCIDENT_CANDIDATE_SCHEMA_VERSION
-            || !valid_prefixed_hex(&self.correlation_key, "icr_", 40)
-            || !valid_scoped_id(&self.tenant_id, "ten_")
-            || !valid_scoped_id(&self.primary_host_id, "host_")
-            || !(0.0..=1.0).contains(&self.confidence)
-            || self.risk_score > 100
-            || !(1..=512).contains(&self.summary.len())
-            || !ordered_times(&self.first_seen, &self.last_seen)
-            || self.detection_ids.is_empty()
-            || self.detection_ids.len() > 10_000
-            || self.detection_count != self.detection_ids.len() as u64
-            || self.evidence_count < self.evidence_index.len() as u64
-            || self.evidence_index.is_empty()
-            || self.evidence_index.len() > 4096
-            || self.sample_event_ids.is_empty()
-            || self.sample_event_ids.len() > 20
-            || !valid_prefixed_hex(&self.full_query_ref, "qry_", 32)
-            || self.aggregate_metrics.len() > 32
-            || self.timeline.is_empty()
-            || self.timeline.len() > 10_000
-            || self.claims.is_empty()
-            || self.claims.len() > 10_000
-            || self.entities.is_empty()
-            || self.entities.len() > 4096
-            || self.edges.len() > 8192
-            || self.data_reductions.is_empty()
-            || self.data_reductions.len() > 8
-        {
-            return false;
-        }
-
-        if !self.evidence_index.iter().all(IncidentEvidenceRef::is_valid)
-            || !self.timeline.iter().all(IncidentTimelineEntry::is_valid)
-            || !self.claims.iter().all(IncidentClaim::is_valid)
-            || !self.entities.iter().all(IncidentEntity::is_valid)
-            || !self.edges.iter().all(IncidentEdge::is_valid)
-            || !self.data_reductions.iter().all(IncidentDataReduction::is_valid)
-        {
-            return false;
-        }
-
-        let indexed: HashSet<&str> = self
-            .evidence_index
+    if !bounded_non_empty(&incident.title, 512)
+        || incident
+            .attack_families
             .iter()
-            .map(|evidence| evidence.event_id.as_str())
-            .collect();
-        if !self
-            .sample_event_ids
+            .any(|family| !bounded_non_empty(family, 128))
+        || incident.entities.iter().any(|entity| {
+            !bounded_non_empty(&entity.stable_key, 1024)
+                || !bounded_non_empty(&entity.display, 512)
+        })
+        || incident.timeline.iter().any(|entry| {
+            !bounded_non_empty(&entry.summary, 4096)
+                || !crate::common::valid_contract_token(&entry.source_version, 128)
+        })
+    {
+        return IncidentContractDecision::InvalidTextField;
+    }
+    if incident.attack_families.len() > 128
+        || incident.detections.len() > 512
+        || incident.entities.len() > 1024
+        || incident.timeline.len() > 4096
+        || incident.evidence_refs.len() > 512
+        || incident.claim_ids.len() > 512
+        || incident
+            .timeline
             .iter()
-            .all(|event_id| indexed.contains(event_id.as_str()))
+            .any(|entry| entry.evidence_ids.len() > 128)
+    {
+        return IncidentContractDecision::ReferenceLimitExceeded;
+    }
+    if contains_duplicate(&incident.attack_families) {
+        return IncidentContractDecision::DuplicateAttackFamily;
+    }
+    if incident
+        .timeline
+        .iter()
+        .any(|entry| contains_duplicate(&entry.evidence_ids))
+    {
+        return IncidentContractDecision::DuplicateTimelineEvidenceId;
+    }
+    if contains_duplicate(incident.entities.iter().map(|entity| &entity.stable_key)) {
+        return IncidentContractDecision::DuplicateEntityStableKey;
+    }
+    if incident
+        .timeline
+        .windows(2)
+        .any(|window| window[0].occurred_at.is_after(&window[1].occurred_at))
+        || incident
+            .timeline
+            .iter()
+            .any(|entry| entry.occurred_at.is_after(&incident.revised_at))
+    {
+        return IncidentContractDecision::InvalidTimelineOrder;
+    }
+    if !incident.references_only_own_tenant() {
+        return IncidentContractDecision::EvidenceTenantMismatch;
+    }
+    if incident.detections.is_empty() {
+        return IncidentContractDecision::DetectionRequired;
+    }
+    if incident.evidence_refs.is_empty() {
+        return IncidentContractDecision::EvidenceRequired;
+    }
+    if contains_duplicate(&incident.detections) {
+        return IncidentContractDecision::DuplicateDetectionId;
+    }
+    if contains_duplicate(incident.entities.iter().map(|entity| &entity.entity_id)) {
+        return IncidentContractDecision::DuplicateEntityId;
+    }
+    if contains_duplicate(
+        incident
+            .evidence_refs
+            .iter()
+            .map(|evidence| &evidence.evidence_id),
+    ) {
+        return IncidentContractDecision::DuplicateEvidenceId;
+    }
+    if contains_duplicate(&incident.claim_ids) {
+        return IncidentContractDecision::DuplicateClaimId;
+    }
+    if incident
+        .evidence_refs
+        .iter()
+        .any(|evidence| crate::validate_evidence_ref(evidence) != crate::EvidenceRefDecision::Accepted)
+    {
+        return IncidentContractDecision::EvidenceContractRejected;
+    }
+    if incident
+        .evidence_refs
+        .iter()
+        .any(|evidence| evidence.collected_at.is_after(&incident.revised_at))
+    {
+        return IncidentContractDecision::EvidenceCollectedAfterRevision;
+    }
+    if incident.timeline.iter().flat_map(|entry| &entry.evidence_ids).any(|evidence_id| {
+        !incident
+            .evidence_refs
+            .iter()
+            .any(|evidence| &evidence.evidence_id == evidence_id)
+    }) {
+        return IncidentContractDecision::TimelineEvidenceMissing;
+    }
+    if incident
+        .timeline
+        .iter()
+        .any(|entry| entry.evidence_ids.is_empty())
+    {
+        return IncidentContractDecision::TimelineEvidenceRequired;
+    }
+    if incident.security_state == SecurityState::ConfirmedCompromise {
+        if incident
+            .evidence_refs
+            .iter()
+            .any(|evidence| evidence.size_bytes == 0)
         {
-            return false;
+            return IncidentContractDecision::ConfirmedEvidenceEmpty;
         }
-        if self.claims.iter().any(|claim| {
-            claim
-                .evidence_event_ids
+        if incident
+            .evidence_refs
+            .iter()
+            .any(|evidence| evidence.integrity_state != IntegrityState::Verified)
+        {
+            return IncidentContractDecision::ConfirmedEvidenceIntegrityFailed;
+        }
+        if incident
+            .evidence_refs
+            .iter()
+            .any(|evidence| evidence.custody_state == CustodyState::Expired)
+        {
+            return IncidentContractDecision::ConfirmedEvidenceCustodyUnavailable;
+        }
+        if incident.assurance != Assurance::Verified {
+            return IncidentContractDecision::ConfirmedAssuranceNotVerified;
+        }
+    }
+    IncidentContractDecision::Accepted
+}
+
+/// Binds one immutable Incident revision to the authoritative Detection and
+/// Claim objects resolved by the server. Repository lookup and authorization
+/// happen outside this pure contract guard; callers must not build these
+/// slices from client-provided objects.
+pub fn validate_incident_relationships(
+    incident: &Incident,
+    detections: &[crate::Detection],
+    claims: &[crate::Claim],
+    evidence_access_context: &crate::EvidenceAccessContext,
+) -> IncidentRelationshipDecision {
+    if validate_incident_contract(incident) != IncidentContractDecision::Accepted {
+        return IncidentRelationshipDecision::IncidentContractRejected;
+    }
+    if crate::validate_evidence_access_context(evidence_access_context)
+        != crate::EvidenceAccessContextDecision::Accepted
+    {
+        return IncidentRelationshipDecision::EvidenceAccessContextRejected;
+    }
+    if evidence_access_context.tenant_id != incident.tenant_id
+        || evidence_access_context.incident_id != incident.incident_id
+    {
+        return IncidentRelationshipDecision::EvidenceAccessContextMismatch;
+    }
+    if evidence_access_context
+        .permitted_evidence
+        .iter()
+        .any(|evidence_id| {
+            !incident
+                .evidence_refs
                 .iter()
-                .any(|event_id| !indexed.contains(event_id.as_str()))
-        }) || self.timeline.iter().any(|entry| {
-            entry
-                .evidence_event_ids
+                .any(|evidence| &evidence.evidence_id == evidence_id)
+        })
+    {
+        return IncidentRelationshipDecision::EvidenceAccessContextContainsForeignEvidence;
+    }
+    if detections.len() > 512 {
+        return IncidentRelationshipDecision::DetectionSetLimitExceeded;
+    }
+    if claims.len() > 512 {
+        return IncidentRelationshipDecision::ClaimSetLimitExceeded;
+    }
+    if contains_duplicate(detections.iter().map(|detection| &detection.detection_id)) {
+        return IncidentRelationshipDecision::DuplicateDetectionId;
+    }
+    if contains_duplicate(claims.iter().map(|claim| &claim.claim_id)) {
+        return IncidentRelationshipDecision::DuplicateClaimId;
+    }
+    if detections.iter().any(|detection| {
+        crate::validate_detection_contract(detection) != crate::DetectionContractDecision::Accepted
+    }) {
+        return IncidentRelationshipDecision::DetectionContractRejected;
+    }
+    if claims.iter().any(|claim| {
+        crate::validate_claim_contract(claim) != crate::ClaimContractDecision::Accepted
+    }) {
+        return IncidentRelationshipDecision::ClaimContractRejected;
+    }
+    if incident.detections.len() != detections.len()
+        || detections
+            .iter()
+            .any(|detection| !incident.detections.contains(&detection.detection_id))
+    {
+        return IncidentRelationshipDecision::DetectionSetMismatch;
+    }
+    if incident.claim_ids.len() != claims.len()
+        || claims
+            .iter()
+            .any(|claim| !incident.claim_ids.contains(&claim.claim_id))
+    {
+        return IncidentRelationshipDecision::ClaimSetMismatch;
+    }
+    for detection in detections {
+        if detection.tenant_id != incident.tenant_id {
+            return IncidentRelationshipDecision::DetectionTenantMismatch;
+        }
+        if detection.last_observed_at.is_after(&incident.revised_at) {
+            return IncidentRelationshipDecision::DetectionObservedAfterRevision;
+        }
+        for evidence in &detection.evidence_refs {
+            let Some(incident_evidence) = incident
+                .evidence_refs
                 .iter()
-                .any(|event_id| !indexed.contains(event_id.as_str()))
+                .find(|candidate| candidate.evidence_id == evidence.evidence_id)
+            else {
+                return IncidentRelationshipDecision::DetectionEvidenceMissing;
+            };
+            match crate::validate_evidence_lifecycle_transition(evidence, incident_evidence) {
+                crate::EvidenceLifecycleDecision::Accepted => {}
+                crate::EvidenceLifecycleDecision::EvidenceIdentityMismatch => {
+                    return IncidentRelationshipDecision::DetectionEvidenceIdentityMismatch;
+                }
+                crate::EvidenceLifecycleDecision::IntegrityStateRegressed
+                | crate::EvidenceLifecycleDecision::CustodyStateRegressed => {
+                    return IncidentRelationshipDecision::DetectionEvidenceLifecycleRegressed;
+                }
+            }
+        }
+        if detection.entity_keys.iter().any(|key| {
+            !incident
+                .entities
+                .iter()
+                .any(|entity| &entity.stable_key == key)
         }) {
-            return false;
+            return IncidentRelationshipDecision::DetectionEntityMissing;
         }
+    }
+    for claim in claims {
+        if claim.tenant_id != incident.tenant_id {
+            return IncidentRelationshipDecision::ClaimTenantMismatch;
+        }
+        if claim.incident_id != incident.incident_id {
+            return IncidentRelationshipDecision::ClaimIncidentMismatch;
+        }
+        if claim.created_at.is_before(&incident.created_at) {
+            return IncidentRelationshipDecision::ClaimCreatedBeforeIncident;
+        }
+        if claim.created_at.is_after(&incident.revised_at) {
+            return IncidentRelationshipDecision::ClaimCreatedAfterRevision;
+        }
+        if claim.evidence_ids.iter().any(|evidence_id| {
+            !incident
+                .evidence_refs
+                .iter()
+                .any(|evidence| &evidence.evidence_id == evidence_id)
+        }) {
+            return IncidentRelationshipDecision::ClaimEvidenceMissing;
+        }
+        if matches!(
+            &claim.origin,
+            crate::ClaimOrigin::Detection { detection_id }
+                if !incident.detections.contains(detection_id)
+        ) {
+            return IncidentRelationshipDecision::ClaimOriginDetectionMissing;
+        }
+        let expected_verification = match claim.status {
+            crate::ClaimStatus::Verified => crate::ClaimVerificationDecision::Verified,
+            crate::ClaimStatus::Proposed => crate::ClaimVerificationDecision::EvidenceValidated,
+            crate::ClaimStatus::Contradicted => crate::ClaimVerificationDecision::Contradicted,
+            crate::ClaimStatus::Unsupported | crate::ClaimStatus::Unknown => {
+                crate::ClaimVerificationDecision::Unsupported
+            }
+            crate::ClaimStatus::HumanReviewRequired => {
+                crate::ClaimVerificationDecision::HumanReviewRequired
+            }
+        };
+        if crate::verify_claim_evidence(
+            claim,
+            &incident.evidence_refs,
+            evidence_access_context,
+        ) != expected_verification
+        {
+            return IncidentRelationshipDecision::ClaimVerificationRejected;
+        }
+    }
+    if incident.security_state == SecurityState::ConfirmedCompromise {
+        if incident.evidence_refs.iter().any(|evidence| {
+            crate::authorize_evidence_use(evidence, evidence_access_context)
+                != crate::EvidenceUseDecision::Allowed
+        }) {
+            return IncidentRelationshipDecision::ConfirmedEvidenceAccessDenied;
+        }
+        let confirmed_detection = detections
+            .iter()
+            .any(|detection| detection.security_state == SecurityState::ConfirmedCompromise);
+        let verified_claim = claims.iter().any(|claim| {
+            claim.status == crate::ClaimStatus::Verified
+                && claim.assurance == Assurance::Verified
+                && claim.requested_security_state == SecurityState::ConfirmedCompromise
+        });
+        if !confirmed_detection && !verified_claim {
+            return IncidentRelationshipDecision::ConfirmedSupportMissing;
+        }
+    }
+    IncidentRelationshipDecision::Accepted
+}
 
-        let entity_ids: HashSet<&str> = self
+/// Enforces append-only evolution between two adjacent immutable Incident
+/// revisions. Mutable presentation and lifecycle state may evolve, but prior
+/// relationships and timeline facts cannot be removed or rewritten.
+pub fn validate_incident_revision_transition(
+    previous: &Incident,
+    current: &Incident,
+) -> IncidentRevisionTransitionDecision {
+    if validate_incident_contract(previous) != IncidentContractDecision::Accepted {
+        return IncidentRevisionTransitionDecision::PreviousContractRejected;
+    }
+    if validate_incident_contract(current) != IncidentContractDecision::Accepted {
+        return IncidentRevisionTransitionDecision::CurrentContractRejected;
+    }
+    if previous.tenant_id != current.tenant_id {
+        return IncidentRevisionTransitionDecision::TenantMismatch;
+    }
+    if previous.incident_id != current.incident_id {
+        return IncidentRevisionTransitionDecision::IncidentMismatch;
+    }
+    if current.revision != previous.revision.saturating_add(1)
+        || current.previous_revision != Some(previous.revision)
+    {
+        return IncidentRevisionTransitionDecision::NonAdjacentRevision;
+    }
+    if !previous.created_at.is_same_instant(&current.created_at) {
+        return IncidentRevisionTransitionDecision::CreatedAtChanged;
+    }
+    if current.revised_at.is_before(&previous.revised_at) {
+        return IncidentRevisionTransitionDecision::RevisionTimeRegressed;
+    }
+    if previous
+        .detections
+        .iter()
+        .any(|detection_id| !current.detections.contains(detection_id))
+    {
+        return IncidentRevisionTransitionDecision::DetectionRemoved;
+    }
+    for evidence in &previous.evidence_refs {
+        let Some(current_evidence) = current
+            .evidence_refs
+            .iter()
+            .find(|candidate| candidate.evidence_id == evidence.evidence_id)
+        else {
+            return IncidentRevisionTransitionDecision::EvidenceRemoved;
+        };
+        match crate::validate_evidence_lifecycle_transition(evidence, current_evidence) {
+            crate::EvidenceLifecycleDecision::Accepted => {}
+            crate::EvidenceLifecycleDecision::EvidenceIdentityMismatch => {
+                return IncidentRevisionTransitionDecision::EvidenceIdentityChanged;
+            }
+            crate::EvidenceLifecycleDecision::IntegrityStateRegressed
+            | crate::EvidenceLifecycleDecision::CustodyStateRegressed => {
+                return IncidentRevisionTransitionDecision::EvidenceLifecycleRegressed;
+            }
+        }
+    }
+    if previous
+        .claim_ids
+        .iter()
+        .any(|claim_id| !current.claim_ids.contains(claim_id))
+    {
+        return IncidentRevisionTransitionDecision::ClaimRemoved;
+    }
+    for entity in &previous.entities {
+        let Some(current_entity) = current
             .entities
             .iter()
-            .map(|entity| entity.entity_id.as_str())
-            .collect();
-        if self.edges.iter().any(|edge| {
-            !entity_ids.contains(edge.source_entity_id.as_str())
-                || !entity_ids.contains(edge.target_entity_id.as_str())
-                || edge
-                    .evidence_event_ids
-                    .iter()
-                    .any(|event_id| !indexed.contains(event_id.as_str()))
-        }) {
-            return false;
-        }
-
-        self.data_reductions
-            .iter()
-            .all(|reduction| reduction.full_query_ref == self.full_query_ref)
-    }
-}
-
-fn default_incident_schema_version() -> String {
-    INCIDENT_CANDIDATE_SCHEMA_VERSION.to_owned()
-}
-
-fn default_reduction_rule() -> String {
-    INCIDENT_REDUCTION_RULE_VERSION.to_owned()
-}
-
-fn default_reduction_reason() -> String {
-    INCIDENT_REDUCTION_REASON.to_owned()
-}
-
-fn parse_time(value: &str) -> Option<DateTime<FixedOffset>> {
-    DateTime::parse_from_rfc3339(value).ok()
-}
-
-fn ordered_times(first: &str, last: &str) -> bool {
-    match (parse_time(first), parse_time(last)) {
-        (Some(first), Some(last)) => first <= last,
-        _ => false,
-    }
-}
-
-fn valid_scoped_id(value: &str, prefix: &str) -> bool {
-    let Some(rest) = value.strip_prefix(prefix) else {
-        return false;
-    };
-    (8..=128).contains(&rest.len())
-        && rest
-            .bytes()
-            .enumerate()
-            .all(|(idx, ch)| ch.is_ascii_alphanumeric() || (idx > 0 && matches!(ch, b'_' | b'-')))
-}
-
-fn valid_prefixed_hex(value: &str, prefix: &str, n: usize) -> bool {
-    value
-        .strip_prefix(prefix)
-        .is_some_and(|rest| rest.len() == n && rest.bytes().all(|ch| ch.is_ascii_hexdigit() && !ch.is_ascii_uppercase()))
-}
-
-fn valid_event_id(value: &str) -> bool {
-    let Some(rest) = value.strip_prefix("evt_") else {
-        return false;
-    };
-    (8..=128).contains(&rest.len())
-        && rest.as_bytes()[0].is_ascii_alphanumeric()
-        && rest
-            .bytes()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, b'_' | b'-'))
-}
-
-
-fn valid_event_type(value: &str) -> bool {
-    let mut segments = value.split('.');
-    let first = segments.next();
-    let mut count = 0usize;
-    let valid = first.is_some_and(valid_event_type_segment)
-        && segments.all(|segment| {
-            count += 1;
-            valid_event_type_segment(segment)
-        });
-    valid && count >= 1
-}
-
-fn valid_event_type_segment(value: &str) -> bool {
-    !value.is_empty()
-        && value.as_bytes()[0].is_ascii_lowercase()
-        && value
-            .bytes()
-            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == b'_')
-}
-
-fn valid_slug(value: &str, max: usize) -> bool {
-    (1..=max).contains(&value.len())
-        && value.as_bytes()[0].is_ascii_lowercase()
-        && value
-            .bytes()
-            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == b'_')
-}
-
-fn is_lower_sha256(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|ch| ch.is_ascii_hexdigit() && !ch.is_ascii_uppercase())
-}
-
-
-fn is_sorted_unique(values: &[String]) -> bool {
-    values.windows(2).all(|pair| pair[0] < pair[1])
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn evidence_reference_requires_tz_and_closed_ids() {
-        let reference = IncidentEvidenceRef {
-            evidence_id: format!("evi_{}", "a".repeat(24)),
-            event_id: "evt_12345678".into(),
-            event_type: "network.http".into(),
-            event_time: "2026-08-11T10:00:00Z".into(),
-            host_id: "host_12345678".into(),
-            raw_ref: "raw://sha256/example".into(),
-            integrity_sha256: Some("a".repeat(64)),
-            source_time_quality: SourceTimeQuality::Trusted,
-            is_late: false,
+            .find(|candidate| candidate.entity_id == entity.entity_id)
+        else {
+            continue;
         };
-        assert!(reference.is_valid());
-
-        let mut invalid = reference;
-        invalid.event_time = "2026-08-11T10:00:00".into();
-        assert!(!invalid.is_valid());
+        if entity.kind != current_entity.kind
+            || entity.stable_key != current_entity.stable_key
+            || entity.host_id != current_entity.host_id
+        {
+            return IncidentRevisionTransitionDecision::EntityIdentityChanged;
+        }
     }
+    if !timeline_multiset_contains(&current.timeline, &previous.timeline) {
+        return IncidentRevisionTransitionDecision::TimelineRewritten;
+    }
+    IncidentRevisionTransitionDecision::Accepted
+}
+
+fn bounded_non_empty(value: &str, maximum_bytes: usize) -> bool {
+    !value.trim().is_empty() && value.len() <= maximum_bytes
+}
+
+fn same_timeline_entry(left: &TimelineEntry, right: &TimelineEntry) -> bool {
+    left.occurred_at.is_same_instant(&right.occurred_at)
+        && left.summary == right.summary
+        && left.source_version == right.source_version
+        && left.evidence_ids == right.evidence_ids
+}
+
+fn timeline_multiset_contains(current: &[TimelineEntry], previous: &[TimelineEntry]) -> bool {
+    let mut matched = vec![false; current.len()];
+    previous.iter().all(|previous_entry| {
+        let Some(index) = current.iter().enumerate().position(|(index, current_entry)| {
+            !matched[index] && same_timeline_entry(previous_entry, current_entry)
+        }) else {
+            return false;
+        };
+        matched[index] = true;
+        true
+    })
 }

@@ -1,2 +1,0 @@
-$ python3 -m compileall -q src scripts tests migrations
-rc=0

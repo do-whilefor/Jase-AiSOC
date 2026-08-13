@@ -2,42 +2,70 @@
 
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use aisoc_contracts::{
-    AdjudicationReport, AgentEnvelope, AgentHeartbeat, AnalyzerReport, BatchAck, BlindVerifierInput, Detection,
-    EventBatch, EvidencePackage, IncidentCandidate, ModelAssessment, ReviewOutcome, SecurityEvent, VerifierReport,
-    WebRequestEnvelope, WebSecurityEvent,
-};
-use schemars::schema_for;
-
-fn write_schema<T: schemars::JsonSchema>(output_dir: &Path, name: &str) -> Result<(), String> {
-    let schema = schema_for!(T);
-    let json = serde_json::to_string_pretty(&schema).map_err(|error| error.to_string())?;
-    fs::write(output_dir.join(name), format!("{json}\n")).map_err(|error| error.to_string())
-}
+use aisoc_contracts::schema::generated_schemas;
 
 fn main() -> Result<(), String> {
-    let output_dir = env::args()
-        .nth(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("schemas-rust-generated"));
-    fs::create_dir_all(&output_dir).map_err(|error| error.to_string())?;
-    write_schema::<SecurityEvent>(&output_dir, "security-event-v0.1.schema.json")?;
-    write_schema::<AgentEnvelope>(&output_dir, "agent-envelope-v0.1.schema.json")?;
-    write_schema::<AgentHeartbeat>(&output_dir, "agent-heartbeat-v0.1.schema.json")?;
-    write_schema::<EventBatch>(&output_dir, "event-batch-v0.1.schema.json")?;
-    write_schema::<BatchAck>(&output_dir, "batch-ack-v0.1.schema.json")?;
-    write_schema::<Detection>(&output_dir, "detection-v0.1.schema.json")?;
-    write_schema::<IncidentCandidate>(&output_dir, "incident-candidate-v0.1.schema.json")?;
-    write_schema::<EvidencePackage>(&output_dir, "ai-evidence-package-v0.1.schema.json")?;
-    write_schema::<AnalyzerReport>(&output_dir, "ai-analyzer-report-v0.1.schema.json")?;
-    write_schema::<BlindVerifierInput>(&output_dir, "ai-blind-verifier-input-v0.1.schema.json")?;
-    write_schema::<VerifierReport>(&output_dir, "ai-verifier-report-v0.1.schema.json")?;
-    write_schema::<AdjudicationReport>(&output_dir, "ai-adjudication-report-v0.1.schema.json")?;
-    write_schema::<ReviewOutcome>(&output_dir, "ai-review-outcome-v0.1.schema.json")?;
-    write_schema::<WebRequestEnvelope>(&output_dir, "web-request-envelope-v0.1.schema.json")?;
-    write_schema::<WebSecurityEvent>(&output_dir, "web-security-event-v0.1.schema.json")?;
-    write_schema::<ModelAssessment>(&output_dir, "model-assessment-v0.1.schema.json")?;
+    let mut arguments = env::args_os().skip(1);
+    let first = arguments.next();
+    let (check_only, output_dir) = if first.as_deref() == Some(std::ffi::OsStr::new("--check")) {
+        (
+            true,
+            arguments
+                .next()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("schemas")),
+        )
+    } else {
+        (
+            false,
+            first
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("schemas")),
+        )
+    };
+    if arguments.next().is_some() {
+        return Err("usage: aisoc-export-schemas [--check] [output-directory]".to_owned());
+    }
+
+    if check_only && !output_dir.is_dir() {
+        return Err(format!(
+            "schema drift check directory does not exist: {}",
+            output_dir.display()
+        ));
+    }
+    if !check_only {
+        fs::create_dir_all(&output_dir).map_err(|error| error.to_string())?;
+    }
+
+    for (filename, schema) in generated_schemas() {
+        let json = serde_json::to_string_pretty(&schema).map_err(|error| error.to_string())?;
+        let expected = format!("{json}\n");
+        let path = output_dir.join(filename);
+        if check_only {
+            let committed = fs::read_to_string(&path)
+                .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+            if committed != expected {
+                return Err(format!("schema drift detected: {}", path.display()));
+            }
+        } else {
+            fs::write(&path, expected).map_err(|error| error.to_string())?;
+        }
+    }
+
+    if check_only {
+        let expected_names: std::collections::BTreeSet<_> = generated_schemas()
+            .into_iter()
+            .map(|(filename, _)| filename.to_owned())
+            .collect();
+        for entry in fs::read_dir(&output_dir).map_err(|error| error.to_string())? {
+            let entry = entry.map_err(|error| error.to_string())?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.ends_with(".schema.json") && !expected_names.contains(&name) {
+                return Err(format!("unexpected committed schema: {name}"));
+            }
+        }
+    }
     Ok(())
 }
